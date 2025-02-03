@@ -1,0 +1,3 @@
+[submodule "submodules/challenge_repo"]
+	path = submodules/challenge_repo
+	url = https://github.com/RiqiangGao/GDP-HMM_AAPMChallenge.git
