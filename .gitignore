@@ -177,6 +177,10 @@ cython_debug/
 # Ignore config
 config.json
 
+# Ignore tokens
+.tokens/
+!tokens/.gitkeep
+
 # Ignore figs
 figs/
 !figs/.gitkeep
@@ -187,3 +191,8 @@ logs/
 
 # Ignore outfiles
 outfiles/
+!outfiles/.gitkeep
+
+# Ignore data
+data/
+!data/.gitkeep
