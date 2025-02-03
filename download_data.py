@@ -11,15 +11,11 @@ path_data = "data"
 
 # Create directories
 path_raw = os.path.join(path_data, "raw_data")
-path_train = os.path.join(path_data, "train")
-path_validate = os.path.join(path_data, "validate")
+path_han = os.path.join(path_data, "han")
+path_lung = os.path.join(path_data, "lung")
 os.makedirs(path_raw, exist_ok=True)
-os.makedirs(path_train, exist_ok=True)
-os.makedirs(path_validate, exist_ok=True)
-os.makedirs(os.path.join(path_train, "han"), exist_ok=True)
-os.makedirs(os.path.join(path_train, "lung"), exist_ok=True)
-os.makedirs(os.path.join(path_validate, "han"), exist_ok=True)
-os.makedirs(os.path.join(path_validate, "lung"), exist_ok=True)
+os.makedirs(path_han, exist_ok=True)
+os.makedirs(path_lung, exist_ok=True)
 
 
 ### DOWNLOAD DATA ###
@@ -54,10 +50,10 @@ print("Unzipping data.")
 
 # Unzip files
 paths = [
-    (f"{path_raw}/train_HaN.zip", f"{path_train}/han"),
-    (f"{path_raw}/train_Lung.zip", f"{path_train}/lung"),
-    (f"{path_raw}/valid_HaN_nodose.zip", f"{path_validate}/han"),
-    (f"{path_raw}/valid_Lung_nodose.zip", f"{path_validate}/lung")
+    (f"{path_raw}/train_HaN.zip", path_han),
+    (f"{path_raw}/train_Lung.zip", path_lung),
+    (f"{path_raw}/valid_HaN_nodose.zip", path_han),
+    (f"{path_raw}/valid_Lung_nodose.zip", path_lung)
 ]
 for (in_path, out_path) in paths:
     print(f"-- Unzipping {in_path} to {out_path}")
