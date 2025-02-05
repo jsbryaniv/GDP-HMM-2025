@@ -177,9 +177,9 @@ cython_debug/
 # Ignore config
 config.json
 
-# Ignore tokens
-.tokens/
-!tokens/.gitkeep
+# Ignore submodules
+submodules/
+!submodules/.gitkeep
 
 # Ignore figs
 figs/

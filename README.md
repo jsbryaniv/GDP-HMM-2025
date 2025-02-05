@@ -8,11 +8,11 @@ To get started set up the environment by running the following command:
 python -m venv .env
 source .env/bin/activate
 pip install -r requirements.txt
-git submodule update --init --recursive
 ```
-Note that the last line is necessary to clone the `gdp-hmm` submodule. If you forget to run this command, you can run it later by running:
+
+Next clone the challenge module by running the following command:
 ```bash
-git submodule update --init --recursive
+git clone https://github.com/RiqiangGao/GDP-HMM_AAPMChallenge submodules/challenge_repo
 ```
 
 Configure vscode to use the venv by pressing `Ctrl+Shift+P` and selecting `Python: Select Interpreter` and then selecting the python version in the `.env` folder. It may be labeled as "Recommended".
