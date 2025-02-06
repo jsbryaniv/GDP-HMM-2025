@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 # Get config variables
 with open('config.json', 'r') as f:
     PATH_DATA = json.load(f)['PATH_DATA']
+    PATH_METADATA = json.load(f)['PATH_METADATA']
 
 # Define global variables
 BAD_FILES = [
@@ -85,7 +86,7 @@ class GDPDataset(Dataset):
         
         # Load dose dictionary
         if return_dose:
-            dose_dict = json.load(open(os.path.join(PATH_DATA, 'PTV_DICT.json'), 'r'))
+            dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
 
         # Set attributes
         self.treatment = treatment              # Treatment type (HaN or Lung)
