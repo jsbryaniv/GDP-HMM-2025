@@ -83,30 +83,29 @@ class Simple3DUnet(nn.Module):
         self.n_layers_per_block = n_layers_per_block
 
         # Define input block
+        block = [
+
+        ]
         self.input_block = nn.Sequential(
             # Merge input channels to n_features for each voxel
-            nn.Conv3d(in_channels, 2*n_features, kernel_size=1),
-            nn.InstanceNorm3d(2*n_features),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(2*n_features, n_features, kernel_size=1),
+            nn.Conv3d(in_channels, n_features, kernel_size=1),
             nn.InstanceNorm3d(n_features),
             nn.ReLU(inplace=True),
+            # Additional convolutional layers
+            *(ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1))
         )
 
         # Define downsample blocks
         self.down_blocks = nn.ModuleList()
         for i in range(n_blocks):
-
-            # Initialize block with downsample layer
-            block = []
-            block.append(ConvBlock(n_features, n_features, downsample=True))
-
-            # Add layers to block
-            for _ in range(n_layers_per_block - 1):
-                block.append(ConvBlock(n_features, n_features))
-
-            # Add block to down_blocks
-            self.down_blocks.append(nn.Sequential(*block))
+            self.down_blocks.append(
+                nn.Sequential(
+                    # Downsample layer
+                    ConvBlock(n_features, n_features, downsample=True),
+                    # Additional convolutional layers
+                    *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)]
+                )
+            )
 
         # Define bottleneck block
         self.bottleneck = ConvBlock(n_features, 2*n_features)
@@ -114,21 +113,19 @@ class Simple3DUnet(nn.Module):
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
         for i in range(n_blocks):
-
-            # Initialize block with upsample layer
-            block = []
-            block.append(ConvBlock(2*n_features, n_features, upsample=True))
-
-            # Add layers to block
-            for _ in range(n_layers_per_block - 1):
-                block.append(ConvBlock(n_features, n_features))
-
-            # Add block to up_blocks
-            self.up_blocks.append(nn.Sequential(*block))
+            self.up_blocks.append(
+                nn.Sequential(
+                    # Upsample layer
+                    ConvBlock(2*n_features, n_features, upsample=True),
+                    # Additional convolutional layers
+                    *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)]
+                )
+            )
 
         # Define output block
         self.output_block = nn.Sequential(
             ConvBlock(2*n_features, n_features),
+            *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)],
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
@@ -154,7 +151,6 @@ class Simple3DUnet(nn.Module):
         for i, block in enumerate(self.up_blocks):
             x = block(x)
             x_skip = skips.pop()
-            x = F.interpolate(x, size=x_skip.shape[-3:], mode='trilinear')
             x = torch.cat([x, x_skip], dim=1)
 
         # Output block
@@ -171,10 +167,9 @@ if __name__ == '__main__':
 
     # Create a model
     model = Simple3DUnet(30, 1)
-    print(model)
 
     # Create a random input
-    x = torch.randn(1, 30, 128, 127, 128)
+    x = torch.randn(1, 30, 128, 128, 128)
     y = model(x)
     print(y.shape)
 
