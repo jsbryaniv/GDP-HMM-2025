@@ -191,10 +191,11 @@ logs/
 !logs/.gitkeep
 
 # Ignore outfiles
-outfiles/
+outfiles/*
 !outfiles/.gitkeep
+!outfiles/logs/.gitkeep
 
-# Ignore data
+# Ignore data except metadata
 data/*
 !data/.gitkeep
 !data/metadata/
