@@ -179,6 +179,7 @@ config.json
 
 # Ignore submodules
 submodules/
+submodules/challenge_repo
 !submodules/.gitkeep
 
 # Ignore figs
