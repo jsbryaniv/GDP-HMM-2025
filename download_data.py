@@ -25,16 +25,16 @@ def download_data(path_data):
         # Get token from config
         with open("config.json", "r") as f:
             config = json.load(f)
-            token = config["hf_token"]
+            token = config["HUGGINGFACE_TOKEN"]
         # Login with token
         login(token)
         print("Successfully logged into Hugging Face!")
     except KeyError:  
         # Exception for when token not in config.json
-        print("Please add your Hugging Face token to config.json")
+        raise KeyError("Please add your Hugging Face token to config.json")
     except Exception as e:  
         # Exception for other errors
-        print(f"Error logging into Hugging Face: {e}")
+        raise Exception(f"Error logging into Hugging Face: {e}")
 
     # Download the dataset
     snapshot_download(
