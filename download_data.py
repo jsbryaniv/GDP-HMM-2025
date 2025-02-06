@@ -2,20 +2,16 @@
 # Import libraries
 import os
 import json
+import shutil
 import zipfile
 from huggingface_hub import login
 from huggingface_hub import snapshot_download
 
-# Set base path
+# Set paths
 path_data = "data"
-
-# Create directories
 path_raw = os.path.join(path_data, "raw_data")
 path_han = os.path.join(path_data, "han")
 path_lung = os.path.join(path_data, "lung")
-os.makedirs(path_raw, exist_ok=True)
-os.makedirs(path_han, exist_ok=True)
-os.makedirs(path_lung, exist_ok=True)
 
 
 ### DOWNLOAD DATA ###
@@ -59,7 +55,6 @@ for (in_path, out_path) in paths:
     print(f"-- Unzipping {in_path} to {out_path}")
     with zipfile.ZipFile(in_path, 'r') as zip_ref:
         zip_ref.extractall(out_path)
-
 
 
 # Done

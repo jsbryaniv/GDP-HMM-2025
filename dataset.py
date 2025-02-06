@@ -7,7 +7,7 @@ import numpy as np
 from torch.utils.data import Dataset
 
 
-# Define organ-at-risk (OAR) dictionaries
+# Define global variables
 HaN_OAR_LIST = [
     'Cochlea_L', 
     'Cochlea_R', 
@@ -54,7 +54,9 @@ Lung_OAR_LIST = [
 ]
 HaN_OAR_DICT = {key: i for i, key in enumerate(HaN_OAR_LIST)}
 Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
-
+BAD_FILES = [
+    '0522c0009+9Ag+MOS_29166.npz',
+]
 
 
 # Create dataset class
@@ -87,6 +89,7 @@ class GDPDataset(Dataset):
 
         # Get list of files
         self.files = os.listdir(self.path)
+        self.files = [f for f in self.files if f not in BAD_FILES]
 
         # Set organ-at-risk (OAR) information
         if self.treatment.lower() == 'han':
@@ -117,16 +120,26 @@ class GDPDataset(Dataset):
         ct = np.clip(ct, self.down_HU, self.up_HU) / self.denom_norm_HU  # Clip and normalize HU values
         ct = np.expand_dims(ct, axis=0)  # Add channel dimension
 
-        # Load beam plate
-        beam = data_dict['beam_plate']
-        beam = np.expand_dims(beam, axis=0)  # Add channel dimension
+        # Load PTVs (initialize as zeros)
+        ptvs = np.zeros((3, *ct.shape[1:]), dtype=np.float32)
+        for i, key in enumerate(['PTV_High', 'PTV_Mid', 'PTV_Low']):
+            if key in self.dose_dict[PatientID]:  # Check if PTV exists in dose_dict
+                opt_name = self.dose_dict[PatientID][key]['OPTName']
+                ptv_dose = self.dose_dict[PatientID][key]['PDose']
+                if opt_name in data_dict:  # Check if mask exists in data_dict
+                    ptv_mask = data_dict[opt_name]
+                    ptvs[i] = ptv_mask * ptv_dose / self.dose_div_factor
 
         # Load organ-at-risk (OAR) data
-        oars = np.zeros((len(self.OAR_LIST), *ct.shape), dtype=bool)
+        oars = np.zeros((len(self.OAR_LIST), *ct.shape[1:]), dtype=bool)
         for oar in self.OAR_LIST:
             if oar in data_dict:
                 oar_data = data_dict[oar]
                 oars[self.OAR_DICT[oar]] = oar_data
+
+        # Load beam plate
+        beam = data_dict['beam_plate']
+        beam = np.expand_dims(beam, axis=0)  # Add channel dimension
 
         # Load dose
         if self.return_dose:
@@ -148,16 +161,17 @@ class GDPDataset(Dataset):
 
         # Convert to torch tensors
         ct = torch.tensor(ct, dtype=torch.float32)
-        beam = torch.tensor(beam, dtype=torch.float32)
+        ptvs = torch.tensor(ptvs, dtype=torch.float32)
         oars = torch.tensor(oars, dtype=torch.float32)
+        beam = torch.tensor(beam, dtype=torch.float32)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
 
         # Return data
         if self.return_dose:
-            return ct, beam, oars, dose
+            return ct, ptvs, oars, beam, dose
         else:
-            return ct, beam, oars
+            return ct, ptvs, oars, beam
 
         
 
@@ -177,14 +191,14 @@ if __name__ == "__main__":
     )
 
     # Get first item
-    ct, beam, oars, dose = dataset[0]
+    ct, ptvs, oars, beam, dose = dataset[0]
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
         if i % 10 == 0:
             print(f'-- {i}/{len(dataset)} --')
-        ct, beam, oars, dose = dataset[i]
+        ct, ptvs, oars, beam, dose = dataset[i]
 
     # Done
     print("Done")
