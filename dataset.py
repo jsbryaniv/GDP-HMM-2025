@@ -9,8 +9,9 @@ from torch.utils.data import Dataset
 
 # Get config variables
 with open('config.json', 'r') as f:
-    PATH_DATA = json.load(f)['PATH_DATA']
-    PATH_METADATA = json.load(f)['PATH_METADATA']
+    config = json.load(f)
+    PATH_DATA = config['PATH_DATA']
+    PATH_METADATA = config['PATH_METADATA']
 
 # Define global variables
 BAD_FILES = [
