@@ -5,18 +5,10 @@ import sys
 import json
 import time
 import torch
-import numpy as np
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
 
 # Import custom classes
 from train import train_model
 from plotting import plot_losses, plot_prediction
-from dataset import GDPDataset
-from models.unet import Simple3DUnet
 
 # Set environment
 with open('config.json', 'r') as f:
@@ -42,6 +34,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
 
     # Load dataset
     if dataID.lower() == 'han':
+        from dataset import GDPDataset
         dataset = GDPDataset(
             treatment='HaN', 
             shape=(128, 128, 128),
@@ -61,6 +54,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
 
     # Initialize model
     if modelID.lower() == 'unet':
+        from models.unet import Simple3DUnet
         model = Simple3DUnet(
             in_channels=35, out_channels=1, 
             n_features=8, n_blocks=3, n_layers_per_block=3
