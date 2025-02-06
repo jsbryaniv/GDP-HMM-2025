@@ -197,3 +197,5 @@ outfiles/
 # Ignore data
 data/
 !data/.gitkeep
+!data/Pat_Obj_DICT.json
+!data/PTV_DICT.json
