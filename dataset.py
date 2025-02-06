@@ -7,7 +7,14 @@ import numpy as np
 from torch.utils.data import Dataset
 
 
+# Get config variables
+with open('config.json', 'r') as f:
+    PATH_DATA = json.load(f)['PATH_DATA']
+
 # Define global variables
+BAD_FILES = [
+    '0522c0009+9Ag+MOS_29166.npz',
+]
 HaN_OAR_LIST = [
     'Cochlea_L', 
     'Cochlea_R', 
@@ -54,50 +61,48 @@ Lung_OAR_LIST = [
 ]
 HaN_OAR_DICT = {key: i for i, key in enumerate(HaN_OAR_LIST)}
 Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
-BAD_FILES = [
-    '0522c0009+9Ag+MOS_29166.npz',
-]
 
 
 # Create dataset class
 class GDPDataset(Dataset):
     def __init__(self, 
-        treatment, path_data, path_dose_dict=None, return_dose=True, 
+        treatment, shape=None, return_dose=True, 
         down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=10,
     ):
         super(GDPDataset, self).__init__()
 
-        # Check inputs
+        # Get treatment specific variables
         if treatment.lower() not in ['han', 'lung']:
             raise ValueError("Treatment must be either 'HaN' or 'Lung'")
-        if return_dose and path_dose_dict is None:
-            raise ValueError("Path to dose dictionary must be provided if 'return_dose' is True")
+        elif treatment.lower() == 'han':
+            path_data = os.path.join(PATH_DATA, 'han/train/')
+            oar_list = HaN_OAR_LIST
+            oar_dict = HaN_OAR_DICT
+        elif treatment.lower() == 'lung':
+            path_data = os.path.join(PATH_DATA, 'lung/train/')
+            oar_list = Lung_OAR_LIST
+            oar_dict = Lung_OAR_DICT
         
         # Load dose dictionary
         if return_dose:
-            dose_dict = json.load(open(path_dose_dict, 'r'))
+            dose_dict = json.load(open(os.path.join(PATH_DATA, 'PTV_DICT.json'), 'r'))
 
         # Set attributes
-        self.path = path_data                  # Path to directory containing data files
-        self.treatment = treatment             # Treatment type (HaN or Lung)
-        self.dose_dict = dose_dict             # Dictionary of dose data
-        self.return_dose = return_dose         # Whether to return dose data
-        self.down_HU = down_HU                 # Lower bound for HU values
-        self.up_HU = up_HU                     # Upper bound for HU values
-        self.denom_norm_HU = denom_norm_HU     # Denominator for normalizing HU values
-        self.dose_div_factor = dose_div_factor # Division factor for dose normalization
+        self.treatment = treatment              # Treatment type (HaN or Lung)
+        self.shape = shape                      # Shape of output data
+        self.return_dose = return_dose          # Whether to return dose data
+        self.down_HU = down_HU                  # Lower bound for HU values
+        self.up_HU = up_HU                      # Upper bound for HU values
+        self.denom_norm_HU = denom_norm_HU      # Denominator for normalizing HU values
+        self.dose_div_factor = dose_div_factor  # Division factor for dose normalization
+        self.path_data = path_data              # Path to directory containing data files
+        self.dose_dict = dose_dict              # Dictionary of dose data
+        self.oar_list = oar_list                # List of organ-at-risk (OAR) names
+        self.oar_dict = oar_dict                # Dictionary of OAR names and indices
 
         # Get list of files
-        self.files = os.listdir(self.path)
+        self.files = os.listdir(self.path_data)
         self.files = [f for f in self.files if f not in BAD_FILES]
-
-        # Set organ-at-risk (OAR) information
-        if self.treatment.lower() == 'han':
-            self.OAR_LIST = HaN_OAR_LIST
-            self.OAR_DICT = HaN_OAR_DICT
-        elif self.treatment.lower() == 'lung':
-            self.OAR_LIST = Lung_OAR_LIST
-            self.OAR_DICT = Lung_OAR_DICT
 
     def __len__(self):
         return len(self.files)
@@ -112,7 +117,7 @@ class GDPDataset(Dataset):
         PatientID = ID.split('+')[0]
 
         # Load data dictionary
-        data_npz = np.load(os.path.join(self.path, file), allow_pickle=True)
+        data_npz = np.load(os.path.join(self.path_data, file), allow_pickle=True)
         data_dict = dict(data_npz)['arr_0'].item()
 
         # Load CT scan
@@ -131,11 +136,11 @@ class GDPDataset(Dataset):
                     ptvs[i] = ptv_mask * ptv_dose / self.dose_div_factor
 
         # Load organ-at-risk (OAR) data
-        oars = np.zeros((len(self.OAR_LIST), *ct.shape[1:]), dtype=bool)
-        for oar in self.OAR_LIST:
+        oars = np.zeros((len(self.oar_list), *ct.shape[1:]), dtype=bool)
+        for oar in self.oar_list:
             if oar in data_dict:
                 oar_data = data_dict[oar]
-                oars[self.OAR_DICT[oar]] = oar_data
+                oars[self.oar_dict[oar]] = oar_data
 
         # Load beam plate
         beam = data_dict['beam_plate']
@@ -159,6 +164,36 @@ class GDPDataset(Dataset):
             # Add channel dimension
             dose = np.expand_dims(dose, axis=0)
 
+        # Reshape data
+        if self.shape is not None:
+            # Get shape info
+            shape_old = np.array(ct.shape[1:])  # Exclude channel dimension
+            shape_new = np.array(self.shape)  # Target shape
+            shape_delta = shape_new - shape_old
+            # Pad image to target shape
+            pad_x = (max(0, shape_delta[0] // 2), max(0, shape_delta[0] - shape_delta[0] // 2))
+            pad_y = (max(0, shape_delta[1] // 2), max(0, shape_delta[1] - shape_delta[1] // 2))
+            pad_z = (max(0, shape_delta[2] // 2), max(0, shape_delta[2] - shape_delta[2] // 2))
+            # Apply padding
+            ct = np.pad(ct, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            ptvs = np.pad(ptvs, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            oars = np.pad(oars, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            if self.return_dose:
+                dose = np.pad(dose, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            # Cropping centered at center
+            center = np.array(ct.shape[1:]) // 2
+            slice_x = slice(center[0] - shape_new[0] // 2, center[0] + shape_new[0] // 2)
+            slice_y = slice(center[1] - shape_new[1] // 2, center[1] + shape_new[1] // 2)
+            slice_z = slice(center[2] - shape_new[2] // 2, center[2] + shape_new[2] // 2)
+            # Apply cropping
+            ct = ct[:, slice_x, slice_y, slice_z]
+            ptvs = ptvs[:, slice_x, slice_y, slice_z]
+            oars = oars[:, slice_x, slice_y, slice_z]
+            beam = beam[:, slice_x, slice_y, slice_z]
+            if self.return_dose:
+                dose = dose[:, slice_x, slice_y, slice_z]
+
         # Convert to torch tensors
         ct = torch.tensor(ct, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)
@@ -177,16 +212,11 @@ class GDPDataset(Dataset):
 
 # Example usage
 if __name__ == "__main__":
-    
-    # Set paths
-    path_data = "data/han/train"
-    path_dose_dict = "data/PTV_DICT.json"
 
     # Create dataset
     dataset = GDPDataset(
         treatment='HaN', 
-        path_data=path_data, 
-        path_dose_dict=path_dose_dict, 
+        shape=(128, 128, 128),
         return_dose=True,
     )
 

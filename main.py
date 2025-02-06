@@ -28,9 +28,8 @@ print("Loading dataset.")
 
 # Load dataset and split into train, validation, and test sets
 dataset = GDPDataset(
-    treatment='HaN',
-    path_data='data/han/train',
-    path_dose_dict='data/PTV_DICT.json',
+    treatment='HaN', 
+    shape=(128, 128, 128),
     return_dose=True,
 )
 test_size = int(0.2 * len(dataset))
