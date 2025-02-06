@@ -195,6 +195,7 @@ outfiles/
 !outfiles/.gitkeep
 
 # Ignore data
-data/
+data/*
 !data/.gitkeep
-!data/metadata
+!data/metadata/
+!data/metadata/*
