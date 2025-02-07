@@ -40,6 +40,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
             shape=(128, 128, 128),
             return_dose=True,
         )
+        in_channels = 35
 
     # Split into train, validation, and test sets
     test_size = int(0.2 * len(dataset))
@@ -48,17 +49,43 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
         [len(dataset) - 2*test_size, test_size, test_size]
     )
 
+    # Get files of each subset
+    files_train = [dataset.files[i] for i in dataset_train.indices]
+    files_val = [dataset.files[i] for i in dataset_val.indices]
+    files_test = [dataset.files[i] for i in dataset_test.indices]
+
 
     ### MODEL ###
     print("Setting up model.")
 
     # Initialize model
     if modelID.lower() == 'unet':
-        from models.unet import Simple3DUnet
-        model = Simple3DUnet(
-            in_channels=35, out_channels=1, 
-            n_features=8, n_blocks=3, n_layers_per_block=3
+        from models.unet import Unet3D
+        model = Unet3D(
+            in_channels=in_channels, 
+            out_channels=1, 
+            **model_kwars,
         )
+        n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Loaded Unet3D model with {n_params} trainable parameters.')
+    elif modelID.lower() == 'vit':
+        from models.vit import ViT3D
+        model = ViT3D(
+            in_channels=in_channels,
+            out_channels=1,
+            **model_kwars,
+        )
+        n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Loaded ViT3D model with {n_params} trainable parameters.')
+    elif modelID.lower() == 'convformer':
+        from models.convformer import Convformer
+        model = Convformer(
+            in_channels=in_channels,
+            out_channels=1,
+            **model_kwars,
+        )
+        n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f'Loaded Convformer model with {n_params} trainable parameters.')
 
     # Move model to device
     model.to(device)
@@ -70,17 +97,12 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        batch_size=1, learning_rate=0.001, num_epochs=20,
+        batch_size=1, learning_rate=0.001, num_epochs=2,
     )
 
 
     ### SAVE RESULTS ###
     print("Saving results.")
-
-    # Get files of each subset
-    files_train = [dataset.files[i] for i in dataset_train.indices]
-    files_val = [dataset.files[i] for i in dataset_val.indices]
-    files_test = [dataset.files[i] for i in dataset_test.indices]
 
     # Update training statistics
     training_statistics['files_train'] = files_train
@@ -129,6 +151,8 @@ if __name__ == '__main__':
 
     # Set job IDs
     all_jobs = [
+        ('HaN', 'ConvFormer'),
+        ('HaN', 'ViT'),
         ('HaN', 'Unet'),
     ]
     

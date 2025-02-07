@@ -196,6 +196,14 @@ class GDPDataset(Dataset):
             if self.return_dose:
                 dose = dose[:, slice_x, slice_y, slice_z]
 
+        # Normalize data
+        ct = (ct - ct.mean()) / ct.std()
+        ptvs = (ptvs - ptvs.mean()) / ptvs.std()
+        oars = (oars - oars.mean()) / oars.std()
+        beam = (beam - beam.mean()) / beam.std()
+        if self.return_dose:
+            dose = (dose - dose.mean()) / dose.std()
+
         # Convert to torch tensors
         ct = torch.tensor(ct, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)

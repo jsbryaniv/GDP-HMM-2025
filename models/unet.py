@@ -71,9 +71,9 @@ class ConvBlock(nn.Module):
 
 
 # Define simple 3D Unet model
-class Simple3DUnet(nn.Module):
+class Unet3D(nn.Module):
     def __init__(self, in_channels, out_channels, n_features=8, n_blocks=3, n_layers_per_block=2):
-        super(Simple3DUnet, self).__init__()
+        super(Unet3D, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
@@ -83,9 +83,6 @@ class Simple3DUnet(nn.Module):
         self.n_layers_per_block = n_layers_per_block
 
         # Define input block
-        block = [
-
-        ]
         self.input_block = nn.Sequential(
             # Merge input channels to n_features for each voxel
             nn.Conv3d(in_channels, n_features, kernel_size=1),
@@ -166,7 +163,7 @@ class Simple3DUnet(nn.Module):
 if __name__ == '__main__':
 
     # Create a model
-    model = Simple3DUnet(30, 1)
+    model = Unet3D(30, 1)
 
     # Create a random input
     x = torch.randn(1, 30, 128, 128, 128)
