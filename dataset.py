@@ -68,7 +68,7 @@ Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
 # Create dataset class
 class GDPDataset(Dataset):
     def __init__(self, 
-        treatment, shape=None, return_dose=True, 
+        treatment, shape=None, scale=None, return_dose=True, 
         down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=10,
     ):
         super(GDPDataset, self).__init__()
@@ -92,6 +92,7 @@ class GDPDataset(Dataset):
         # Set attributes
         self.treatment = treatment              # Treatment type (HaN or Lung)
         self.shape = shape                      # Shape of output data
+        self.scale = scale                      # Scale of output data
         self.return_dose = return_dose          # Whether to return dose data
         self.down_HU = down_HU                  # Lower bound for HU values
         self.up_HU = up_HU                      # Upper bound for HU values
@@ -165,6 +166,16 @@ class GDPDataset(Dataset):
             dose = np.clip(dose, 0, dose_ptvhigh_dose * 1.2)
             # Add channel dimension
             dose = np.expand_dims(dose, axis=0)
+
+        # Rescale data
+        if self.scale is not None:
+            downsample_factor = int(1/self.scale)
+            ct = ct[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            ptvs = ptvs[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            oars = oars[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            beam = beam[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            if self.return_dose:
+                dose = dose[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
 
         # Reshape data
         if self.shape is not None:

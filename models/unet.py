@@ -84,10 +84,10 @@ class Unet3D(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
-            # Merge input channels to n_features for each voxel
+            # Normalize
+            nn.GroupNorm(in_channels, in_channels),
+            # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
-            nn.InstanceNorm3d(n_features),
-            nn.ReLU(inplace=True),
             # Additional convolutional layers
             *(ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1))
         )
@@ -157,18 +157,21 @@ class Unet3D(nn.Module):
         return x
 
 
-
-
 # Test the model
 if __name__ == '__main__':
 
     # Create a model
     model = Unet3D(30, 1)
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # Create a random input
+    # Count parameters
+    print(f'Model has {n_params} parameters')
+
+    # Create data
     x = torch.randn(1, 30, 128, 128, 128)
+
+    # Forward pass
     y = model(x)
-    print(y.shape)
 
     # Done
     print('Done!')

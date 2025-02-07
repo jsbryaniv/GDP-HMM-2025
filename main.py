@@ -37,10 +37,12 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
         from dataset import GDPDataset
         dataset = GDPDataset(
             treatment='HaN', 
-            shape=(128, 128, 128),
+            shape=(64, 64, 64),
+            scale=0.5,
             return_dose=True,
         )
         in_channels = 35
+        out_channels = 1
 
     # Split into train, validation, and test sets
     test_size = int(0.2 * len(dataset))
@@ -60,28 +62,31 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
 
     # Initialize model
     if modelID.lower() == 'unet':
+        # Unet3D model
         from models.unet import Unet3D
         model = Unet3D(
             in_channels=in_channels, 
-            out_channels=1, 
+            out_channels=out_channels, 
             **model_kwars,
         )
         n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f'Loaded Unet3D model with {n_params} trainable parameters.')
     elif modelID.lower() == 'vit':
+        # Vision Transformer model
         from models.vit import ViT3D
         model = ViT3D(
             in_channels=in_channels,
-            out_channels=1,
+            out_channels=out_channels,
             **model_kwars,
         )
         n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f'Loaded ViT3D model with {n_params} trainable parameters.')
     elif modelID.lower() == 'convformer':
-        from models.convformer import Convformer
-        model = Convformer(
+        # Convolutional Transformer model
+        from models.convformer import ConvformerModel
+        model = ConvformerModel(
             in_channels=in_channels,
-            out_channels=1,
+            out_channels=out_channels,
             **model_kwars,
         )
         n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -97,7 +102,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        batch_size=1, learning_rate=0.001, num_epochs=2,
+        batch_size=1, learning_rate=0.01, num_epochs=2,
     )
 
 

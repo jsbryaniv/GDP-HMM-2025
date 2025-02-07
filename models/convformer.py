@@ -5,49 +5,36 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# Define kernelized self-attention block
-class AttentionKernelBlock(nn.Module):
-    """Applies self-attention within a local receptive field defined by a kernel"""
+# Define convolutional attention block
+class ConvAttn3d(nn.Module):
+    """Applies attention within a local receptive field defined by a kernel"""
     def __init__(self, n_features, kernel_size=3):
-        super(AttentionKernelBlock, self).__init__()
+        super(ConvAttn3d, self).__init__()
 
         # Set attributes
         self.n_features = n_features
         self.kernel_size = kernel_size
 
-        # Query, Key, Value projections
-        self.qkv_proj = nn.Conv3d(n_features, n_features * 3, kernel_size=1)  # 1x1 Conv as linear layer
+        # Set projections
         self.out_proj = nn.Conv3d(n_features, n_features, kernel_size=1)
 
         # Create relative positional embeddings
-        self.rel_pos = nn.Parameter(torch.randn(n_features, kernel_size, kernel_size, kernel_size))
+        self.pos_emb = nn.Parameter(torch.randn(n_features, kernel_size, kernel_size, kernel_size))
 
-        # Create window extractor kernel that reshapes a kernel window (B,C,k,k,k) into a vector (B,C*k^3)
-        wek = torch.zeros(n_features*kernel_size**3, n_features, kernel_size, kernel_size, kernel_size)
-        for i in range(kernel_size):
-            for j in range(kernel_size):
-                for k in range(kernel_size):
-                    wek[i*kernel_size**2 + j*kernel_size + k, :, i, j, k] = 1
-        self.window_extractor_kernel = wek
-        
+    def forward(self, Q, K, V):
 
-    def forward(self, x):
-        return self.forward_v1(x)
-    
-    def forward_v1(self, x):
-
-        # Project inputs into Q, K, V
-        B, C, D, H, W = x.shape
-        Q, K, V = self.qkv_proj(x).chunk(3, dim=1)  # Split into Q, K, V
+        # Get constants
+        B, C, D, H, W = Q.shape
+        device = Q.device
         
         # Pad keys and values
         K = F.pad(K, [self.kernel_size // 2] * 6)
         V = F.pad(V, [self.kernel_size // 2] * 6)
 
         # Initialize attention weights
-        attn = torch.zeros(B, self.kernel_size**3, D, H, W, device=x.device)
+        attn_weights = torch.zeros(B, self.kernel_size**3, D, H, W, device=device)
 
-        # Loop over displacements
+        # Get attention from each kernel position
         ijk = -1
         for i in range(self.kernel_size):
             for j in range(self.kernel_size):
@@ -55,16 +42,19 @@ class AttentionKernelBlock(nn.Module):
                     ijk += 1
 
                     # Get shifted key and positional embedding
-                    pos_emb = self.rel_pos[:, i, j, k].view(1, self.n_features, 1, 1, 1)
+                    pos_emb = self.pos_emb[:, i, j, k].view(1, self.n_features, 1, 1, 1)
                     K_shift = K[:, :, i:i+D, j:j+H, k:k+W] + pos_emb
 
                     # Calculate attention weights
-                    attn[:, ijk] = (Q * K_shift).sum(dim=1) / (self.n_features ** 0.5)
+                    attn_weights[:, ijk] = (Q * K_shift).sum(dim=1) / (self.n_features ** 0.5)
 
         # Softmax attention weights
-        attn_weights = F.softmax(attn, dim=1)
+        attn_weights = F.softmax(attn_weights, dim=1)
 
-        # Loop over displacements
+        # Initialize output
+        x = torch.zeros_like(Q)
+
+        # Get output from each kernel position
         ijk = -1
         for i in range(self.kernel_size):
             for j in range(self.kernel_size):
@@ -81,124 +71,105 @@ class AttentionKernelBlock(nn.Module):
                     x = x + dx
 
         # Finalize output
-        x = self.out_proj(x)  # Final projection
-
-        # Return output
-        return x
-    
-    def forward_v2(self, x):
-
-        # Project inputs into Q, K, V
-        B, C, D, H, W = x.shape
-        Q, K, V = self.qkv_proj(x).chunk(3, dim=1)  # Split into Q, K, V
-        
-        # Pad keys and values
-        K = F.pad(K, [self.kernel_size // 2] * 6)
-        V = F.pad(V, [self.kernel_size // 2] * 6)
-        
-        # Extract windows into a single channel
-        wek = self.window_extractor_kernel.to(x.device)  # Window extractor kernel (wek)
-        K_kernels = F.conv3d(K, wek)
-        V_kernels = F.conv3d(V, wek)
-
-        # Add relative positional embeddings
-        pos_emb = self.rel_pos.view(1, self.n_features*self.kernel_size**3, 1, 1, 1)
-        K_kernels = K_kernels + pos_emb
-
-        # Initialize attention weights
-        attn = torch.zeros(B, self.kernel_size**3, D, H, W, device=x.device)
-        
-        # Get attention weights
-        for ijk in range(self.kernel_size**3):
-            attn[:, ijk] = (Q * K_kernels[:, ijk:ijk+self.n_features]).sum(dim=1) / (self.n_features ** 0.5)
-
-        # Softmax attention weights
-        attn = F.softmax(attn, dim=1)
-
-        # Apply attention weights to values
-        out = torch.zeros(B, self.n_features, D, H, W, device=x.device)
-        for ijk in range(self.kernel_size**3):
-            out = out + attn[:, ijk] * V_kernels[:, ijk:ijk+self.n_features]
-
-        # Finalize output
-        x = x = self.out_proj(out)  # Final projection
+        x = self.out_proj(x)
 
         # Return output
         return x
     
 
-# Make kernalized multi-head attention block
-class MultiHeadAttentionKernel(nn.Module):
+# Make confolutional multi-head attention block
+class MultiheadConvAttn3d(nn.Module):
     """Applies multi-head self-attention within a local receptive field defined by a kernel"""
-    def __init__(self, n_features, n_heads=4, kernel_size=3):
-        super(MultiHeadAttentionKernel, self).__init__()
+    def __init__(self, n_features, kernel_size=3, n_heads=4):
+        super(MultiheadConvAttn3d, self).__init__()
 
         # Set attributes
         self.n_features = n_features
-        self.n_heads = n_heads
         self.kernel_size = kernel_size
+        self.n_heads = n_heads
+
+        # Query, Key, Value projections
+        self.q_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
+        self.k_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
+        self.v_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
 
         # Define attention heads
         self.attention_heads = nn.ModuleList([
-            AttentionKernelBlock(n_features // n_heads, kernel_size) for _ in range(n_heads)
+            ConvAttn3d(n_features // n_heads, kernel_size) for _ in range(n_heads)
         ])
 
         # Define output projection
         self.out_proj = nn.Conv3d(n_features, n_features, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, query, key, value):
 
-        # Split input into chunks
-        x_list = x.chunk(self.n_heads, dim=1)
+        # Project inputs into Q, K, V
+        B, C, D, H, W = query.shape
+        Qs = self.q_proj(query).chunk(self.n_heads, dim=1)
+        Ks = self.k_proj(key).chunk(self.n_heads, dim=1)
+        Vs = self.v_proj(value).chunk(self.n_heads, dim=1)
 
         # Apply attention heads
-        x_list = [head(x) for head, x in zip(self.attention_heads, x_list)]
+        out = [head(q, k, v) for (head, q, k, v) in zip(self.attention_heads, Qs, Ks, Vs)]
 
         # Merge heads
-        x = torch.cat(x_list, dim=1)
-        x = self.out_proj(x)
+        out = torch.cat(out, dim=1)
+        out = self.out_proj(out)
+
+        # Return output
+        return out
+
+
+# Define Convformer block
+class ConvformerBlock3d(nn.Module):
+    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1):
+        super(ConvformerBlock3d, self).__init__()
+
+        # Set up attributes
+        self.n_features = n_features
+        self.n_heads = n_heads
+        self.expansion = expansion
+        
+        # Calculate constants
+        n_features_inner = int(n_features * expansion)
+        self.n_features_inner = n_features_inner
+
+        # Set up multi-head self-attention
+        self.self_attn = MultiheadConvAttn3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
+
+        # Set up feedforward layer
+        self.mlp = nn.Sequential(
+            nn.Conv3d(n_features, n_features_inner, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv3d(n_features_inner, n_features, kernel_size=1),
+        )
+
+        # Set up normalization layers
+        self.norm1 = nn.InstanceNorm3d(n_features)
+        self.norm2 = nn.InstanceNorm3d(n_features)
+
+    def forward(self, x):
+
+        # Apply self-attention
+        x_normed = self.norm1(x)
+        attn_output = self.self_attn(x_normed, x_normed, x_normed)
+        x = x + attn_output
+
+        # Feedforward layer
+        x = x + self.mlp(self.norm2(x))
 
         # Return output
         return x
 
 
-
-# Define convolutional transformer block
-class ConvTransformerBlock(nn.Module):
-    """Convolutional Transformer Block using kernelized self-attention"""
-    def __init__(self, n_features, kernel_size=3, n_heads=4, expansion=2):
-        super(ConvTransformerBlock, self).__init__()
-
-        # Set attributes
-        self.n_features = n_features
-        self.kernel_size = kernel_size
-        self.n_heads = n_heads
-        self.expansion = expansion
-
-        # Define layers
-        self.norm1 = nn.GroupNorm(1, n_features)  # Normalization layer
-        self.attn = MultiHeadAttentionKernel(n_features, n_heads, kernel_size)  # Multi-head attention
-        self.norm2 = nn.GroupNorm(1, n_features)  # Normalization layer
-        self.mlp = nn.Sequential(
-            nn.Conv3d(n_features, n_features * expansion, kernel_size=1),
-            nn.GELU(),
-            nn.Conv3d(n_features * expansion, n_features, kernel_size=1),
-        )
-
-    def forward(self, x):
-        x = x + self.attn(self.norm1(x))  # Local attention
-        x = x + self.mlp(self.norm2(x))   # MLP for depth-wise feature mixing
-        return x
-
-
 # Define full convolutional transformer model
-class Convformer(nn.Module):
+class ConvformerModel(nn.Module):
     """Full Convolutional Transformer model"""
     def __init__(self,
         in_channels, out_channels,
-        n_features=8, num_layers=6, n_heads=1, kernel_size=3
+        n_features=8, num_layers=4, n_heads=2, kernel_size=3
     ):
-        super(Convformer, self).__init__()
+        super(ConvformerModel, self).__init__()
 
         # Set attributes
         self.in_channels = in_channels
@@ -210,9 +181,10 @@ class Convformer(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
+            # Normalize
+            nn.GroupNorm(in_channels, in_channels),
+            # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=3, padding=1),
-            nn.InstanceNorm3d(n_features, affine=True),
-            nn.ReLU(inplace=True),
         )
 
         # Define layers
@@ -220,7 +192,7 @@ class Convformer(nn.Module):
         for _ in range(num_layers):
             self.layers.append(
                 nn.Sequential(
-                    ConvTransformerBlock(n_features, kernel_size=kernel_size, n_heads=n_heads)
+                    ConvformerBlock3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
                 )
             )
 
@@ -235,8 +207,7 @@ class Convformer(nn.Module):
         x = self.input_block(x)
 
         # Transformer layers
-        for layer in self.layers:
-            print('------layer------')
+        for i, layer in enumerate(self.layers):
             x = layer(x)
 
         # Output block
@@ -245,30 +216,28 @@ class Convformer(nn.Module):
         # Return output
         return x
 
-# Example usage
+
+# Test the model
 if __name__ == '__main__':
 
-    # Import libraries
-    import time
-
-    # Set device
+    # Get device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # device = 'cpu'
-    
-    # Create data
-    x = torch.randn(1, 35, 128, 128, 128)
 
-    # Create model
-    model = Convformer(in_channels=35, out_channels=1)
+    # Create a model
+    model = ConvformerModel(30, 1)
+
+    # Count parameters
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f'Model has {n_params} parameters')
 
+    # Create data
+    x = torch.randn(1, 30, 64, 64, 64)
+
     # Forward pass
-    t0 = time.time()
+    x = x.to(device)
+    model = model.to(device)
     y = model(x)
-    print(f'Forward pass took {time.time() - t0:.2f} seconds on {device}')
 
     # Done
-    print("Done!")
-
+    print('Done!')
 
