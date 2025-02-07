@@ -157,10 +157,13 @@ if __name__ == '__main__':
     ]
     
     # Get training IDs from system arguments
+    print('sysargs=',sys.argv)
     ID = 0
     args = sys.argv
     if len(args) > 1:
-        ID = args[1]
+        ID = int(args[1])
+
+    print('ID=',ID)
 
     # Run main function
     dataID, modelID = all_jobs[ID]
