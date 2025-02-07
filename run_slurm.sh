@@ -7,20 +7,22 @@
 #SBATCH --gres=gpu:1                       # Request 1 GPU (modify if needed)
 #SBATCH --mem=24G                          # Memory allocation
 
-# Load the required modules (if using an environment module system)
+# Set up environment
 module load python
 module load cuda
-
-# Activate your Python environment
 source activate .env
+
+# Get the command-line argument
+ARGS=$1
 
 # Print environment details (useful for debugging)
 echo "Running on: $(hostname)"
 echo "Slurm Job ID: $SLURM_JOB_ID"
 echo "CUDA Devices: $CUDA_VISIBLE_DEVICES"
+echo "Arguments: $ARGS"
 
 # Run your Python script
-python -u main.py
+python -u main.py $ARGS
 
 # Print completion message
 echo "Job finished at $(date)"
