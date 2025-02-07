@@ -19,29 +19,109 @@ class AttentionKernelBlock(nn.Module):
         self.qkv_proj = nn.Conv3d(n_features, n_features * 3, kernel_size=1)  # 1x1 Conv as linear layer
         self.out_proj = nn.Conv3d(n_features, n_features, kernel_size=1)
 
-        # Learnable kernel weights
-        self.q_kernel = nn.Parameter(.1*torch.randn(1, n_features, kernel_size, kernel_size, kernel_size))
-        self.v_kernel = nn.Parameter(.1*torch.randn(1, n_features, kernel_size, kernel_size, kernel_size))
+        # Create relative positional embeddings
+        self.rel_pos = nn.Parameter(torch.randn(n_features, kernel_size, kernel_size, kernel_size))
+
+        # Create window extractor kernel that reshapes a kernel window (B,C,k,k,k) into a vector (B,C*k^3)
+        wek = torch.zeros(n_features*kernel_size**3, n_features, kernel_size, kernel_size, kernel_size)
+        for i in range(kernel_size):
+            for j in range(kernel_size):
+                for k in range(kernel_size):
+                    wek[i*kernel_size**2 + j*kernel_size + k, :, i, j, k] = 1
+        self.window_extractor_kernel = wek
+        
 
     def forward(self, x):
+        return self.forward_v1(x)
+    
+    def forward_v1(self, x):
 
         # Project inputs into Q, K, V
         B, C, D, H, W = x.shape
         Q, K, V = self.qkv_proj(x).chunk(3, dim=1)  # Split into Q, K, V
+        
+        # Pad keys and values
+        K = F.pad(K, [self.kernel_size // 2] * 6)
+        V = F.pad(V, [self.kernel_size // 2] * 6)
 
-        # Multiply Q and K with kernel weights
-        Q = F.conv3d(Q, self.q_kernel, padding=self.kernel_size // 2)
-        V = F.conv3d(V, self.v_kernel, padding=self.kernel_size // 2)
+        # Initialize attention weights
+        attn = torch.zeros(B, self.kernel_size**3, D, H, W, device=x.device)
 
-        # Calculate attention weights
-        attn_weights = (Q * K).softmax(dim=2)
+        # Loop over displacements
+        ijk = -1
+        for i in range(self.kernel_size):
+            for j in range(self.kernel_size):
+                for k in range(self.kernel_size):
+                    ijk += 1
 
-        # Apply attention weights
-        x = attn_weights * V
+                    # Get shifted key and positional embedding
+                    pos_emb = self.rel_pos[:, i, j, k].view(1, self.n_features, 1, 1, 1)
+                    K_shift = K[:, :, i:i+D, j:j+H, k:k+W] + pos_emb
+
+                    # Calculate attention weights
+                    attn[:, ijk] = (Q * K_shift).sum(dim=1) / (self.n_features ** 0.5)
+
+        # Softmax attention weights
+        attn_weights = F.softmax(attn, dim=1)
+
+        # Loop over displacements
+        ijk = -1
+        for i in range(self.kernel_size):
+            for j in range(self.kernel_size):
+                for k in range(self.kernel_size):
+                    ijk += 1
+
+                    # Get shifted values
+                    V_shift = V[:, :, i:i+D, j:j+H, k:k+W]
+
+                    # Apply attention weights
+                    dx = attn_weights[:, ijk] * V_shift
+
+                    # Update output
+                    x = x + dx
 
         # Finalize output
-        x = x.view(B, C, D, H, W)  # Reshape back
         x = self.out_proj(x)  # Final projection
+
+        # Return output
+        return x
+    
+    def forward_v2(self, x):
+
+        # Project inputs into Q, K, V
+        B, C, D, H, W = x.shape
+        Q, K, V = self.qkv_proj(x).chunk(3, dim=1)  # Split into Q, K, V
+        
+        # Pad keys and values
+        K = F.pad(K, [self.kernel_size // 2] * 6)
+        V = F.pad(V, [self.kernel_size // 2] * 6)
+        
+        # Extract windows into a single channel
+        wek = self.window_extractor_kernel.to(x.device)  # Window extractor kernel (wek)
+        K_kernels = F.conv3d(K, wek)
+        V_kernels = F.conv3d(V, wek)
+
+        # Add relative positional embeddings
+        pos_emb = self.rel_pos.view(1, self.n_features*self.kernel_size**3, 1, 1, 1)
+        K_kernels = K_kernels + pos_emb
+
+        # Initialize attention weights
+        attn = torch.zeros(B, self.kernel_size**3, D, H, W, device=x.device)
+        
+        # Get attention weights
+        for ijk in range(self.kernel_size**3):
+            attn[:, ijk] = (Q * K_kernels[:, ijk:ijk+self.n_features]).sum(dim=1) / (self.n_features ** 0.5)
+
+        # Softmax attention weights
+        attn = F.softmax(attn, dim=1)
+
+        # Apply attention weights to values
+        out = torch.zeros(B, self.n_features, D, H, W, device=x.device)
+        for ijk in range(self.kernel_size**3):
+            out = out + attn[:, ijk] * V_kernels[:, ijk:ijk+self.n_features]
+
+        # Finalize output
+        x = x = self.out_proj(out)  # Final projection
 
         # Return output
         return x
@@ -156,6 +236,7 @@ class Convformer(nn.Module):
 
         # Transformer layers
         for layer in self.layers:
+            print('------layer------')
             x = layer(x)
 
         # Output block
@@ -166,6 +247,13 @@ class Convformer(nn.Module):
 
 # Example usage
 if __name__ == '__main__':
+
+    # Import libraries
+    import time
+
+    # Set device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = 'cpu'
     
     # Create data
     x = torch.randn(1, 35, 128, 128, 128)
@@ -176,7 +264,9 @@ if __name__ == '__main__':
     print(f'Model has {n_params} parameters')
 
     # Forward pass
+    t0 = time.time()
     y = model(x)
+    print(f'Forward pass took {time.time() - t0:.2f} seconds on {device}')
 
     # Done
     print("Done!")
