@@ -34,10 +34,11 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
 
     # Load dataset
     if dataID.lower() == 'han':
+        shape = (64, 64, 64)
         from dataset import GDPDataset
         dataset = GDPDataset(
             treatment='HaN', 
-            shape=(64, 64, 64),
+            shape=shape,
             scale=0.5,
             return_dose=True,
         )
@@ -77,6 +78,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
         model = ViT3D(
             in_channels=in_channels,
             out_channels=out_channels,
+            shape=shape,
             **model_kwars,
         )
         n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -163,7 +165,7 @@ if __name__ == '__main__':
     
     # Get training IDs from system arguments
     print('sysargs=',sys.argv)
-    ID = 0
+    ID = 1
     args = sys.argv
     if len(args) > 1:
         ID = int(args[1])

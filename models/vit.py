@@ -46,7 +46,7 @@ class TransformerBlock(nn.Module):
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), patch_size=(4, 4, 4), downscaling_factor=4,
+        shape=(64, 64, 64), patch_size=(4, 4, 4), downscaling_factor=2,
         embed_dim=64, num_heads=2, num_layers=6,
     ):
         super(ViT3D, self).__init__()
@@ -153,9 +153,6 @@ class ViT3D(nn.Module):
         x = self.downscale(x)
 
         # Patch embedding
-        print(x.shape)
-        print(self.embed_dim)
-
         x = self.patch_embed(x)  # Shape: [B, embed_dim, D//pD, H//pH, W//pW]
         x = x.flatten(2).transpose(1, 2)  # Shape: [B, num_patches, embed_dim]
 
