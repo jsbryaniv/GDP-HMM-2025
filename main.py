@@ -104,7 +104,7 @@ def main(dataID, modelID, train_kwars=None, model_kwars=None):
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        batch_size=1, learning_rate=0.01, num_epochs=2,
+        batch_size=1, learning_rate=0.01, num_epochs=20,
     )
 
 
