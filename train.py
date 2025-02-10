@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, learning_rate=0.01, num_epochs=100,
+    batch_size=1, learning_rate=0.01, max_grad=1, num_epochs=100,
 ): 
     # Set up constants
     device = next(model.parameters()).device
@@ -90,6 +90,7 @@ def train_model(
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
             optimizer.step()
 
             # Update average loss
