@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 def train_model(
     model, dataset_train, dataset_val,
     batch_size=1, learning_rate=0.01, max_grad=1, num_epochs=100,
+    print_every=50,
 ): 
     # Set up constants
     device = next(model.parameters()).device
@@ -72,8 +73,8 @@ def train_model(
         for batch_idx, (ct, ptvs, oars, beam, dose) in enumerate(loader_train):
 
             # Status update
-            if batch_idx % 10 == 0:
-                print(f'---- Batch {batch_idx}/{len(loader_train)}')
+            if batch_idx % print_every == 0:
+                print(f'---- E{epoch}/{num_epochs} Batch {batch_idx}/{len(loader_train)}')
 
             # Send to device
             ct = ct.to(device)
@@ -97,7 +98,7 @@ def train_model(
             avg_loss_train += loss.item() / len(loader_train)
 
             # Status update
-            if batch_idx % 10 == 0:
+            if batch_idx % print_every == 0:
                 t_batch = time.time() - t_batch
                 if batch_idx > 0:
                     t_batch /= 10
@@ -130,8 +131,8 @@ def train_model(
             avg_loss_val += loss.item() / len(loader_val)
 
             # Status update
-            if batch_idx % 10 == 0:
-                print(f'---- Batch {batch_idx}/{len(loader_val)}')
+            if batch_idx % print_every == 0:
+                print(f'---- E{epoch}/{num_epochs} Val Batch {batch_idx}/{len(loader_val)}')
 
         ### Finalize training statistics ###
         print('--Finalizing training statistics')
@@ -144,7 +145,7 @@ def train_model(
             best_model_state = copy.deepcopy(model.state_dict())
 
         # Status update
-        print(f'-- Summary')
+        print(f'-- Epoch {epoch}/{num_epochs} Summary:')
         print(f'---- Train Loss: {avg_loss_train:.4f}')
         print(f'---- Val Loss: {avg_loss_val:.4f}')
         print(f'---- Time: {time.time()-t_epoch:.2f} s / epoch')
