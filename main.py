@@ -15,6 +15,22 @@ with open('config.json', 'r') as f:
     config = json.load(f)
 
 
+# Get savename function
+def get_savename(dataID, modelID, **kwargs):
+    """
+    Get savename for a given dataset and model.
+    """
+    # Initialize savename
+    savename = f'model_{dataID}_{modelID}'
+    # Add kwargs to savename
+    kwargs_sorted = sorted(kwargs.items())
+    for key, value in kwargs_sorted:
+        if value:
+            savename += f'_{key}={value}'
+    # Return savename
+    return savename
+
+
 # Load dataset function
 def load_dataset(dataID, **kwargs):
 
@@ -25,7 +41,7 @@ def load_dataset(dataID, **kwargs):
         from dataset import GDPDataset
 
         # Set constants
-        in_channels = 35
+        in_channels = 36
         out_channels = 1
         shape = (128, 128, 128)
         scale = 1
@@ -82,7 +98,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         )
     elif modelID.lower() == 'uconvtrans':
         # U-Convformer model
-        from models.uconvtrans import UConvformerModel
+        from models.uconvformer import UConvformerModel
         model = UConvformerModel(
             in_channels=in_channels, 
             out_channels=out_channels,
@@ -173,7 +189,7 @@ def main(
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        batch_size=1, learning_rate=0.01, n_epochs=50,
+        batch_size=1, learning_rate=0.01, n_epochs=20,
         jobname=savename,
         **train_kwargs,
     )

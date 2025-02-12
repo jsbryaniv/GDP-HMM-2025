@@ -13,71 +13,6 @@ import torch.nn.functional as F
 from models.blocks import ConvBlock
 
 
-# Define convolutional block
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, upsample=False, downsample=False, beta=.5):
-        super(ConvBlock, self).__init__()
-
-        # Check inputs
-        if upsample and downsample:
-            raise ValueError('Cannot upsample and downsample at the same time.')
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.upsample = upsample
-        self.downsample = downsample
-        self.beta = beta
-
-        # Define residual layer
-        if upsample:
-            self.residual = nn.ConvTranspose3d(
-                in_channels, out_channels, kernel_size=2, stride=2
-            )
-        elif downsample:
-            self.residual = nn.Conv3d(in_channels, out_channels, kernel_size=2, stride=2)
-        elif in_channels != out_channels:
-            self.residual = nn.Conv3d(in_channels, out_channels, kernel_size=1)
-        else:
-            self.residual = nn.Identity()
-
-        # Define convolutional layers
-        if upsample:
-            self.conv = nn.Sequential(
-                nn.ConvTranspose3d(
-                    in_channels, out_channels, kernel_size=2, stride=2
-                ),
-                nn.GroupNorm(1, out_channels),
-                nn.ReLU(inplace=True),
-            )
-        elif downsample:
-            self.conv = nn.Sequential(
-                nn.Conv3d(in_channels, out_channels, kernel_size=2, stride=2),
-                nn.GroupNorm(1, out_channels),
-                nn.ReLU(inplace=True),
-            )
-        else:
-            self.conv = nn.Sequential(
-                nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
-                nn.GroupNorm(1, out_channels),
-                nn.ReLU(inplace=True),
-            )
-
-    def forward(self, x):
-        
-        # Residual connection
-        x0 = self.residual(x)
-
-        # Convolutional block
-        x = self.conv(x)
-
-        # Combine with residual
-        x = self.beta * x + (1 - self.beta) * x0
-
-        # Return the output
-        return x
-
-
 # Define simple 3D Unet model
 class Unet3D(nn.Module):
     def __init__(self, in_channels, out_channels, n_features=8, n_blocks=3, n_layers_per_block=2):
@@ -92,8 +27,8 @@ class Unet3D(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
-            # Normalize
-            nn.GroupNorm(in_channels, in_channels),
+            # # Normalize
+            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Additional convolutional layers
@@ -169,23 +104,19 @@ class Unet3D(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from utils import estimate_memory_usage
 
     # Create a model
-    model = Unet3D(30, 1)
+    model = Unet3D(36, 1)
 
     # Create data
-    x = torch.randn(1, 30, 64, 64, 64)
+    x = torch.randn(1, 36, 128, 128, 128)
 
     # Forward pass
     y = model(x)
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)
-    estimate_memory_usage(model, torch.randn(1, 30, 64, 64, 64), print_stats=True)
-    estimate_memory_usage(model, torch.randn(1, 30, 128, 128, 128), print_stats=True)
 
     # Done
     print('Done!')

@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.blocks import ConvBlock, ConvAttn3d, ConvformerBlock3d
+from models.blocks import ConvBlock, ConvAttn3d, ConvformerBlock3d, ConvformerCrossBlock3d
 
 
 # Define full convolutional transformer model
@@ -18,7 +18,7 @@ class UConvformerModel(nn.Module):
     """Full Convolutional Transformer model"""
     def __init__(self,
         in_channels, out_channels,
-        n_features=8, n_blocks=3, n_layers_per_block=3
+        n_features=8, n_blocks=4, n_layers_per_block=3
     ):
         super(UConvformerModel, self).__init__()
         
@@ -31,8 +31,8 @@ class UConvformerModel(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
-            # Normalize
-            nn.GroupNorm(in_channels, in_channels),
+            # # Normalize
+            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Downsample
@@ -101,8 +101,8 @@ class UConvformerModel(nn.Module):
         self.output_block = nn.Sequential(
             # Upsample
             ConvBlock(n_features, n_features, upsample=True),
-            # Smooth
-            nn.Conv3d(n_features, n_features, kernel_size=3, padding=1),
+            # Additional convolutional layers
+            *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)],
             # Project to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
@@ -131,14 +131,15 @@ class UConvformerModel(nn.Module):
             x = self.up_blocks[i](x)
             # Get skip
             x_skip = skips.pop()
-            # Get query from x
-            Q = self.q_proj_blocks[i](x)
             # Get key and value from skip
             K, V = self.kv_proj_blocks[i](x_skip).chunk(2, dim=1)
-            # Apply attention
-            x = x + self.attn_blocks[i](Q, K, V)
-            # Apply MLP
-            x = x + self.mlp_blocks[i](x)
+            for _ in range(self.n_blocks - i):
+                # Get query from x
+                Q = self.q_proj_blocks[i](x)
+                # Apply attention
+                x = x + self.attn_blocks[i](Q, K, V)
+                # Apply MLP
+                x = x + self.mlp_blocks[i](x)
 
         # Output block
         x = self.output_block(x)
@@ -151,15 +152,13 @@ class UConvformerModel(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from utils import estimate_memory_usage
 
     # Create a model
-    model = UConvformerModel(30, 1)
+    model = UConvformerModel(36, 1)
 
     # Create data
-    x = torch.randn(1, 30, 128, 128, 128)
+    x = torch.randn(1, 36, 128, 128, 128)
 
     # Forward pass
     y = model(x)

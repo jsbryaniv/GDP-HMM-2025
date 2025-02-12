@@ -32,8 +32,8 @@ class ConvformerModel(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
-            # Normalize
-            nn.GroupNorm(in_channels, in_channels),
+            # # Normalize
+            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=3, padding=1),
         )
@@ -72,15 +72,13 @@ class ConvformerModel(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from utils import estimate_memory_usage
 
     # Create a model
-    model = ConvformerModel(30, 1)
+    model = ConvformerModel(36, 1)
 
     # Create data
-    x = torch.randn(1, 30, 64, 64, 64)
+    x = torch.randn(1, 36, 128, 128, 128)
 
     # Forward pass
     y = model(x)

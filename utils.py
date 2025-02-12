@@ -57,11 +57,21 @@ def estimate_memory_usage(model, x, print_stats=True):
     if print_stats:
         print(f"Model has {n_params:,} parameters")
         print(f"Estimated Memory Usage:")
-        print(f"  - Parameters: {mem_params / 1e6:.2f} MB")
-        print(f"  - Gradients: {mem_gradients / 1e6:.2f} MB")
-        print(f"  - Optimizer: {mem_optimizer / 1e6:.2f} MB")
-        print(f"  - Activations: {mem_activations / 1e6:.2f} MB")
-        print(f"  - Total: {mem_total / 1e6:.2f} MB")
+        # Loop over memory components
+        for key, value in {
+            "Parameters": mem_params,
+            "Gradients": mem_gradients,
+            "Optimizer": mem_optimizer,
+            "Activations": mem_activations,
+            "Total": mem_total,
+        }.items():
+            # Dynamically find the appropriate unit
+            scale = 1
+            for unit in ["bytes", "KB", "MB", "GB", "TB"]:
+                if value / scale < 1024:
+                    break
+                scale *= 1024
+            print(f"  - {key}: {value / scale:.3f} {unit}")
 
     # Return total memory
     return mem_total

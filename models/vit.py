@@ -46,8 +46,8 @@ class ViT3D(nn.Module):
 
         # Create downscaling and upscaling layers
         self.downscale = nn.Sequential(
-            # Normalize
-            nn.GroupNorm(in_channels, in_channels),
+            # # Normalize
+            # nn.GroupNorm(in_channels, in_channels),
             # Downscale along channels
             nn.Conv3d(
                 in_channels, 
@@ -64,13 +64,6 @@ class ViT3D(nn.Module):
             )
         )
         self.upscale = nn.Sequential(
-            # Smooth
-            nn.Conv3d(
-                out_channels*downscaling_factor, 
-                out_channels*downscaling_factor, 
-                kernel_size=3, 
-                padding=1
-            ),
             # Upscale
             nn.ConvTranspose3d(
                 out_channels*downscaling_factor,
@@ -79,6 +72,13 @@ class ViT3D(nn.Module):
                 stride=downscaling_factor
             ),
             # Smooth
+            nn.Conv3d(
+                out_channels*downscaling_factor, 
+                out_channels*downscaling_factor, 
+                kernel_size=3, 
+                padding=1
+            ),
+            # Project to output channels
             nn.Conv3d(
                 out_channels*downscaling_factor, 
                 out_channels, 
@@ -148,19 +148,17 @@ class ViT3D(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from utils import estimate_memory_usage
 
     # Create a model
     model = ViT3D(
-        30, 1, 
+        36, 1, 
         shape=(128, 128, 128), patch_size=(8, 8, 8), 
         downscaling_factor=2,
     )
 
     # Create data
-    x = torch.randn(1, 30, 128, 128, 128)
+    x = torch.randn(1, 36, 128, 128, 128)
 
     # Forward pass
     y = model(x)

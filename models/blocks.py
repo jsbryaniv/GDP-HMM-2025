@@ -267,5 +267,50 @@ class ConvformerBlock3d(nn.Module):
         return x
 
 
+# Define convolutional cross-attention transformer block
+class ConvformerCrossBlock3d(nn.Module):
+    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=2):
+        super(ConvformerCrossBlock3d, self).__init__()
+
+        # Set up attributes
+        self.n_features = n_features
+        self.n_heads = n_heads
+        self.expansion = expansion
+
+        # Calculate constants
+        n_features_inner = int(n_features * expansion)
+        self.n_features_inner = n_features_inner
+
+        # Multi-head cross-attention
+        self.cross_attn = MultiheadConvAttn3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
+
+        # Feedforward layer
+        self.mlp = nn.Sequential(
+            nn.Conv3d(n_features, n_features_inner, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv3d(n_features_inner, n_features, kernel_size=1),
+        )
+
+        # Normalization layers
+        self.norm1 = nn.InstanceNorm3d(n_features)
+        self.norm2 = nn.InstanceNorm3d(n_features)
+        self.norm3 = nn.InstanceNorm3d(n_features)
+
+    def forward(self, x, y):
+        """
+        x is the query tensor
+        y is the context tensor
+        """
+
+        # Apply cross-attention
+        x_normed = self.norm1(x)
+        y_normed = self.norm2(y)  # Normalize context separately
+        attn_output = self.cross_attn(x_normed, y_normed, y_normed)
+        x = x + attn_output
+
+        # Feedforward layer
+        x = x + self.mlp(self.norm3(x))
+
+        return x
 
 

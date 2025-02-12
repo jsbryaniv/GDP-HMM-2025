@@ -148,6 +148,10 @@ class GDPDataset(Dataset):
             if oar in data_dict:
                 oar_data = data_dict[oar]
                 oars[self.oar_dict[oar]] = oar_data
+        
+        # Load body mask
+        body = data_dict['Body']
+        body = np.expand_dims(body, axis=0)  # Add channel dimension
 
         # Load dose
         if self.return_dose:
@@ -174,6 +178,7 @@ class GDPDataset(Dataset):
             beam = beam[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             ptvs = ptvs[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             oars = oars[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            body = body[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             if self.return_dose:
                 dose = dose[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
 
@@ -192,6 +197,7 @@ class GDPDataset(Dataset):
             beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             ptvs = np.pad(ptvs, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             oars = np.pad(oars, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            body = np.pad(body, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             if self.return_dose:
                 dose = np.pad(dose, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             # Cropping centered at center
@@ -204,6 +210,7 @@ class GDPDataset(Dataset):
             beam = beam[:, slice_x, slice_y, slice_z]
             ptvs = ptvs[:, slice_x, slice_y, slice_z]
             oars = oars[:, slice_x, slice_y, slice_z]
+            body = body[:, slice_x, slice_y, slice_z]
             if self.return_dose:
                 dose = dose[:, slice_x, slice_y, slice_z]
 
@@ -212,6 +219,7 @@ class GDPDataset(Dataset):
         # beam = (beam - beam.mean()) / beam.std()
         # ptvs = (ptvs - ptvs.mean()) / ptvs.std()
         # oars = (oars - oars.mean()) / oars.std()
+        # body = (body - body.mean()) / body.std()
         # if self.return_dose:
         #     dose = (dose - dose.mean()) / dose.std()
 
@@ -220,14 +228,15 @@ class GDPDataset(Dataset):
         beam = torch.tensor(beam, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)
         oars = torch.tensor(oars, dtype=torch.float32)
+        body = torch.tensor(body, dtype=torch.float32)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
 
         # Return data
         if self.return_dose:
-            return ct, beam, ptvs, oars, dose
+            return ct, beam, ptvs, oars, body, dose
         else:
-            return ct, beam, ptvs, oars
+            return ct, beam, ptvs, oars, body
 
         
 
@@ -242,14 +251,14 @@ if __name__ == "__main__":
     )
 
     # Get first item
-    ct, beam, ptvs, oars, dose = dataset[0]
+    ct, beam, ptvs, oars, body, dose = dataset[0]
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
         if i % 10 == 0:
             print(f'-- {i}/{len(dataset)} --')
-        ct, beam, ptvs, oars, dose = dataset[i]
+        ct, beam, ptvs, oars, body, dose = dataset[i]
 
     # Done
     print("Done")

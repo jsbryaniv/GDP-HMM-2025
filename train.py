@@ -72,8 +72,10 @@ def train_model(
         avg_loss_train = 0
 
         # Loop over batches
-        t_batch = time.time()
-        for batch_idx, (ct, beam, ptvs, oars, dose) in enumerate(loader_train):
+        t_batch = time.time()                           # Start timer
+        if device.type != "cpu":
+            torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
+        for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_train):
 
             # Status update
             if batch_idx % print_every == 0:
@@ -81,13 +83,14 @@ def train_model(
 
             # Send to device
             ct = ct.to(device)
+            beam = beam.to(device)
             ptvs = ptvs.to(device)
             oars = oars.to(device)
-            beam = beam.to(device)
+            body = body.to(device)
             dose = dose.to(device)
 
             # Forward pass
-            x = torch.cat([ct, beam, ptvs, oars], dim=1)
+            x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
             y = model(x)
             loss = loss_fn(y, dose, model)
 
@@ -102,11 +105,20 @@ def train_model(
 
             # Status update
             if batch_idx % print_every == 0:
+                # Get time per batch
                 t_batch = time.time() - t_batch
                 if batch_idx > 0:
                     t_batch /= 10
-                print(f'------ Time: {t_batch:.2f} s / batch | Loss: {loss.item():.4f}')
+                # Get memory usage 
+                mem = torch.cuda.max_memory_allocated() / 1024**3 if (device.type != "cpu") else 0
+                # Print status
+                print(
+                    f'------ Time: {t_batch:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}'
+                )
+                # Reset timer and memory tracker
                 t_batch = time.time()
+                if device.type != "cpu":
+                    torch.cuda.reset_peak_memory_stats(device)
 
         ### Validation ###
         print('--Validation')
@@ -115,18 +127,19 @@ def train_model(
         avg_loss_val = 0
 
         # Loop over batches
-        for batch_idx, (ct, beam, ptvs, oars, dose) in enumerate(loader_val):
+        for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_val):
 
             # Send to device
             ct = ct.to(device)
+            beam = beam.to(device)
             ptvs = ptvs.to(device)
             oars = oars.to(device)
-            beam = beam.to(device)
+            body = body.to(device)
             dose = dose.to(device)
 
             # Forward pass
             with torch.no_grad():
-                x = torch.cat([ct, beam, ptvs, oars], dim=1)
+                x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
                 y = model(x)
                 loss = loss_fn(y, dose, model)
 
