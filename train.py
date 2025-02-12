@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, learning_rate=0.01, max_grad=1, num_epochs=100,
-    print_every=50,
+    batch_size=1, learning_rate=0.01, max_grad=1, n_epochs=100,
+    jobname=None, print_every=50,
 ): 
     # Set up constants
     device = next(model.parameters()).device
@@ -21,14 +21,14 @@ def train_model(
     
     # Print status
     print('-'*50)
-    print(f'Training model with {n_parameters} parameters on {device} for {num_epochs} epochs.')
+    print(f'Training model with {n_parameters} parameters on {device} for {n_epochs} epochs.')
     print('-'*50)
 
     # Set up data loaders
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False)
     loader_train = DataLoader(
         dataset_train, batch_size=batch_size, shuffle=True,
-        # pin_memory=True, num_workers=4, prefetch_factor=2,
+        # pin_memory=True, n_workers=4, prefetch_factor=2,
     )
 
     # Set up optimizer
@@ -56,11 +56,14 @@ def train_model(
     best_model_state = copy.deepcopy(model.state_dict())
 
     # Training loop
-    for epoch in range(num_epochs):
+    for epoch in range(n_epochs):
 
         # Status update
         t_epoch = time.time()
-        print(f'████ Epoch {epoch+1}/{num_epochs} ████')
+        if jobname is not None:
+            print(f'████ {jobname} | Epoch {epoch+1}/{n_epochs} ████')
+        else:
+            print(f'████ Epoch {epoch+1}/{n_epochs} ████')
 
         ### Training ###
         print('--Training')
@@ -70,11 +73,11 @@ def train_model(
 
         # Loop over batches
         t_batch = time.time()
-        for batch_idx, (ct, ptvs, oars, beam, dose) in enumerate(loader_train):
+        for batch_idx, (ct, beam, ptvs, oars, dose) in enumerate(loader_train):
 
             # Status update
             if batch_idx % print_every == 0:
-                print(f'---- E{epoch}/{num_epochs} Batch {batch_idx}/{len(loader_train)}')
+                print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)}')
 
             # Send to device
             ct = ct.to(device)
@@ -84,7 +87,7 @@ def train_model(
             dose = dose.to(device)
 
             # Forward pass
-            x = torch.cat([ct, ptvs, oars, beam], dim=1)
+            x = torch.cat([ct, beam, ptvs, oars], dim=1)
             y = model(x)
             loss = loss_fn(y, dose, model)
 
@@ -112,7 +115,7 @@ def train_model(
         avg_loss_val = 0
 
         # Loop over batches
-        for batch_idx, (ct, ptvs, oars, beam, dose) in enumerate(loader_val):
+        for batch_idx, (ct, beam, ptvs, oars, dose) in enumerate(loader_val):
 
             # Send to device
             ct = ct.to(device)
@@ -123,7 +126,7 @@ def train_model(
 
             # Forward pass
             with torch.no_grad():
-                x = torch.cat([ct, ptvs, oars, beam], dim=1)
+                x = torch.cat([ct, beam, ptvs, oars], dim=1)
                 y = model(x)
                 loss = loss_fn(y, dose, model)
 
@@ -132,7 +135,7 @@ def train_model(
 
             # Status update
             if batch_idx % print_every == 0:
-                print(f'---- E{epoch}/{num_epochs} Val Batch {batch_idx}/{len(loader_val)}')
+                print(f'---- E{epoch}/{n_epochs} Val Batch {batch_idx}/{len(loader_val)}')
 
         ### Finalize training statistics ###
         print('--Finalizing training statistics')
@@ -145,7 +148,7 @@ def train_model(
             best_model_state = copy.deepcopy(model.state_dict())
 
         # Status update
-        print(f'-- Epoch {epoch}/{num_epochs} Summary:')
+        print(f'-- Epoch {epoch}/{n_epochs} Summary:')
         print(f'---- Train Loss: {avg_loss_train:.4f}')
         print(f'---- Val Loss: {avg_loss_val:.4f}')
         print(f'---- Time: {time.time()-t_epoch:.2f} s / epoch')

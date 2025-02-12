@@ -1,8 +1,16 @@
 
+# Add the project root to sys.path if running as __main__
+if __name__ == "__main__":
+    import os, sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 # Import libraries
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+# Import custom libraries
+from models.blocks import ConvBlock
 
 
 # Define convolutional block
@@ -160,18 +168,24 @@ class Unet3D(nn.Module):
 # Test the model
 if __name__ == '__main__':
 
+    # Import custom libraries
+    import os, sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from utils import estimate_memory_usage
+
     # Create a model
     model = Unet3D(30, 1)
-    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-    # Count parameters
-    print(f'Model has {n_params} parameters')
 
     # Create data
-    x = torch.randn(1, 30, 128, 128, 128)
+    x = torch.randn(1, 30, 64, 64, 64)
 
     # Forward pass
     y = model(x)
+
+    # Estimate memory usage
+    estimate_memory_usage(model, x, print_stats=True)
+    estimate_memory_usage(model, torch.randn(1, 30, 64, 64, 64), print_stats=True)
+    estimate_memory_usage(model, torch.randn(1, 30, 128, 128, 128), print_stats=True)
 
     # Done
     print('Done!')

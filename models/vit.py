@@ -1,53 +1,23 @@
 
+# Add the project root to sys.path if running as __main__
+if __name__ == "__main__":
+    import os, sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 # Import libraries
 import torch
 import torch.nn as nn
 
-# Define transformer block
-class TransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads=4, expansion=2):
-        super(TransformerBlock, self).__init__()
+# Import custom libraries
+from models.blocks import TransformerBlock
 
-        # Set up attributes
-        self.n_features = n_features
-        self.n_heads = n_heads
-        self.expansion = expansion
-        
-        # Calculate constants
-        n_features_inner = int(n_features * expansion)
-        self.n_features_inner = n_features_inner
-
-        # Set up multi-head self-attention
-        self.self_attn = nn.MultiheadAttention(n_features, n_heads, batch_first=True)
-
-        # Set up feedforward layer
-        self.mlp = nn.Sequential(
-            nn.Linear(n_features, n_features_inner),
-            nn.ReLU(),
-            nn.Linear(n_features_inner, n_features),
-        )
-
-        # Set up normalization layers
-        self.norm1 = nn.LayerNorm(n_features)
-        self.norm2 = nn.LayerNorm(n_features)
-
-    def forward(self, x):
-
-        # Apply self-attention
-        attn_output, _ = self.self_attn(self.norm1(x), self.norm1(x), self.norm1(x))
-        x = x + attn_output
-
-        # Feedforward layer
-        x = x + self.mlp(self.norm2(x))
-
-        return x
 
 # Create class
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
         shape=(64, 64, 64), patch_size=(4, 4, 4), downscaling_factor=2,
-        embed_dim=64, num_heads=2, num_layers=6,
+        embed_dim=64, n_heads=2, n_layers=6,
     ):
         super(ViT3D, self).__init__()
         
@@ -58,8 +28,8 @@ class ViT3D(nn.Module):
         self.patch_size = patch_size
         self.downscaling_factor = downscaling_factor
         self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.num_layers = num_layers
+        self.n_heads = n_heads
+        self.n_layers = n_layers
 
         # Calculate constants
         self.shape_downscaled = (
@@ -72,7 +42,7 @@ class ViT3D(nn.Module):
             self.shape_downscaled[1] // patch_size[1],
             self.shape_downscaled[2] // patch_size[2],
         )
-        self.num_patches = self.shape_patchgrid[0] * self.shape_patchgrid[1] * self.shape_patchgrid[2]
+        self.n_patches = self.shape_patchgrid[0] * self.shape_patchgrid[1] * self.shape_patchgrid[2]
 
         # Create downscaling and upscaling layers
         self.downscale = nn.Sequential(
@@ -138,13 +108,13 @@ class ViT3D(nn.Module):
         )
         
         # Positional Encoding
-        self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.num_patches, embed_dim))
+        self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, embed_dim))
 
         # Transformer Encoders
         self.transformers = nn.ModuleList()
-        for _ in range(num_layers):
+        for _ in range(n_layers):
             self.transformers.append(
-                TransformerBlock(embed_dim, num_heads)
+                TransformerBlock(embed_dim, n_heads)
             )
 
     def forward(self, x):
@@ -154,7 +124,7 @@ class ViT3D(nn.Module):
 
         # Patch embedding
         x = self.patch_embed(x)  # Shape: [B, embed_dim, D//pD, H//pH, W//pW]
-        x = x.flatten(2).transpose(1, 2)  # Shape: [B, num_patches, embed_dim]
+        x = x.flatten(2).transpose(1, 2)  # Shape: [B, n_patches, embed_dim]
 
         # Add positional encoding
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
@@ -177,18 +147,26 @@ class ViT3D(nn.Module):
 # Test the model
 if __name__ == '__main__':
 
-    # Create a model
-    model = ViT3D(30, 1, shape=(128, 128, 128), patch_size=(8, 8, 8), downscaling_factor=2)
+    # Import custom libraries
+    import os, sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from utils import estimate_memory_usage
 
-    # Count parameters
-    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f'Model has {n_params} parameters')
+    # Create a model
+    model = ViT3D(
+        30, 1, 
+        shape=(128, 128, 128), patch_size=(8, 8, 8), 
+        downscaling_factor=2,
+    )
 
     # Create data
     x = torch.randn(1, 30, 128, 128, 128)
 
     # Forward pass
     y = model(x)
+
+    # Estimate memory usage
+    estimate_memory_usage(model, x, print_stats=True)
 
     # Done
     print('Done!')

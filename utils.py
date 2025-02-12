@@ -1,0 +1,68 @@
+
+"""
+Python file containing utility functions for the models.
+A utility function is a function that is useful in multiple contexts.
+"""
+
+# Import libraries
+import os
+import torch
+import psutil
+
+### MEASURE CPU MEMORY ###
+
+# Define function to measure CPU memory
+def estimate_memory_usage(model, x, print_stats=True):
+    """
+    Estimate total memory used by model parameters, gradients, activations, and optimizer states.
+    
+    WARNING:
+    This function should only be run once per script execution. Running it multiple times in a row 
+    may produce incorrect results due to PyTorch's memory caching, delayed garbage collection, 
+    and OS-level memory fragmentation. For accurate measurements, restart the process before 
+    each run.
+    """
+
+    # Move to CPU
+    device = torch.device("cpu")  # Ensure execution on CPU
+    model = model.to(device)
+
+    # Measure memory before execution
+    process = psutil.Process(os.getpid())
+    mem_before = process.memory_info().rss  # Total RAM usage before forward pass
+
+    # Forward pass
+    y = model(x)
+
+    # Compute loss and backward pass
+    loss = y.sum()
+    loss.backward()
+
+    # Measure memory after execution
+    mem_after = process.memory_info().rss  # Total RAM usage after backward pass
+
+    # Compute memory usage for model parameters
+    dtype = next(model.parameters()).dtype
+    n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    bytes_per_param = torch.finfo(dtype).bits // 8  # 4 bytes for float32, 2 bytes for float16
+    mem_params = n_params * bytes_per_param         # Memory for parameters
+    mem_gradients = mem_params                      # Gradients require same amount of memory
+    mem_optimizer = 2 * mem_params                  # Adam needs ~2x parameter memory
+
+    # Total estimated memory usage
+    mem_total = mem_after - mem_before
+    mem_activations = mem_total - (mem_params + mem_gradients + mem_optimizer)
+
+    # Print stats
+    if print_stats:
+        print(f"Model has {n_params:,} parameters")
+        print(f"Estimated Memory Usage:")
+        print(f"  - Parameters: {mem_params / 1e6:.2f} MB")
+        print(f"  - Gradients: {mem_gradients / 1e6:.2f} MB")
+        print(f"  - Optimizer: {mem_optimizer / 1e6:.2f} MB")
+        print(f"  - Activations: {mem_activations / 1e6:.2f} MB")
+        print(f"  - Total: {mem_total / 1e6:.2f} MB")
+
+    # Return total memory
+    return mem_total
+

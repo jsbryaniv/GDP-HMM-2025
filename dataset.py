@@ -128,6 +128,10 @@ class GDPDataset(Dataset):
         ct = np.clip(ct, self.down_HU, self.up_HU) / self.denom_norm_HU  # Clip and normalize HU values
         ct = np.expand_dims(ct, axis=0)  # Add channel dimension
 
+        # Load beam plate
+        beam = data_dict['beam_plate']
+        beam = np.expand_dims(beam, axis=0)  # Add channel dimension
+
         # Load PTVs (initialize as zeros)
         ptvs = np.zeros((3, *ct.shape[1:]), dtype=np.float32)
         for i, key in enumerate(['PTV_High', 'PTV_Mid', 'PTV_Low']):
@@ -144,10 +148,6 @@ class GDPDataset(Dataset):
             if oar in data_dict:
                 oar_data = data_dict[oar]
                 oars[self.oar_dict[oar]] = oar_data
-
-        # Load beam plate
-        beam = data_dict['beam_plate']
-        beam = np.expand_dims(beam, axis=0)  # Add channel dimension
 
         # Load dose
         if self.return_dose:
@@ -171,9 +171,9 @@ class GDPDataset(Dataset):
         if self.scale is not None:
             downsample_factor = int(1/self.scale)
             ct = ct[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
+            beam = beam[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             ptvs = ptvs[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             oars = oars[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            beam = beam[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
             if self.return_dose:
                 dose = dose[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
 
@@ -189,9 +189,9 @@ class GDPDataset(Dataset):
             pad_z = (max(0, shape_delta[2] // 2), max(0, shape_delta[2] - shape_delta[2] // 2))
             # Apply padding
             ct = np.pad(ct, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             ptvs = np.pad(ptvs, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             oars = np.pad(oars, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             if self.return_dose:
                 dose = np.pad(dose, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             # Cropping centered at center
@@ -201,33 +201,33 @@ class GDPDataset(Dataset):
             slice_z = slice(center[2] - shape_new[2] // 2, center[2] + shape_new[2] // 2)
             # Apply cropping
             ct = ct[:, slice_x, slice_y, slice_z]
+            beam = beam[:, slice_x, slice_y, slice_z]
             ptvs = ptvs[:, slice_x, slice_y, slice_z]
             oars = oars[:, slice_x, slice_y, slice_z]
-            beam = beam[:, slice_x, slice_y, slice_z]
             if self.return_dose:
                 dose = dose[:, slice_x, slice_y, slice_z]
 
-        # Normalize data
-        ct = (ct - ct.mean()) / ct.std()
-        ptvs = (ptvs - ptvs.mean()) / ptvs.std()
-        oars = (oars - oars.mean()) / oars.std()
-        beam = (beam - beam.mean()) / beam.std()
-        if self.return_dose:
-            dose = (dose - dose.mean()) / dose.std()
+        # # Normalize data
+        # ct = (ct - ct.mean()) / ct.std()
+        # beam = (beam - beam.mean()) / beam.std()
+        # ptvs = (ptvs - ptvs.mean()) / ptvs.std()
+        # oars = (oars - oars.mean()) / oars.std()
+        # if self.return_dose:
+        #     dose = (dose - dose.mean()) / dose.std()
 
         # Convert to torch tensors
         ct = torch.tensor(ct, dtype=torch.float32)
+        beam = torch.tensor(beam, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)
         oars = torch.tensor(oars, dtype=torch.float32)
-        beam = torch.tensor(beam, dtype=torch.float32)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
 
         # Return data
         if self.return_dose:
-            return ct, ptvs, oars, beam, dose
+            return ct, beam, ptvs, oars, dose
         else:
-            return ct, ptvs, oars, beam
+            return ct, beam, ptvs, oars
 
         
 
@@ -242,14 +242,14 @@ if __name__ == "__main__":
     )
 
     # Get first item
-    ct, ptvs, oars, beam, dose = dataset[0]
+    ct, beam, ptvs, oars, dose = dataset[0]
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
         if i % 10 == 0:
             print(f'-- {i}/{len(dataset)} --')
-        ct, ptvs, oars, beam, dose = dataset[i]
+        ct, beam, ptvs, oars, dose = dataset[i]
 
     # Done
     print("Done")

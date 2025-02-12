@@ -1,38 +1,55 @@
 
 # Import libraries
-import os
-import yaml
-import numpy as np
-import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+import tracemalloc
 
 
-### Competition Code ###
+# Define function to measure CPU memory
+def measure_cpu_memory(model, x):
 
-# Import data_loader
-from comptetition_objects import GetLoader
+    # Move to CPU
+    device = torch.device("cpu")  # Ensure execution on CPU
+    model = model.to(device)
 
-# Get config
-cfig = yaml.load(open('submodules/challenge_repo/config_files/config_dummy.yaml'), Loader=yaml.FullLoader)
+    # Start memory tracking
+    tracemalloc.start()
 
-# Get data loader
-loaders = GetLoader(cfig = cfig['loader_params'])
-train_loader =loaders.train_dataloader()
-val_loader = loaders.val_dataloader()
+    # Forward pass
+    output = model(x)
 
-# Done
-print("Done")
+    # Backward pass
+    loss = output.sum()
+    loss.backward()
+
+    # Measure peak memory usage
+    current_mem, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    # Return peak memory usage
+    return peak_mem
 
 
-### My Code ###
+# Main
+if __name__ == '__main__':
 
-# Get HaN files
-path_train_han = "data/han/train"
-files = os.listdir(path_train_han)
+    # Example Model
+    model = nn.Sequential(
+        nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.Flatten(),
+        nn.Linear(128 * 32 * 32, 10)
+    )
 
-# Load first file
-file = files[0]
-data_npz = np.load(os.path.join(path_train_han, file), allow_pickle=True)
-data_dict = dict(data_npz)['arr_0'].item()
+    # Example input
+    x = torch.randn(1, 3, 32, 32)
 
-# Done
-print("Done")
+    # Measure CPU memory
+    measure_cpu_memory(model, x, dtype=torch.float32)
+
+    # Done
+    print('Done')
+
+
