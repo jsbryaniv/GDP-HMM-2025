@@ -30,7 +30,7 @@ If you clone this repository to a new machine, be sure to create a new config.js
     "HUGGINGFACE_TOKEN": "your-huggingface-token"
 }
 ```
-In particular, to get a Huggingface token, you can sign up for an account at [Huggingface](https://huggingface.co/). Then, you can find your token by going to your profile and clicking on the "API token" tab.
+Replace `name-of-your-machine` with the name of your machine. This can be anything you want. Replace `path/to/data` with the path to the data directory. In particular, to get a Huggingface token, you can sign up for an account at [Huggingface](https://huggingface.co/). Then, you can find your token by going to your profile and clicking on the "API token" tab.
 
 ## Downloading data
 
