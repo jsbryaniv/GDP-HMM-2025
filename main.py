@@ -20,13 +20,16 @@ def get_savename(dataID, modelID, **kwargs):
     """
     Get savename for a given dataset and model.
     """
+
     # Initialize savename
     savename = f'model_{dataID}_{modelID}'
+
     # Add kwargs to savename
     kwargs_sorted = sorted(kwargs.items())
     for key, value in kwargs_sorted:
         if value:
             savename += f'_{key}={value}'
+
     # Return savename
     return savename
 
@@ -85,7 +88,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         model = ViT3D(
             in_channels=in_channels, 
             out_channels=out_channels,
-            shape=(64, 64, 64),
+            shape=(128, 128, 128),
             **kwargs,
         )
     elif modelID.lower() == 'convformer':
@@ -121,7 +124,7 @@ def main(
     print(f"Running main function for model {modelID} on dataset {dataID}.")
         
     # Get savename
-    savename = f'model2_{dataID}_{modelID}'
+    savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
     print(f"-- savename={savename}")
 
     # Get constants
@@ -203,9 +206,9 @@ def main(
         # Get old training statistics
         old_training_statistics = old_metadata['training_statistics']
         # Find the best loss
-        training_statistics['best_loss_val'] = min(
-            training_statistics['best_loss_val'],
-            old_training_statistics['best_loss_val']
+        training_statistics['loss_val_best'] = min(
+            training_statistics['loss_val_best'],
+            old_training_statistics['loss_val_best'],
         )
         # Merge loss lists
         for key in ['losses_train', 'losses_val']:
@@ -289,7 +292,7 @@ if __name__ == '__main__':
 
     # Run main function
     job_args = all_jobs[ID]
-    main(**job_args)
+    model, metadata = main(**job_args)
 
     # Done
     print('Done!')
