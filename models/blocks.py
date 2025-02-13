@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 
 # Convolutional block
@@ -127,6 +128,16 @@ class ConvAttn3d(nn.Module):
         self.pos_emb = nn.Parameter(torch.randn(n_features, kernel_size, kernel_size, kernel_size))
 
     def forward(self, Q, K, V):
+        """
+        The forward function uses lots of fast operations. This causes lots of intermediate
+        tensors to be stored in memory. To avoid this, we use the checkpoint function to
+        avoid storing intermediate tensors in memory. Instead of storing the intermediate
+        tensors, the checkpoint function will recompute the intermediate tensors during the
+        backward pass. We trade memory for compute time.
+        """
+        return checkpoint(self._forward, Q, K, V, use_reentrant=False)
+    
+    def _forward(self, Q, K, V):
 
         # Get constants
         B, C, D, H, W = Q.shape

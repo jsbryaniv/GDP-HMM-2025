@@ -12,34 +12,61 @@ import psutil
 ### MEASURE CPU MEMORY ###
 
 # Define function to measure CPU memory
-def estimate_memory_usage(model, x, print_stats=True):
+def estimate_memory_usage(model, x, print_stats=True, device=None):
     """
     Estimate total memory used by model parameters, gradients, activations, and optimizer states.
     
     WARNING:
-    This function should only be run once per script execution. Running it multiple times in a row 
-    may produce incorrect results due to PyTorch's memory caching, delayed garbage collection, 
+    The CPU function should only be run once per script execution. Running it multiple times in a  
+    row may produce incorrect results due to PyTorch's memory caching, delayed garbage collection, 
     and OS-level memory fragmentation. For accurate measurements, restart the process before 
     each run.
     """
+    
+    # Check which method to use
+    if device is None or device == 'cpu':
+        """
+        Calculate memory usage on CPU using psutil.
+        """
 
-    # Move to CPU
-    device = torch.device("cpu")  # Ensure execution on CPU
-    model = model.to(device)
+        # Move to CPU
+        device = torch.device("cpu")  # Ensure execution on CPU
+        model = model.to(device)
+        x = x.to(device)
 
-    # Measure memory before execution
-    process = psutil.Process(os.getpid())
-    mem_before = process.memory_info().rss  # Total RAM usage before forward pass
+        # Measure memory before execution
+        process = psutil.Process(os.getpid())
+        mem_before = process.memory_info().rss  # Total RAM usage before forward pass
 
-    # Forward pass
-    y = model(x)
+        # Forward and backward pass
+        y = model(x)
+        loss = y.sum()
+        loss.backward()
 
-    # Compute loss and backward pass
-    loss = y.sum()
-    loss.backward()
+        # Measure memory after execution
+        mem_after = process.memory_info().rss  # Total RAM usage after backward pass
 
-    # Measure memory after execution
-    mem_after = process.memory_info().rss  # Total RAM usage after backward pass
+    else:
+        """
+        Calculate memory usage on GPU using PyTorch.
+        """
+
+        # Move to GPU
+        device = torch.device("cuda")  # Ensure execution on GPU
+        model = model.to(device)
+        x = x.to(device)
+
+        # Measure memory before execution
+        torch.cuda.reset_peak_memory_stats(device)
+        mem_before = torch.cuda.max_memory_allocated(device)
+
+        # Forward and backward pass
+        y = model(x)
+        loss = y.sum()
+        loss.backward()
+
+        # Measure memory after execution
+        mem_after = torch.cuda.max_memory_allocated(device)
 
     # Compute memory usage for model parameters
     dtype = next(model.parameters()).dtype

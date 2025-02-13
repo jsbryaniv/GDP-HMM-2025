@@ -163,6 +163,10 @@ if __name__ == '__main__':
     # Forward pass
     y = model(x)
 
+    # Backward pass
+    loss = y.sum()
+    loss.backward()
+
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)
 

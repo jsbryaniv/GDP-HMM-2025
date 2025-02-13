@@ -54,46 +54,25 @@ class UConvformerModel(nn.Module):
         # Define bottleneck block
         self.bottleneck = ConvformerBlock3d(n_features)
 
-        # Define upsample, qkv, attention, and mlp blocks
+        # Define upsample, cross-convformer, and mixing blocks
         self.up_blocks = nn.ModuleList()
-        self.q_proj_blocks = nn.ModuleList()
-        self.kv_proj_blocks = nn.ModuleList()
-        self.attn_blocks = nn.ModuleList()
-        self.mlp_blocks = nn.ModuleList()
+        self.convformer_blocks = nn.ModuleList()
+        self.mixing_blocks = nn.ModuleList()
         for i in range(n_blocks):
             # Upsample block
             self.up_blocks.append(
                 nn.Sequential(
-                    # Upsample layer
                     ConvBlock(n_features, n_features, upsample=True),
-                    # Additional convolutional layers
-                    *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)]
                 )
             )
-            # Q projection block
-            self.q_proj_blocks.append(
-                nn.Sequential(
-                    nn.InstanceNorm3d(n_features),
-                    nn.Conv3d(n_features, n_features, kernel_size=1)
-                )
+            # Convformer block
+            self.convformer_blocks.append(
+                ConvformerCrossBlock3d(n_features)
             )
-            # KV projection block
-            self.kv_proj_blocks.append(
+            # Mixing block
+            self.mixing_blocks.append(
                 nn.Sequential(
-                    nn.InstanceNorm3d(n_features),
-                    nn.Conv3d(n_features, 2*n_features, kernel_size=1)
-                )
-            )
-            # Attention block
-            self.attn_blocks.append(
-                ConvAttn3d(n_features)
-            )
-            # MLP block
-            self.mlp_blocks.append(
-                nn.Sequential(
-                    nn.Conv3d(n_features, n_features, kernel_size=1),
-                    nn.ReLU(inplace=True),
-                    nn.Conv3d(n_features, n_features, kernel_size=1),
+                    *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)],
                 )
             )
 
@@ -131,15 +110,11 @@ class UConvformerModel(nn.Module):
             x = self.up_blocks[i](x)
             # Get skip
             x_skip = skips.pop()
-            # Get key and value from skip
-            K, V = self.kv_proj_blocks[i](x_skip).chunk(2, dim=1)
+            # Apply convformer
             for _ in range(self.n_blocks - i):
-                # Get query from x
-                Q = self.q_proj_blocks[i](x)
-                # Apply attention
-                x = x + self.attn_blocks[i](Q, K, V)
-                # Apply MLP
-                x = x + self.mlp_blocks[i](x)
+                x = self.convformer_blocks[i](x, x_skip)
+            # Mix features
+            x = self.mixing_blocks[i](x)
 
         # Output block
         x = self.output_block(x)
@@ -162,6 +137,10 @@ if __name__ == '__main__':
 
     # Forward pass
     y = model(x)
+
+    # Backward pass
+    loss = y.sum()
+    loss.backward()
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)
