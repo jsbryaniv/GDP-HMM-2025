@@ -20,8 +20,8 @@ class CrossAttnAEModel(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         n_features=8, n_blocks=4, 
-        n_layers_per_block=3, n_layers_per_block_context=2,
-        n_attn_repeats=1, n_attn_heads=2,
+        n_layers_per_block=4, n_layers_per_block_context=4,
+        n_attn_repeats=2, n_attn_heads=2,
     ):
         super(CrossAttnAEModel, self).__init__()
         
