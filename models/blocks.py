@@ -8,7 +8,7 @@ from torch.utils.checkpoint import checkpoint
 
 # Convolutional block
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, upsample=False, downsample=False, beta=.5):
+    def __init__(self, in_channels, out_channels, upsample=False, downsample=False, beta=.9):
         super(ConvBlock, self).__init__()
 
         # Check inputs
@@ -40,19 +40,19 @@ class ConvBlock(nn.Module):
                 nn.ConvTranspose3d(
                     in_channels, out_channels, kernel_size=2, stride=2
                 ),
-                nn.GroupNorm(1, out_channels),
+                nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )
         elif downsample:
             self.conv = nn.Sequential(
                 nn.Conv3d(in_channels, out_channels, kernel_size=2, stride=2),
-                nn.GroupNorm(1, out_channels),
+                nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )
         else:
             self.conv = nn.Sequential(
                 nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
-                nn.GroupNorm(1, out_channels),
+                nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )
 
@@ -65,7 +65,7 @@ class ConvBlock(nn.Module):
         x = self.conv(x)
 
         # Combine with residual
-        x = self.beta * x + (1 - self.beta) * x0
+        x = self.beta * x0 + (1 - self.beta) * x
 
         # Return the output
         return x

@@ -107,6 +107,15 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
             out_channels=out_channels,
             **kwargs,
         )
+    elif modelID.lower() == 'crossattnae':
+        # Cross Attention Autoencoder model
+        from models.crossattnae import CrossAttnAEModel
+        model = CrossAttnAEModel(
+            in_channels=3, 
+            out_channels=1,
+            n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
+            **kwargs,
+        )
 
     # Return model
     return model
@@ -250,13 +259,28 @@ def main(
 if __name__ == '__main__':
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
 
     # Set job IDs
     all_jobs = [
         {
             'dataID': 'HaN', 
+            'modelID': 'CrossAttnAE',
+            'data_kwargs': {},
+            'model_kwargs': {},
+            'train_kwargs': {'loss_type': 'crossae'},
+        },
+        {
+            'dataID': 'HaN', 
             'modelID': 'UConvTrans',
+            'data_kwargs': {},
+            'model_kwargs': {},
+            'train_kwargs': {},
+        },
+        {
+            'dataID': 'HaN', 
+            'modelID': 'Unet',
             'data_kwargs': {},
             'model_kwargs': {},
             'train_kwargs': {},
@@ -271,13 +295,6 @@ if __name__ == '__main__':
         {
             'dataID': 'HaN', 
             'modelID': 'ViT',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {},
-        },
-        {
-            'dataID': 'HaN', 
-            'modelID': 'Unet',
             'data_kwargs': {},
             'model_kwargs': {},
             'train_kwargs': {},
