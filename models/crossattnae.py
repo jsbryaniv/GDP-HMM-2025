@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 # Import custom libraries
 from models.unet import Unet3D
-from models.blocks import ConvBlock, ConvformerBlock3d, ConvformerCrossBlock3d
+from models.blocks import ConvBlock, VolCrossTransformer3d
 
 
 # Define cross attention autoencoder model
@@ -21,7 +21,7 @@ class CrossAttnAEModel(nn.Module):
         in_channels, out_channels, n_cross_channels_list,
         n_features=8, n_blocks=4, 
         n_layers_per_block=4, n_layers_per_block_context=4,
-        n_attn_repeats=2, n_attn_heads=2,
+        n_attn_repeats=2, n_heads=2,
     ):
         super(CrossAttnAEModel, self).__init__()
         
@@ -34,7 +34,7 @@ class CrossAttnAEModel(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.n_layers_per_block_context = n_layers_per_block_context
         self.n_attn_repeats = n_attn_repeats
-        self.n_attn_heads = n_attn_heads
+        self.n_heads = n_heads
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -66,19 +66,15 @@ class CrossAttnAEModel(nn.Module):
         # Create context feature dropout layers
         self.context_dropout = nn.ModuleList()
         for depth in range(n_blocks+1):
-            self.context_dropout.append(nn.Dropout(p=1-.2**(n_blocks-depth)))
+            self.context_dropout.append(nn.Dropout(p=1-.5**(n_blocks-depth)))
 
         
-        ### CONVOLUTIONAL TRANSFORMERS ###
+        ### LATENT MIXING BLOCKS ###
 
         # Create self convformer blocks
-        self.self_convformer_blocks = nn.ModuleList()
+        self.self_mixing_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
-            self.self_convformer_blocks.append(
-                # ConvformerBlock3d(
-                #     n_features_per_depth[depth], 
-                #     kernel_size=3, n_heads=n_attn_heads,
-                # )
+            self.self_mixing_blocks.append(
                 ConvBlock(
                     n_features_per_depth[depth], 
                     n_features_per_depth[depth], 
@@ -86,27 +82,14 @@ class CrossAttnAEModel(nn.Module):
             )
 
         # Create cross convformer blocks
-        self.cross_convformer_blocks = nn.ModuleDict()
+        self.cross_mixing_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
-            for j in range(n_context):
-                name = f'depth{depth}_context{j}'
-                self.cross_convformer_blocks[name] = ConvformerCrossBlock3d(
-                    n_features_per_depth[depth], 
-                    kernel_size=1, n_heads=n_attn_heads,
+            self.cross_mixing_blocks.append(
+                VolCrossTransformer3d(
+                    n_features_per_depth[depth], n_context,
+                    n_heads=n_heads
                 )
-
-    def apply_context(self, x, fcon, depth):
-        """
-        Apply context features to the input tensor at depth i.
-        """
-        for _ in range(self.n_attn_repeats*(depth+1)):
-            # Apply context features
-            for j in range(self.n_context):
-                x = self.cross_convformer_blocks[f'depth{depth}_context{j}'](x, fcon[j])
-            # Apply self convformer
-            x = self.self_convformer_blocks[depth](x)
-        # Return the output
-        return x
+            )
 
     def forward(self, x, y_list):
         """
@@ -115,20 +98,12 @@ class CrossAttnAEModel(nn.Module):
         """
 
         # Encode y_list, copying transpose
-        f_con_blk = [  # f[context][block]
-            self.context_autoencoders[c].encoder(y_list[c]) for c in range(self.n_context)
-        ]
-        f_blk_con = [  # f[block][context]
-            [row[i].clone() for row in f_con_blk] for i in range(self.n_blocks+1)
-        ]
+        f_con_blk = [autoencoder.encoder(y) for autoencoder, y in zip(self.context_autoencoders, y_list)]
+        f_blk_con = [[f.clone() for f in row] for row in zip(*f_con_blk)]
 
         # Apply dropout to context features and decode
-        f_con_blk = [  # f[context][block]
-            [self.context_dropout[i](f_con_blk[c][i]) for i in range(self.n_blocks+1)] for c in range(self.n_context)
-        ]
-        y_list = [  # y[context]
-            self.context_autoencoders[i].decoder(f_con_blk[i]) for i in range(self.n_context)
-        ]
+        f_con_blk = [[dropout(f) for dropout, f in zip(self.context_dropout, f_con_blk[c])] for c in range(self.n_context)]
+        y_list = [autoencoder.decoder(fs) for autoencoder, fs in zip(self.context_autoencoders, f_con_blk)]
 
         # Encode x
         feats = self.autoencoder.encoder(x)
@@ -136,15 +111,21 @@ class CrossAttnAEModel(nn.Module):
 
         # Apply context
         fcon = f_blk_con.pop()
-        x = self.apply_context(x, fcon, self.n_blocks)
+        depth = self.n_blocks
+        for _ in range(depth*self.n_attn_repeats+1):
+            x = self.cross_mixing_blocks[depth](x, fcon)
+            x = self.self_mixing_blocks[depth](x)
 
         # Upsample blocks
         for i in range(self.n_blocks):
+            depth = self.n_blocks - 1 - i
             # Upsample
             x = self.autoencoder.up_blocks[i](x)
             # Apply context
             fcon = f_blk_con.pop()
-            x = self.apply_context(x, fcon, self.n_blocks-i-1)
+            for _ in range(depth*self.n_attn_repeats+1):
+                x = self.cross_mixing_blocks[depth](x, fcon)
+                x = self.self_mixing_blocks[depth](x)
             # Merge with skip
             x_skip = feats.pop()
             x = torch.cat([x, x_skip], dim=1)

@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 
+### CONVOLUTIONAL BLOCK ###
+
 # Convolutional block
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, upsample=False, downsample=False, beta=.9):
@@ -71,6 +73,8 @@ class ConvBlock(nn.Module):
         return x
 
 
+### TRANSFORMER BLOCK ###
+
 # Define transformer block
 class TransformerBlock(nn.Module):
     def __init__(self, n_features, n_heads=4, expansion=2):
@@ -111,6 +115,8 @@ class TransformerBlock(nn.Module):
         return x
 
 
+### CONVOLUTIONAL TRANSFORMER BLOCKS ###
+
 # Define convolutional attention block
 class ConvAttn3d(nn.Module):
     """Applies attention within a local receptive field defined by a kernel"""
@@ -127,7 +133,7 @@ class ConvAttn3d(nn.Module):
         # Create relative positional embeddings
         self.pos_emb = nn.Parameter(torch.randn(n_features, kernel_size, kernel_size, kernel_size))
 
-    def forward(self, Q, K, V):
+    def forward(self, q, k, v):
         """
         The forward function uses lots of fast operations. This causes lots of intermediate
         tensors to be stored in memory. To avoid this, we use the checkpoint function to
@@ -135,62 +141,62 @@ class ConvAttn3d(nn.Module):
         tensors, the checkpoint function will recompute the intermediate tensors during the
         backward pass. We trade memory for compute time.
         """
-        return checkpoint(self._forward, Q, K, V, use_reentrant=False)
+        return checkpoint(self._forward, q, k, v, use_reentrant=False)
     
-    def _forward(self, Q, K, V):
+    def _forward(self, q, k, v):
 
         # Get constants
-        B, C, D, H, W = Q.shape
-        device = Q.device
+        B, C, D, H, W = q.shape
+        device = q.device
         
         # Pad keys and values
-        K = F.pad(K, [self.kernel_size // 2] * 6)
-        V = F.pad(V, [self.kernel_size // 2] * 6)
+        k = F.pad(k, [self.kernel_size // 2] * 6)
+        v = F.pad(v, [self.kernel_size // 2] * 6)
 
         # Initialize attention weights
         attn_weights = torch.zeros(B, self.kernel_size**3, D, H, W, device=device)
 
         # Get attention from each kernel position
-        ijk = -1
-        for i in range(self.kernel_size):
-            for j in range(self.kernel_size):
-                for k in range(self.kernel_size):
-                    ijk += 1
+        xyz = -1
+        for x in range(self.kernel_size):
+            for y in range(self.kernel_size):
+                for z in range(self.kernel_size):
+                    xyz += 1
 
                     # Get shifted key and positional embedding
-                    pos_emb = self.pos_emb[:, i, j, k].view(1, self.n_features, 1, 1, 1)
-                    K_shift = K[:, :, i:i+D, j:j+H, k:k+W] + pos_emb
+                    pos_emb = self.pos_emb[:, x, y, z].view(1, self.n_features, 1, 1, 1)
+                    k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb
 
                     # Calculate attention weights
-                    attn_weights[:, ijk] = (Q * K_shift).sum(dim=1) / (self.n_features ** 0.5)
+                    attn_weights[:, ijk] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
 
         # Softmax attention weights
         attn_weights = F.softmax(attn_weights, dim=1)
 
         # Initialize output
-        x = torch.zeros_like(Q)
+        out = torch.zeros_like(q)
 
         # Get output from each kernel position
-        ijk = -1
-        for i in range(self.kernel_size):
-            for j in range(self.kernel_size):
-                for k in range(self.kernel_size):
-                    ijk += 1
+        xyz = -1
+        for x in range(self.kernel_size):
+            for y in range(self.kernel_size):
+                for z in range(self.kernel_size):
+                    xyz += 1
 
                     # Get shifted values
-                    V_shift = V[:, :, i:i+D, j:j+H, k:k+W]
+                    v_shift = v[:, :, x:x+D, y:y+H, z:z+W]
 
                     # Apply attention weights
-                    dx = attn_weights[:, ijk] * V_shift
+                    dout = attn_weights[:, xyz] * v_shift
 
                     # Update output
-                    x = x + dx
+                    out = out + dout
 
         # Finalize output
-        x = self.out_proj(x)
+        out = self.out_proj(out)
 
         # Return output
-        return x
+        return out
     
 
 # Make confolutional multi-head attention block
@@ -325,3 +331,127 @@ class ConvformerCrossBlock3d(nn.Module):
         return x
 
 
+### VOLUMETRIC TRANSFORMER BLOCKS ###
+
+# Define volumentric attention block
+class VolAttn3d(nn.Module):
+    """Applies attention for each voxel in a 3D volume given context features."""
+    def __init__(self, n_features):
+        super(VolAttn3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+
+        # Set projections
+        self.out_proj = nn.Conv3d(n_features, n_features, kernel_size=1)
+
+    def forward(self, q, k_list, v_list):
+
+        # Concatenate context
+        k = torch.cat([K.unsqueeze(1) for K in k_list], dim=1)
+        v = torch.cat([V.unsqueeze(1) for V in v_list], dim=1)
+
+        # Get attention weights
+        attn_weights = (q.unsqueeze(1) * k).sum(dim=2) / (self.n_features ** 0.5)
+        # attn_weights = torch.einsum('bfxyz,bcfxyz->bcxyz', Q, K) / (self.n_features ** 0.5)
+        attn_weights = F.softmax(attn_weights, dim=1)
+
+        # Apply attention weights
+        x = (attn_weights.unsqueeze(2) * v).sum(dim=1)
+        # x = torch.einsum('bcxyz,bcfxyz->bfxyz', attn_weights, V)
+
+        # Finalize output
+        x = self.out_proj(x)
+
+        # Return output
+        return x
+
+
+# Make volumetric multi-head attention block
+class MultiheadVolAttn3d(nn.Module):
+    """Applies multi-head attention for each voxel in a 3D volume given context features."""
+    def __init__(self, n_features, kernel_size=3, n_heads=4):
+        super(MultiheadVolAttn3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.kernel_size = kernel_size
+        self.n_heads = n_heads
+
+        # Query, Key, Value projections
+        self.q_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
+        self.k_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
+        self.v_proj = nn.Conv3d(n_features, n_features, kernel_size=1) 
+
+        # Define attention heads
+        self.attention_heads = nn.ModuleList([
+            VolAttn3d(n_features // n_heads) for _ in range(n_heads)
+        ])
+
+        # Define output projection
+        self.out_proj = nn.Conv3d(n_features, n_features, kernel_size=1)
+
+    def forward(self, query, key_list, value_list):
+
+        # Project inputs into Q, K, V
+        Q = self.q_proj(query).chunk(self.n_heads, dim=1)
+        K_list = [self.k_proj(key).chunk(self.n_heads, dim=1) for key in key_list]        # [context][head]
+        V_list = [self.v_proj(value).chunk(self.n_heads, dim=1) for value in value_list]  # [context][head]
+        K_list = list(zip(*K_list))                                                       # [head][context]
+        V_list = list(zip(*V_list))                                                       # [head][context]
+
+        # Apply attention heads
+        out = [head(q, k_list, v_list) for (head, q, k_list, v_list) in zip(self.attention_heads, Q, K_list, V_list)]
+
+        # Merge heads
+        out = torch.cat(out, dim=1)
+        out = self.out_proj(out)
+
+        # Return output
+        return out
+
+
+# Define volumetric cross-attention transformer block
+class VolCrossTransformer3d(nn.Module):
+    """Volumetric cross-attention transformer block."""
+    def __init__(self, n_features, n_context, n_heads=1, expansion=1):
+        super(VolCrossTransformer3d, self).__init__()
+
+        # Set up attributes
+        self.n_features = n_features
+        self.n_context = n_context
+        self.n_heads = n_heads
+        self.expansion = expansion
+        
+        # Calculate constants
+        n_features_inner = int(n_features * expansion)
+        self.n_features_inner = n_features_inner
+
+        # Set up multi-head self-attention
+        self.self_attn = MultiheadVolAttn3d(n_features, n_heads=n_heads)
+
+        # Set up feedforward layer
+        self.mlp = nn.Sequential(
+            nn.Conv3d(n_features, n_features_inner, kernel_size=1),
+            nn.GELU(),
+            nn.Conv3d(n_features_inner, n_features, kernel_size=1),
+        )
+
+        # Set up normalization layers
+        self.norm1 = nn.InstanceNorm3d(n_features)
+        self.norm2 = nn.InstanceNorm3d(n_features)
+        self.norm_context = nn.ModuleList([nn.InstanceNorm3d(n_features) for _ in range(n_context)])
+
+    def forward(self, x, y_list):
+
+        # Apply self-attention
+        x_normed = self.norm1(x)
+        y_list_normed = [norm(y) for norm, y in zip(self.norm_context, y_list)]
+        attn_output = self.self_attn(x_normed, y_list_normed, y_list_normed)
+        x = x + attn_output
+
+        # Feedforward layer
+        x = x + self.mlp(self.norm2(x))
+
+        # Return output
+        return x

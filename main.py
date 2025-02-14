@@ -33,7 +33,6 @@ def get_savename(dataID, modelID, **kwargs):
     # Return savename
     return savename
 
-
 # Load dataset function
 def load_dataset(dataID, **kwargs):
 
@@ -120,7 +119,6 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
     # Return model
     return model
 
-
 # Define main function
 def main(
     dataID, modelID,
@@ -131,6 +129,14 @@ def main(
     Main function to train a model on a dataset.
     """
     print(f"Running main function for model {modelID} on dataset {dataID}.")
+
+    # Get device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Check machine for device constraints
+    if config['MACHINE'] == 'carina@mca':
+        if modelID == 'CrossAttnAE':  # CrossAttnAE requires too much memory for carina
+            device = torch.device('cpu')
         
     # Get savename
     savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
@@ -257,9 +263,6 @@ def main(
 
 # Run main function
 if __name__ == '__main__':
-
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Set job IDs
     all_jobs = [
