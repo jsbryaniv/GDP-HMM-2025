@@ -10,16 +10,22 @@ from torch.utils.checkpoint import checkpoint
 
 # Convolutional block
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, upsample=False, downsample=False, beta=.9):
+    def __init__(self, in_channels, out_channels, kernel_size=None, upsample=False, downsample=False, beta=.1):
         super(ConvBlock, self).__init__()
 
         # Check inputs
         if upsample and downsample:
             raise ValueError('Cannot upsample and downsample at the same time.')
+        if kernel_size is None:
+            if upsample or downsample:
+                kernel_size = 2
+            else:
+                kernel_size = 3
 
         # Set attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.kernel_size = kernel_size
         self.upsample = upsample
         self.downsample = downsample
         self.beta = beta
@@ -40,20 +46,27 @@ class ConvBlock(nn.Module):
         if upsample:
             self.conv = nn.Sequential(
                 nn.ConvTranspose3d(
-                    in_channels, out_channels, kernel_size=2, stride=2
+                    in_channels, out_channels,
+                    kernel_size=2, stride=2,
                 ),
+                nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),  # Smooth
                 nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )
         elif downsample:
             self.conv = nn.Sequential(
-                nn.Conv3d(in_channels, out_channels, kernel_size=2, stride=2),
+                nn.Conv3d(
+                    in_channels, out_channels, 
+                    kernel_size=2, stride=2,
+                ),
                 nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )
         else:
             self.conv = nn.Sequential(
-                nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+                nn.Conv3d(
+                    in_channels, out_channels, kernel_size=kernel_size, padding=(kernel_size//2)
+                ),
                 nn.GroupNorm(max(1, out_channels // 4), out_channels),
                 nn.ReLU(inplace=True),
             )

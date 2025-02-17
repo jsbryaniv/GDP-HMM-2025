@@ -66,7 +66,8 @@ class CrossAttnAEModel(nn.Module):
         # Create context feature dropout layers
         self.context_dropout = nn.ModuleList()
         for depth in range(n_blocks+1):
-            self.context_dropout.append(nn.Dropout(p=1-.5**(n_blocks-depth)))
+            p = (1-(1-1/n_features)**(n_blocks-depth))  # No dropouts at final layer; roughly half at first
+            self.context_dropout.append(nn.Dropout(p=p))
 
         
         ### LATENT MIXING BLOCKS ###
@@ -110,9 +111,9 @@ class CrossAttnAEModel(nn.Module):
         x = feats.pop()
 
         # Apply context
-        fcon = f_blk_con.pop()
+        fcon = f_blk_con[-1]
         depth = self.n_blocks
-        for _ in range(depth*self.n_attn_repeats+1):
+        for _ in range((depth+1)*self.n_attn_repeats):
             x = self.cross_mixing_blocks[depth](x, fcon)
             x = self.self_mixing_blocks[depth](x)
 
@@ -121,14 +122,15 @@ class CrossAttnAEModel(nn.Module):
             depth = self.n_blocks - 1 - i
             # Upsample
             x = self.autoencoder.up_blocks[i](x)
+            # Merge with skip
+            x_skip = feats[depth]
+            x = torch.cat([x, x_skip], dim=1)
+            x = self.autoencoder.merge_blocks[i](x)
             # Apply context
-            fcon = f_blk_con.pop()
-            for _ in range(depth*self.n_attn_repeats+1):
+            fcon = f_blk_con[depth]
+            for _ in range((depth+1)*self.n_attn_repeats):
                 x = self.cross_mixing_blocks[depth](x, fcon)
                 x = self.self_mixing_blocks[depth](x)
-            # Merge with skip
-            x_skip = feats.pop()
-            x = torch.cat([x, x_skip], dim=1)
 
         # Output block
         x = self.autoencoder.output_block(x)
@@ -165,6 +167,7 @@ if __name__ == '__main__':
     # Measure memory after execution
     mem_after = process.memory_info().rss  # Total RAM usage after backward pass
     print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
+    print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 
     # Done
     print('Done!')

@@ -45,8 +45,10 @@ def load_dataset(dataID, **kwargs):
         # Set constants
         in_channels = 36
         out_channels = 1
-        shape = (128, 128, 128)
-        scale = 1
+        # shape = (128, 128, 128)
+        # scale = 1
+        shape = (64, 64, 64)  # TODO: DEBUGGING ONLY
+        scale = .5  # TODO: DEBUGGING ONLY
 
         # Create dataset
         dataset = GDPDataset(
@@ -133,10 +135,10 @@ def main(
     # Get device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    # Check machine for device constraints
-    if config['MACHINE'] == 'carina@mca':
-        if modelID == 'CrossAttnAE':  # CrossAttnAE requires too much memory for carina
-            device = torch.device('cpu')
+    # # Check machine for device constraints
+    # if config['MACHINE'] == 'carina@mca':
+    #     if modelID == 'CrossAttnAE':  # CrossAttnAE requires too much memory for carina
+    #         device = torch.device('cpu')
         
     # Get savename
     savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
@@ -207,7 +209,6 @@ def main(
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        batch_size=1, learning_rate=0.01, n_epochs=20,
         jobname=savename,
         **train_kwargs,
     )

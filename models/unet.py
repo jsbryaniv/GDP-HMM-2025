@@ -58,10 +58,11 @@ class Unet3D(nn.Module):
         n_out = n_features_per_depth[-1]
         self.bottleneck = ConvBlock(n_in, n_out)
 
-        # Define upsample blocks
+        # Define upsample and merge blocks
         self.up_blocks = nn.ModuleList()
+        self.merge_blocks = nn.ModuleList()
         for i in range(n_blocks, 0, -1):
-            n_in = n_features_per_depth[i] * (1 if i == n_blocks else 2)
+            n_in = n_features_per_depth[i]
             n_out = n_features_per_depth[i-1]
             self.up_blocks.append(
                 nn.Sequential(
@@ -71,11 +72,15 @@ class Unet3D(nn.Module):
                     *[ConvBlock(n_out, n_out) for _ in range(n_layers_per_block - 1)]
                 )
             )
+            self.merge_blocks.append(
+                nn.Sequential(
+                    ConvBlock(2*n_out, n_out, kernel_size=1),
+                )
+            )
 
         # Define output block
         self.output_block = nn.Sequential(
-            ConvBlock(2*n_features, n_features),
-            *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1)],
+            *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block)],
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
@@ -119,9 +124,12 @@ class Unet3D(nn.Module):
 
         # Upsample blocks
         for i, block in enumerate(self.up_blocks):
+            # Upsample
             x = block(x)
+            # Merge with skip
             x_skip = feats.pop()
             x = torch.cat([x, x_skip], dim=1)
+            x = self.merge_blocks[i](x)
 
         # Output block
         x = self.output_block(x)

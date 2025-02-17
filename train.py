@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, learning_rate=0.01, max_grad=1, n_epochs=100,
-    jobname=None, print_every=50, loss_type=None,
+    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=20,
+    jobname=None, print_every=50,
 ): 
     # Set up constants
     device = next(model.parameters()).device
@@ -46,10 +46,14 @@ def train_model(
             # Forward pass
             y = model(x)
 
-            # Compute loss
-            likelihood = F.mse_loss(y, dose)
+            # Compute prior loss
             prior = sum(p.pow(2).sum() for p in model.parameters()) / n_parameters
-            loss = likelihood + prior
+
+            # Compute likelihood loss
+            likelihood = F.mse_loss(y, dose)
+
+            # Compute total loss
+            loss = prior + likelihood
 
             # Force garbage collection
             del ct, beam, ptvs, oars, body, dose, x, y
@@ -67,28 +71,48 @@ def train_model(
             # Forward pass
             z, y_list_ae = model(x, y_list)
 
-            # Compute loss
-            likelihood = F.mse_loss(z, dose)
-            # recon_loss = sum(F.mse_loss(recon, ae_targets) for recon, ae_targets in zip(y_list_ae, y_list))
-            ae_error_continuous = sum(F.mse_loss(recon, target) for recon, target in zip(y_list_ae[:-2], y_list[:-2]))
-            ae_error_binary = sum(F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(y_list_ae[-2:], y_list[-2:]))
-            recon_loss = ae_error_continuous + ae_error_binary
+            # Separate continuous and binary outputs
+            targets_cnt = y_list[:-2]
+            targets_bin = y_list[-2:]
+            predictions_cnt = y_list_ae[:-2]
+            predictions_bin = y_list_ae[-2:]
+
+            # Compute prior loss
             prior = sum(p.pow(2).sum() for p in model.parameters()) / n_parameters
-            loss = likelihood + recon_loss + prior
+
+            # Compute likelihood loss
+            likelihood = F.mse_loss(z, dose)
+
+            # Compute autoencoder loss
+            recon_loss_cnt = sum(
+                F.mse_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
+            )
+            recon_loss_bin = sum(
+                F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(predictions_bin, targets_bin)
+            )
+
+            # Compute total loss
+            loss = prior + likelihood + recon_loss_cnt + recon_loss_bin
 
             # # Plot
-            # fig, ax = plt.subplots(2, 3)
-            # index = 64
-            # ax[0, 0].imshow(ct[0,0,index,:,:].detach().cpu().numpy())
-            # ax[0, 1].imshow(dose[0,0,index,:,:].detach().cpu().numpy())
-            # ax[0, 2].imshow(z[0,0,index,:,:].detach().cpu().numpy())
-            # ax[1, 0].imshow(y_list_ae[0][0,0,index,:,:].detach().cpu().numpy())
-            # ax[1, 1].imshow(y_list_ae[1][0,0,index,:,:].detach().cpu().numpy())
-            # ax[1, 2].imshow(y_list_ae[-2][0,0,index,:,:].detach().cpu().numpy())
+            # import matplotlib.pyplot as plt
+            # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
+            # index = x.shape[2] // 2
+            # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
+            #     if i > 3:
+            #         y_ae = torch.sigmoid(y_ae)
+            #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
+            #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
+            #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
+            #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
             # plt.show()
             # plt.pause(1)
             # plt.savefig('_image.png')
             # plt.close()
+
+            # Check loss
+            if loss > 100:
+                print(f'Loss: {loss:.4f}')
 
             # Force garbage collection
             del ct, beam, ptvs, oars, body, dose, x, y_list, z, y_list_ae
