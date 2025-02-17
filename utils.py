@@ -8,6 +8,7 @@ A utility function is a function that is useful in multiple contexts.
 import os
 import torch
 import psutil
+import pytorch_msssim
 
 ### MEASURE CPU MEMORY ###
 
@@ -102,4 +103,17 @@ def estimate_memory_usage(model, x, print_stats=True, device=None):
 
     # Return total memory
     return mem_total
+
+
+
+### CUSTOM LOSS FUNCTIONS ###
+
+# Define 3D SSIM loss
+def ssim3d_loss(pred, target):
+    """Computes 3D SSIM efficiently by treating depth slices as batch elements."""
+    B, C, D, H, W = pred.shape
+    pred_2d = pred.reshape(B * D, C, H, W)  # Flatten depth into batch
+    target_2d = target.reshape(B * D, C, H, W)
+    
+    return pytorch_msssim.ssim(pred_2d, target_2d, data_range=1.0)
 

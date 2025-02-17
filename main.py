@@ -144,7 +144,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         # Cross Attention Autoencoder model
         from models.crossattnae import CrossAttnAEModel
         model = CrossAttnAEModel(
-            in_channels=3, 
+            in_channels=4, 
             out_channels=1,
             n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
             **kwargs,

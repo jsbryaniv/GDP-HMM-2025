@@ -8,6 +8,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+# Load custom libraries
+from utils import *
+
 
 # Set up training function
 def train_model(
@@ -57,27 +60,39 @@ def train_model(
             # Forward pass
             y = model(x)
 
+            # # Ignore voxels outside of body
+            # ct = ct * body
+            # dose = dose * body
+            # y = y * body
+
             # Compute likelihood loss
-            likelihood = F.mse_loss(y, dose)
+            likelihood_mse = F.mse_loss(y, dose)
 
-            # Compute total loss
-            loss = prior + likelihood
+            # # Compute ssim loss
+            # likelihood_ssim = 1 - ssim3d_loss(y, dose)
 
-            # Force garbage collection
-            del ct, beam, ptvs, oars, body, dose, x, y
-            if device.type != "cuda":
-                torch.cuda.empty_cache()
+            # Combine losses
+            likelihood = (
+                likelihood_mse 
+                # + likelihood_ssim
+            )
 
         elif loss_type.lower() == 'crossae':
             """
             Cross attention autoencoder loss
             """
             # Organize inputs
-            x = ptvs.clone()
+            x = torch.cat([beam, ptvs], dim=1)
             y_list = [ct, beam, ptvs, oars, body]
 
             # Forward pass
             z, y_list_ae = model(x, y_list)
+
+            # # Ignore voxels outside of body
+            # dose = dose * body
+            # z = z * body
+            # y_list = [y * body for y in y_list]
+            # y_list_ae = [y * body for y in y_list_ae]
 
             # Separate continuous and binary outputs
             targets_cnt = y_list[:-2]
@@ -86,18 +101,30 @@ def train_model(
             predictions_bin = y_list_ae[-2:]
 
             # Compute likelihood loss
-            likelihood_dose = F.mse_loss(z, dose)
+            likelihood_pred_mse = F.mse_loss(z, dose)
+
+            # # Compute ssim loss
+            # likelihood_pred_ssim = 1 - ssim3d_loss(z, dose)
 
             # Compute autoencoder loss
-            likelihood_ae_cnt = sum(
+            likelihood_cnt_mse = sum(  # Continuous MSE
                 F.mse_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
             )
-            likelihood_ae_bin = sum(
+            # likelihood_cnt_ssim = sum(  # Continuous SSIM
+            #     1 - ssim3d_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
+            # )
+            likelihood_bin_cel = sum(  # Binary Cross Entropy with Logits
                 F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(predictions_bin, targets_bin)
             )
 
             # Combine losses
-            likelihood = likelihood_dose + likelihood_ae_cnt + likelihood_ae_bin
+            likelihood = (
+                likelihood_pred_mse 
+                # + likelihood_pred_ssim 
+                + likelihood_cnt_mse 
+                # + likelihood_cnt_ssim 
+                + likelihood_bin_cel
+            )
 
         # Compute total loss
         loss = prior + likelihood
