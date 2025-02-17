@@ -130,6 +130,7 @@ class GDPDataset(Dataset):
 
         # Load beam plate
         beam = data_dict['beam_plate']
+        beam = (beam - beam.min()) / (beam.max() - beam.min())  # Normalize beam plate
         beam = np.expand_dims(beam, axis=0)  # Add channel dimension
 
         # Load PTVs (initialize as zeros)

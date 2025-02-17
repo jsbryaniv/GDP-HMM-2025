@@ -8,7 +8,6 @@ import torch
 
 # Import custom classes
 from train import train_model
-from plotting import plot_losses, plot_prediction
 
 # Set environment
 with open('config.json', 'r') as f:
@@ -38,6 +37,9 @@ def load_dataset(dataID, **kwargs):
 
     # Load dataset
     if dataID.lower() == 'han':
+        """
+        Regular Head and Neck dataset.
+        """
 
         # Import dataset
         from dataset import GDPDataset
@@ -45,10 +47,40 @@ def load_dataset(dataID, **kwargs):
         # Set constants
         in_channels = 36
         out_channels = 1
-        # shape = (128, 128, 128)
-        # scale = 1
-        shape = (64, 64, 64)  # TODO: DEBUGGING ONLY
-        scale = .5  # TODO: DEBUGGING ONLY
+        shape = (128, 128, 128)
+        scale = 1
+
+        # Create dataset
+        dataset = GDPDataset(
+            treatment='HaN', 
+            shape=shape,
+            scale=scale,
+            return_dose=True,
+            **kwargs,
+        )
+
+        # Collect metadata
+        metadata = {
+            'dataID': dataID,
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'shape': shape,
+            'scale': scale,
+        }
+
+    elif dataID.lower() == 'han_half':
+        """
+        Half sized Head and Neck dataset.
+        """
+
+        # Import dataset
+        from dataset import GDPDataset
+
+        # Set constants
+        in_channels = 36
+        out_channels = 1
+        shape = (64, 64, 64)  # Half shape
+        scale = .5            # Half scale
 
         # Create dataset
         dataset = GDPDataset(
@@ -134,11 +166,6 @@ def main(
 
     # Get device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    # # Check machine for device constraints
-    # if config['MACHINE'] == 'carina@mca':
-    #     if modelID == 'CrossAttnAE':  # CrossAttnAE requires too much memory for carina
-    #         device = torch.device('cpu')
         
     # Get savename
     savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
@@ -266,43 +293,27 @@ def main(
 if __name__ == '__main__':
 
     # Set job IDs
-    all_jobs = [
-        {
-            'dataID': 'HaN', 
-            'modelID': 'CrossAttnAE',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {'loss_type': 'crossae'},
-        },
-        {
-            'dataID': 'HaN', 
-            'modelID': 'UConvTrans',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {},
-        },
-        {
-            'dataID': 'HaN', 
-            'modelID': 'Unet',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {},
-        },
-        {
-            'dataID': 'HaN', 
-            'modelID': 'ConvFormer',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {},
-        },
-        {
-            'dataID': 'HaN', 
-            'modelID': 'ViT',
-            'data_kwargs': {},
-            'model_kwargs': {},
-            'train_kwargs': {},
-        },
-    ]
+    all_jobs = []
+    for dataID in ['HaN_half', 'HaN']:
+        for modelID in ['CrossAttnAE', 'UConvTrans', 'Unet', 'ConvFormer', 'ViT']:
+
+            # Initialize kwargs
+            data_kwargs = {}
+            model_kwargs = {}
+            train_kwargs = {}
+
+            # Get job specific kwargs
+            if modelID == 'CrossAttnAE':
+                train_kwargs = {'loss_type': 'crossae'}
+
+            # Add job
+            all_jobs.append({
+                'dataID': dataID, 
+                'modelID': modelID,
+                'data_kwargs': data_kwargs,
+                'model_kwargs': model_kwargs,
+                'train_kwargs': train_kwargs,
+            })
     
     # Get training IDs from system arguments
     ID = 0

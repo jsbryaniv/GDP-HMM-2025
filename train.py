@@ -36,6 +36,17 @@ def train_model(
 
     # Set up loss function
     def get_loss(ct, beam, ptvs, oars, body, dose, model):
+
+        # Compute prior loss
+        prior = 0
+        for name, param in model.named_parameters():
+            if 'bias' in name:
+                prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
+            else:
+                prior += param.pow(2).sum()
+        prior /= n_parameters
+
+        # Compute likelihood loss
         if loss_type is None or loss_type.lower() == 'mse':
             """
             Mean squared error loss
@@ -45,9 +56,6 @@ def train_model(
 
             # Forward pass
             y = model(x)
-
-            # Compute prior loss
-            prior = sum(p.pow(2).sum() for p in model.parameters()) / n_parameters
 
             # Compute likelihood loss
             likelihood = F.mse_loss(y, dose)
@@ -77,47 +85,39 @@ def train_model(
             predictions_cnt = y_list_ae[:-2]
             predictions_bin = y_list_ae[-2:]
 
-            # Compute prior loss
-            prior = sum(p.pow(2).sum() for p in model.parameters()) / n_parameters
-
             # Compute likelihood loss
-            likelihood = F.mse_loss(z, dose)
+            likelihood_dose = F.mse_loss(z, dose)
 
             # Compute autoencoder loss
-            recon_loss_cnt = sum(
+            likelihood_ae_cnt = sum(
                 F.mse_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
             )
-            recon_loss_bin = sum(
+            likelihood_ae_bin = sum(
                 F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(predictions_bin, targets_bin)
             )
 
-            # Compute total loss
-            loss = prior + likelihood + recon_loss_cnt + recon_loss_bin
+            # Combine losses
+            likelihood = likelihood_dose + likelihood_ae_cnt + likelihood_ae_bin
 
-            # # Plot
-            # import matplotlib.pyplot as plt
-            # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-            # index = x.shape[2] // 2
-            # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
-            #     if i > 3:
-            #         y_ae = torch.sigmoid(y_ae)
-            #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
-            #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
-            #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-            #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-            # plt.show()
-            # plt.pause(1)
-            # plt.savefig('_image.png')
-            # plt.close()
+        # Compute total loss
+        loss = prior + likelihood
 
-            # Check loss
-            if loss > 100:
-                print(f'Loss: {loss:.4f}')
-
-            # Force garbage collection
-            del ct, beam, ptvs, oars, body, dose, x, y_list, z, y_list_ae
-            if device.type != "cuda":
-                torch.cuda.empty_cache()
+        # # Plot
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
+        # index = x.shape[2] // 2
+        # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
+        #     if i > 3:
+        #         y_ae = torch.sigmoid(y_ae)
+        #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
+        #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
+        #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
+        #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
+        # plt.show()
+        # plt.pause(1)
+        # plt.savefig('_image.png')
+        # plt.close()
+        # print(loss.item())
 
         # Return loss
         return loss
