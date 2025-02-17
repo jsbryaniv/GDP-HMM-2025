@@ -181,7 +181,7 @@ class ConvAttn3d(nn.Module):
                     k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb
 
                     # Calculate attention weights
-                    attn_weights[:, ijk] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
+                    attn_weights[:, xyz] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
 
         # Softmax attention weights
         attn_weights = F.softmax(attn_weights, dim=1)
