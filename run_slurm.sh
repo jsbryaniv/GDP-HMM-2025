@@ -32,6 +32,13 @@ echo "Job Arguments: [$ARGS, $ITER]"
 
 # Run your Python script
 python -u main.py $ARGS $ITER
+EXIT_CODE=$?  # Store the exit status of the Python script
+
+# Check if Python script ran successfully
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "Python script failed (exit code: $EXIT_CODE)."
+    exit $EXIT_CODE  # Exit before resubmitting the job
+fi
 
 # If ITER is less than N_ITER, resubmit the job
 if [ $ITER -lt $N_ITER ]; then
