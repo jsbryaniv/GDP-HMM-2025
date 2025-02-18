@@ -16,8 +16,8 @@ from models.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(64, 64, 64), scale=2, patch_size=(4, 4, 4),
-        n_features=64, n_heads=4, n_layers=8,
+        shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
+        n_features=64, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
 
@@ -50,67 +50,66 @@ class ViT3D(nn.Module):
         )
         self.n_patches = self.shape_patchgrid[0] * self.shape_patchgrid[1] * self.shape_patchgrid[2]
 
-        # Create downscaling and upscaling layers
-        self.downscale = nn.Sequential(
+        # Create input block
+        self.input_block = nn.Sequential(
             # # Normalize
             # nn.GroupNorm(in_channels, in_channels),
-            # Downscale along channels
+            # Merge input channels to n_features
+            nn.Conv3d(in_channels, n_features, kernel_size=1),
+        )
+
+        # Create output block
+        self.output_block = nn.Sequential(
+            # Mix channels
+            nn.Conv3d(n_features, n_features, kernel_size=1),
+            # Smooth output
             nn.Conv3d(
-                in_channels, 
-                in_channels*scale, 
+                n_features, n_features, 
+                kernel_size=3, padding=1,
+                groups=n_features//n_heads,
+            ),
+            # Project to output channels
+            nn.Conv3d(n_features, out_channels, kernel_size=1),
+        )
+
+        # Create downscaling and upscaling layers
+        self.downscale = nn.Sequential(
+            nn.Conv3d(
+                n_features, 
+                n_features, 
                 kernel_size=scale, 
                 stride=scale,
-                groups=in_channels  # Grouped convolutions for channel-wise downscaling
-            ),
-            # Mix channels
-            nn.Conv3d(
-                in_channels*scale, 
-                in_channels*scale, 
-                kernel_size=1
+                groups=n_features  # Channel-wise downscaling
             )
         )
         self.upscale = nn.Sequential(
-            # Upscale
             nn.ConvTranspose3d(
-                out_channels*scale,
-                out_channels*scale,
+                n_features,
+                n_features,
                 kernel_size=scale,
-                stride=scale
-            ),
-            # Smooth
-            nn.Conv3d(
-                out_channels*scale, 
-                out_channels*scale, 
-                kernel_size=3, 
-                padding=1
-            ),
-            # Project to output channels
-            nn.Conv3d(
-                out_channels*scale, 
-                out_channels, 
-                kernel_size=3, 
-                padding=1
-            ), 
+                stride=scale,
+                groups=n_features  # Channel-wise upscaling
+            )
         )
         
         # 3D Patch Embedding and Unembedding Layers
         self.patch_embed = nn.Sequential(
-            # Transform channels to n_features
-            nn.Conv3d(in_channels*scale, n_features, kernel_size=1),
-            # Embed volume into patches
             nn.Conv3d(
                 n_features, 
                 n_features,
                 kernel_size=patch_size, 
                 stride=patch_size,
-                groups=n_features  # Grouped convolutions for channel-wise patching
+                groups=n_features  # Channel-wise patching
             )
         )
-        self.patch_unembed = nn.ConvTranspose3d(
-            n_features, 
-            out_channels*scale, 
-            kernel_size=patch_size, 
-            stride=patch_size
+        self.patch_unembed = nn.Sequential(
+            nn.ConvTranspose3d(
+                n_features, 
+                n_features, 
+                kernel_size=patch_size, 
+                stride=patch_size,
+                groups=n_features  # Channel-wise unpatching
+            )
         )
         
         # Positional Encoding
@@ -125,10 +124,11 @@ class ViT3D(nn.Module):
 
     def forward(self, x):
 
-        # Downscale input
-        x = self.downscale(x)
+        # Input block
+        x = self.input_block(x)
 
         # Patch embedding
+        x = self.downscale(x)
         x = self.patch_embed(x)  # Shape: [B, n_features, D//pD, H//pH, W//pW]
         x = x.flatten(2).transpose(1, 2)  # Shape: [B, n_patches, n_features]
 
@@ -142,9 +142,10 @@ class ViT3D(nn.Module):
         # Patch unembedding
         x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
         x = self.patch_unembed(x)
-
-        # Upscale output
         x = self.upscale(x)
+
+        # Output block
+        x = self.output_block(x)
 
         # Return output
         return x
