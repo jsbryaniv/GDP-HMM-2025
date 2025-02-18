@@ -243,7 +243,7 @@ def main(
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        jobname=savename, debug=True,
+        jobname=savename,
         **train_kwargs,
     )
 
@@ -328,7 +328,7 @@ if __name__ == '__main__':
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else -1
-    ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+    ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
     # Run main function
     job_args = all_jobs[ID]
