@@ -132,7 +132,7 @@ def train_model(
     losses_train = []
     losses_val = []
     loss_val_best = float('inf')
-    model_state_best = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()})
+    model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
     # Training loop
     for epoch in range(n_epochs):
@@ -189,7 +189,7 @@ def train_model(
             # Status update
             if batch_idx % print_every == 0:
                 # Get time per batch
-                t_elapsed = (time.time() - t_batch) / (10 if batch_idx > 0 else 1)
+                t_elapsed = (time.time() - t_batch) / (1 if batch_idx == 0 else print_every)
                 # Get memory usage 
                 mem = 0 if device.type == "cpu" else torch.cuda.max_memory_allocated() / 1024**3
                 # Print status
@@ -240,7 +240,7 @@ def train_model(
         losses_val.append(loss_val_avg)
         if loss_val_avg < loss_val_best:
             loss_val_best = loss_val_avg
-            model_state_best = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()})
+            model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
         # Status update
         print(f'-- Epoch {epoch}/{n_epochs} Summary:')
