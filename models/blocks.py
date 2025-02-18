@@ -10,7 +10,7 @@ from torch.utils.checkpoint import checkpoint
 
 # Convolutional block
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=None, upsample=False, downsample=False, beta=.1):
+    def __init__(self, in_channels, out_channels, kernel_size=None, groups=1, upsample=False, downsample=False, beta=.1):
         super(ConvBlock, self).__init__()
 
         # Check inputs
@@ -33,43 +33,67 @@ class ConvBlock(nn.Module):
         # Define residual layer
         if upsample:
             self.residual = nn.ConvTranspose3d(
-                in_channels, out_channels, kernel_size=2, stride=2
+                in_channels, out_channels, 
+                kernel_size=2, stride=2, 
+                groups=groups,
             )
         elif downsample:
-            self.residual = nn.Conv3d(in_channels, out_channels, kernel_size=2, stride=2)
+            self.residual = nn.Conv3d(
+                in_channels, out_channels, 
+                kernel_size=2, stride=2,
+                groups=groups
+            )
         elif in_channels != out_channels:
-            self.residual = nn.Conv3d(in_channels, out_channels, kernel_size=1)
+            self.residual = nn.Conv3d(
+                in_channels, out_channels, 
+                kernel_size=1, stride=1,
+                groups=groups,
+            )
         else:
             self.residual = nn.Identity()
 
         # Define convolutional layers
         if upsample:
-            self.conv = nn.Sequential(
-                nn.ConvTranspose3d(
+            conv_layers = [
+                # Upsample
+                nn.ConvTranspose3d(  
                     in_channels, out_channels,
                     kernel_size=2, stride=2,
+                    groups=groups,
                 ),
-                nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),  # Smooth
-                nn.GroupNorm(max(1, out_channels // 4), out_channels),
-                nn.ReLU(inplace=True),
-            )
+                # Smooth
+                nn.Conv3d( 
+                    out_channels, out_channels, 
+                    kernel_size=3, padding=1,
+                    groups=groups,
+                ),
+            ]
         elif downsample:
-            self.conv = nn.Sequential(
+            conv_layers = [
                 nn.Conv3d(
                     in_channels, out_channels, 
                     kernel_size=2, stride=2,
+                    groups=groups,
                 ),
-                nn.GroupNorm(max(1, out_channels // 4), out_channels),
-                nn.ReLU(inplace=True),
-            )
+            ]
         else:
-            self.conv = nn.Sequential(
+            conv_layers = [
                 nn.Conv3d(
-                    in_channels, out_channels, kernel_size=kernel_size, padding=(kernel_size//2)
+                    in_channels, out_channels, 
+                    kernel_size=kernel_size, padding=(kernel_size//2),
+                    groups=groups,
                 ),
-                nn.GroupNorm(max(1, out_channels // 4), out_channels),
-                nn.ReLU(inplace=True),
-            )
+            ]
+        if groups > 1:
+            # Mix channels between groups
+            conv_layers.append(nn.Conv3d(out_channels, out_channels, kernel_size=1))  
+        self.conv = nn.Sequential(*conv_layers)
+
+        # Define norm
+        self.norm = nn.GroupNorm(groups, out_channels)
+
+        # Define activation
+        self.activation = nn.ReLU(inplace=True)
 
     def forward(self, x):
         

@@ -20,8 +20,8 @@ class CrossAttnAEModel(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         n_features=8, n_blocks=4, 
-        n_layers_per_block=4, n_layers_per_block_context=4,
-        n_attn_repeats=2, n_heads=2,
+        n_layers_per_block=4, n_layers_per_block_context=2,
+        n_heads=4, n_attn_repeats=2,
     ):
         super(CrossAttnAEModel, self).__init__()
         
@@ -59,7 +59,7 @@ class CrossAttnAEModel(nn.Module):
                 Unet3D(
                     n_channels, n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
-                    n_layers_per_block=n_layers_per_block_context
+                    n_layers_per_block=n_layers_per_block_context,
                 )
             )
         
@@ -78,7 +78,7 @@ class CrossAttnAEModel(nn.Module):
             self.self_mixing_blocks.append(
                 ConvBlock(
                     n_features_per_depth[depth], 
-                    n_features_per_depth[depth], 
+                    n_features_per_depth[depth],
                 )
             )
 
@@ -150,8 +150,8 @@ if __name__ == '__main__':
     model = CrossAttnAEModel(3, 1, (1, 1, 2, 8))
 
     # Create data
-    x = torch.randn(1, 3, 128, 128, 128)
-    context_list = [torch.randn(1, c, 128, 128, 128) for c in (1, 1, 2, 8)]
+    x = torch.randn(1, 3, 64, 64, 64)
+    context_list = [torch.randn(1, c, 64, 64, 64) for c in (1, 1, 2, 8)]
 
     # Measure memory before execution
     process = psutil.Process(os.getpid())
@@ -166,8 +166,8 @@ if __name__ == '__main__':
 
     # Measure memory after execution
     mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-    print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
     print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
+    print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
 
     # Done
     print('Done!')

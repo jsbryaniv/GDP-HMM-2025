@@ -15,13 +15,14 @@ from models.blocks import ConvBlock
 
 # Define simple 3D Unet model
 class Unet3D(nn.Module):
-    def __init__(self, in_channels, out_channels, n_features=8, n_blocks=4, n_layers_per_block=4):
+    def __init__(self, in_channels, out_channels, n_features=16, n_groups=4, n_blocks=4, n_layers_per_block=4):
         super(Unet3D, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.n_features = n_features
+        self.n_groups = n_groups
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
 
@@ -41,35 +42,36 @@ class Unet3D(nn.Module):
 
         # Define downsample blocks
         self.down_blocks = nn.ModuleList()
-        for i in range(n_blocks):
-            n_in = n_features_per_depth[i]
-            n_out = n_features_per_depth[i+1]
+        for depth in range(n_blocks):
+            n_in = n_features_per_depth[depth]
+            n_out = n_features_per_depth[depth+1]
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    ConvBlock(n_in, n_out, downsample=True),
+                    ConvBlock(n_in, n_out, groups=n_groups, downsample=True),
                     # Additional convolutional layers
-                    *[ConvBlock(n_out, n_out) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock(n_out, n_out, groups=n_groups) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
         # Define bottleneck block
         n_in = n_features_per_depth[-1]
         n_out = n_features_per_depth[-1]
-        self.bottleneck = ConvBlock(n_in, n_out)
+        self.bottleneck = ConvBlock(n_in, n_out, groups=n_groups)
 
         # Define upsample and merge blocks
         self.up_blocks = nn.ModuleList()
         self.merge_blocks = nn.ModuleList()
-        for i in range(n_blocks, 0, -1):
-            n_in = n_features_per_depth[i]
-            n_out = n_features_per_depth[i-1]
+        for i in range(n_blocks):
+            depth = self.n_blocks - 1 - i
+            n_in = n_features_per_depth[depth+1]
+            n_out = n_features_per_depth[depth]
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    ConvBlock(n_in, n_out, upsample=True),
+                    ConvBlock(n_in, n_out, groups=n_groups, upsample=True),
                     # Additional convolutional layers
-                    *[ConvBlock(n_out, n_out) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock(n_out, n_out, groups=n_groups) for _ in range(n_layers_per_block - 1)]
                 )
             )
             self.merge_blocks.append(
@@ -105,7 +107,7 @@ class Unet3D(nn.Module):
         feats.append(x)
 
         # Downsample blocks
-        for i, block in enumerate(self.down_blocks):
+        for depth, block in enumerate(self.down_blocks):
             x = block(x)
             feats.append(x)
 

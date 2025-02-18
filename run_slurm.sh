@@ -12,17 +12,33 @@ module load python
 module load cuda
 source activate .env
 
+# Define constants
+N_ITER=10
+
 # Get the command-line argument
 ARGS=$1
+ITER=$2
 
-# Print environment details (useful for debugging)
+# If ITER is not provided, set it to 0
+if [ -z "$ITER" ]; then
+    ITER=0
+fi
+
+# Print environment details
 echo "Running on: $(hostname)"
 echo "Slurm Job ID: $SLURM_JOB_ID"
 echo "CUDA Devices: [$CUDA_VISIBLE_DEVICES]"
-echo "Arguments: [$ARGS]"
+echo "Job Arguments: [$ARGS, $ITER]"
 
 # Run your Python script
-python -u main.py $ARGS
+python -u main.py $ARGS $ITER
+
+# If ITER is less than N_ITER, resubmit the job
+if [ $ITER -lt $N_ITER ]; then
+    ITER=$((ITER+1))
+    echo "Resubmitting job with iteration $ITER/$N_ITER."
+    sbatch run_slurm.sh $ARGS $ITER
+fi
 
 # Print completion message
 echo "Job finished at $(date)"

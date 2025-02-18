@@ -68,7 +68,7 @@ def load_dataset(dataID, **kwargs):
             'scale': scale,
         }
 
-    elif dataID.lower() == 'han_half':
+    elif dataID.lower() == 'halfhan':
         """
         Half sized Head and Neck dataset.
         """
@@ -121,8 +121,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         model = ViT3D(
             in_channels=in_channels, 
             out_channels=out_channels,
-            shape=(128, 128, 128),
-            **kwargs,
+            **{'shape': 128, **kwargs},
         )
     elif modelID.lower() == 'convformer':
         # Convolutional Transformer model
@@ -144,7 +143,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         # Cross Attention Autoencoder model
         from models.crossattnae import CrossAttnAEModel
         model = CrossAttnAEModel(
-            in_channels=4, 
+            in_channels=4,
             out_channels=1,
             n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
             **kwargs,
@@ -184,8 +183,11 @@ def main(
     
     # If continuing training, load previous files
     if continue_training:
-        old_metadata = json.load(os.path.join(path_output, f'{savename}.json'))
+        for _ in range(10):
+            print("WARNING: Be aware job is running with continue_training=True.")
         old_model_state = torch.load(os.path.join(path_output, f'{savename}.pth'))
+        with open(os.path.join(path_output, f'{savename}.json'), 'r') as f:
+            old_metadata = json.load(f)
 
     ### DATASET ###
     print("Loading dataset.")
@@ -199,18 +201,23 @@ def main(
 
     # Split into train, validation, and test sets
     if continue_training:
+        # Get indices of each subset
+        indices_val = old_metadata['indices_val']
+        indices_test = old_metadata['indices_test']
+        indices_train = old_metadata['indices_train']
         # Initialize datasets as Subset objects
-        dataset_val = torch.utils.data.Subset(dataset, old_metadata['indices_val'])
-        dataset_test = torch.utils.data.Subset(dataset, old_metadata['indices_test'])
-        dataset_train = torch.utils.data.Subset(dataset, old_metadata['indices_train'])
+        dataset_val = torch.utils.data.Subset(dataset, indices_val)
+        dataset_test = torch.utils.data.Subset(dataset, indices_test)
+        dataset_train = torch.utils.data.Subset(dataset, indices_train)
     else:
         # If continuing training, split dataset into train, validation, and test sets
         test_size = int(0.2 * len(dataset))
         dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
             dataset,
             [test_size, test_size, len(dataset) - 2*test_size],
+            generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
         )
-        # Get files of each subset
+        # Get indices of each subset
         indices_val = dataset_val.indices
         indices_test = dataset_test.indices
         indices_train = dataset_train.indices
@@ -236,7 +243,7 @@ def main(
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        jobname=savename,
+        jobname=savename, debug=True,
         **train_kwargs,
     )
 
@@ -249,10 +256,12 @@ def main(
         # Get old training statistics
         old_training_statistics = old_metadata['training_statistics']
         # Find the best loss
-        training_statistics['loss_val_best'] = min(
-            training_statistics['loss_val_best'],
-            old_training_statistics['loss_val_best'],
-        )
+        old_loss_val_bset = old_training_statistics['loss_val_best']
+        new_loss_val_best = training_statistics['loss_val_best']
+        if old_loss_val_bset < new_loss_val_best:
+            # If old loss is better, keep old loss and load old model state
+            training_statistics['loss_val_best'] = old_loss_val_bset
+            model.load_state_dict(old_model_state)  # Load old model state
         # Merge loss lists
         for key in ['losses_train', 'losses_val']:
             training_statistics[key] = old_training_statistics[key] + training_statistics[key]
@@ -294,8 +303,8 @@ if __name__ == '__main__':
 
     # Set job IDs
     all_jobs = []
-    for dataID in ['HaN_half', 'HaN']:
-        for modelID in ['CrossAttnAE', 'UConvTrans', 'Unet', 'ConvFormer', 'ViT']:
+    for dataID in ['HalfHaN', 'HaN']:
+        for modelID in ['CrossAttnAE', 'Unet', 'ViT']:
 
             # Initialize kwargs
             data_kwargs = {}
@@ -305,6 +314,8 @@ if __name__ == '__main__':
             # Get job specific kwargs
             if modelID == 'CrossAttnAE':
                 train_kwargs = {'loss_type': 'crossae'}
+            if (modelID == 'ViT') and ('half' in dataID.lower()):
+                model_kwargs = {'shape': 64, 'scale': 2}
 
             # Add job
             all_jobs.append({
@@ -316,14 +327,12 @@ if __name__ == '__main__':
             })
     
     # Get training IDs from system arguments
-    ID = 0
-    args = sys.argv
-    if len(args) > 1:
-        ID = int(args[1])
+    ID = int(sys.argv[1]) if len(sys.argv) > 1 else -1
+    ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 
     # Run main function
     job_args = all_jobs[ID]
-    model, metadata = main(**job_args)
+    model, metadata = main(**job_args, continue_training=bool(ITER > 0))
 
     # Done
     print('Done!')

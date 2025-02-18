@@ -15,8 +15,8 @@ from utils import *
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=20,
-    jobname=None, print_every=50,
+    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=10,
+    jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
     device = next(model.parameters()).device
@@ -26,6 +26,9 @@ def train_model(
     print('-'*50)
     print(f'Training model with {n_parameters} parameters on {device} for {n_epochs} epochs.')
     print('-'*50)
+    if debug:
+        for _ in range(10):
+            print("WARNING: Be aware job is running with debug=True.")
 
     # Set up data loaders
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False)
@@ -60,16 +63,8 @@ def train_model(
             # Forward pass
             y = model(x)
 
-            # # Ignore voxels outside of body
-            # ct = ct * body
-            # dose = dose * body
-            # y = y * body
-
             # Compute likelihood loss
             likelihood_mse = F.mse_loss(y, dose)
-
-            # # Compute ssim loss
-            # likelihood_ssim = 1 - ssim3d_loss(y, dose)
 
             # Combine losses
             likelihood = (
@@ -82,17 +77,11 @@ def train_model(
             Cross attention autoencoder loss
             """
             # Organize inputs
-            x = torch.cat([beam, ptvs], dim=1)
+            x = torch.cat([beam, ptvs], dim=1).clone()
             y_list = [ct, beam, ptvs, oars, body]
 
             # Forward pass
             z, y_list_ae = model(x, y_list)
-
-            # # Ignore voxels outside of body
-            # dose = dose * body
-            # z = z * body
-            # y_list = [y * body for y in y_list]
-            # y_list_ae = [y * body for y in y_list_ae]
 
             # Separate continuous and binary outputs
             targets_cnt = y_list[:-2]
@@ -103,16 +92,10 @@ def train_model(
             # Compute likelihood loss
             likelihood_pred_mse = F.mse_loss(z, dose)
 
-            # # Compute ssim loss
-            # likelihood_pred_ssim = 1 - ssim3d_loss(z, dose)
-
             # Compute autoencoder loss
             likelihood_cnt_mse = sum(  # Continuous MSE
                 F.mse_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
             )
-            # likelihood_cnt_ssim = sum(  # Continuous SSIM
-            #     1 - ssim3d_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
-            # )
             likelihood_bin_cel = sum(  # Binary Cross Entropy with Logits
                 F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(predictions_bin, targets_bin)
             )
@@ -120,9 +103,7 @@ def train_model(
             # Combine losses
             likelihood = (
                 likelihood_pred_mse 
-                # + likelihood_pred_ssim 
                 + likelihood_cnt_mse 
-                # + likelihood_cnt_ssim 
                 + likelihood_bin_cel
             )
 
@@ -158,6 +139,9 @@ def train_model(
 
     # Training loop
     for epoch in range(n_epochs):
+        if debug and epoch > 1:
+                print('DEBUG MODE: Breaking early.')
+                break
 
         # Status update
         t_epoch = time.time()
@@ -177,6 +161,9 @@ def train_model(
         if device.type != "cpu":
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
         for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_train):
+            if debug and batch_idx > 10:
+                    print('DEBUG MODE: Breaking early.')
+                    break
 
             # Status update
             if batch_idx % print_every == 0:
@@ -225,6 +212,9 @@ def train_model(
 
         # Loop over batches
         for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_val):
+            if debug and batch_idx > 10:
+                    print('DEBUG MODE: Breaking early.')
+                    break
 
             # Send to device
             ct = ct.to(device)
