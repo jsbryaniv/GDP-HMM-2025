@@ -10,7 +10,7 @@
 # Set up environment
 module load python
 module load cuda
-source activate .env
+source .env/bin/activate
 
 # Define constants
 N_ITER=10
