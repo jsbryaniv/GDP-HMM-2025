@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=10,
+    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=10, epoch_start=0,
     jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
@@ -135,7 +135,7 @@ def train_model(
     model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
     # Training loop
-    for epoch in range(n_epochs):
+    for epoch in range(epoch_start, epoch_start+n_epochs):
         if debug and epoch > 1:
                 print('DEBUG MODE: Breaking early.')
                 break

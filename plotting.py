@@ -5,6 +5,43 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Copy axes function
+def copy_axis(ax_from, ax_to):
+    """Copy all attributes, plots, and artist objects dynamically from one axis to another."""
+
+    # Copy all artists (lines, scatter, etc.)
+    artist_attrs = [attr for attr in dir(ax_from) if isinstance(getattr(ax_from, attr, None), list)]
+    for attr in artist_attrs:
+        for artist in getattr(ax_from, attr):
+            try:
+                ax_to.add_artist(artist)
+            except:
+                pass  # Skip non-artist objects
+
+    # Manually copy imshow images (since they need special handling)
+    for img in ax_from.images:
+        ax_to.imshow(
+            img.get_array(), 
+            cmap=img.get_cmap(), 
+            extent=img.get_extent(),
+            alpha=img.get_alpha(), 
+            interpolation=img.get_interpolation()
+        )
+
+    # Copy labels, limits, and grid
+    ax_to.set_title(ax_from.get_title())
+    ax_to.set_xlabel(ax_from.get_xlabel())
+    ax_to.set_ylabel(ax_from.get_ylabel())
+    ax_to.set_xlim(ax_from.get_xlim())
+    ax_to.set_ylim(ax_from.get_ylim())
+
+    # Copy legend if it exists
+    legend = ax_from.get_legend()
+    if legend:
+        ax_to.legend(loc=legend._loc)
+
+    # Done
+    return ax_to
 
 # Plot results of a single slice
 def plot_prediction(scan, target, prediction, z=None):
@@ -69,6 +106,7 @@ def plot_losses(losses_train, losses_val):
     ax.plot(losses_val, label='Validation')
 
     # Finalize plot
+    ax.set_ylim([0, max(losses_val)])
     ax.legend()
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')
@@ -78,3 +116,9 @@ def plot_losses(losses_train, losses_val):
     # Return figure and axis
     return fig, ax
 
+
+# Plot dvhs
+def plot_dvh(dose, ptvs, oars, bins=100, ax=None):
+    """
+    
+    """

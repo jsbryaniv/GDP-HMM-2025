@@ -183,11 +183,16 @@ def main(
     
     # If continuing training, load previous files
     if continue_training:
+        # Print warning message
         for _ in range(10):
             print("WARNING: Be aware job is running with continue_training=True.")
+        # Load old data
         old_model_state = torch.load(os.path.join(path_output, f'{savename}.pth'))
         with open(os.path.join(path_output, f'{savename}.json'), 'r') as f:
             old_metadata = json.load(f)
+        # Get epoch start
+        epoch_start = len(old_metadata['training_statistics']['losses_train'])
+        train_kwargs['epoch_start'] = epoch_start
 
     ### DATASET ###
     print("Loading dataset.")

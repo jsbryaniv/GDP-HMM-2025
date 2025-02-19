@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, Subset
 
 # Import custom libaries
 from main import load_dataset, load_model
-from plotting import plot_losses
+from plotting import plot_losses, copy_axis
 
 # Get config 
 with open('config.json', 'r') as f:
@@ -73,7 +73,6 @@ def load_model_and_test_dataset(savename):
     return model, datasets, metadata
 
 
-
 # Set up training function
 def test_model(
     model, dataset_test, metadata, n_show=5,
@@ -128,13 +127,14 @@ def test_model(
                 # Get prediction
                 x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
                 y = model(x)
+                pred = body*y
                 # Get plot data
                 slice_index = ct.shape[-3] // 2
                 plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
                 plot_col = [
-                    ct[0, 0, slice_index].cpu().detach().numpy(),    # CT
-                    dose[0, 0, slice_index].cpu().detach().numpy(),  # Dose Ground Truth
-                    y[0, 0, slice_index].cpu().detach().numpy(),     # Dose Prediction
+                    ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
+                    dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
+                    pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
                 ]
                 # Get loss
                 body_index = body.cpu().detach().numpy().astype(bool)
@@ -146,50 +146,22 @@ def test_model(
                 Cross Attention Autoencoder loss
                 """
                 # Get prediction
-                x = ptvs.clone()
+                x = torch.cat([beam, ptvs], dim=1).clone()
                 y_list = [ct, beam, ptvs, oars, body]
                 z, y_list_ae = model(x, y_list)
+                pred = body*z
+                # Get plot data
                 slice_index = ct.shape[-3] // 2
                 plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
                 plot_col = [
-                    ct[0, 0, slice_index].cpu().detach().numpy(),    # CT
-                    dose[0, 0, slice_index].cpu().detach().numpy(),  # Dose Ground Truth
-                    z[0, 0, slice_index].cpu().detach().numpy(),     # Dose Prediction
+                    ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
+                    dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
+                    pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
                 ]
-                # body_index = body.astype(bool)
-                # ^^^ This doesnt work. Try this instead:
                 # Get loss
                 body_index = body.cpu().detach().numpy().astype(bool)
                 loss = f'MSE={F.mse_loss(z[body_index], dose[body_index]).item():.4f}; MAE={F.l1_loss(z[body_index], dose[body_index]).item():.4f}'
                 plot_loss.append(loss)
-                # Get plot data
-                # # Softmax binary outputs
-                # y_list_ae = y_list_ae[:-2] + [torch.sigmoid(y) for y in y_list_ae[-2:]]
-                # # Sum multichannel outputs
-                # y_list = [y.sum(dim=1, keepdim=True) for y in y_list]
-                # y_list_ae = [y.sum(dim=1, keepdim=True) for y in y_list_ae]
-                # # Get plot data
-                # slice_index = ct.shape[-3] // 2
-                # plot_labels = [
-                #     'CT Ground Truth', 
-                #     'CT Prediction', 
-                #     'PTVs Ground Truth', 
-                #     'PTVs Prediction', 
-                #     'OARs Ground Truth', 
-                #     'OARs Prediction', 
-                #     'Dose Ground Truth', 
-                #     'Dose Prediction'
-                # ]
-                # plot_col = [
-                #     y_list[0][0, 0, slice_index].cpu().detach().numpy(),     # CT Ground Truth
-                #     y_list_ae[0][0, 0, slice_index].cpu().detach().numpy(),  # CT Prediction
-                #     y_list[2][0, 0, slice_index].cpu().detach().numpy(),     # PTVs Ground Truth
-                #     y_list_ae[2][0, 0, slice_index].cpu().detach().numpy(),  # PTVs Prediction
-                #     y_list[3][0, 0, slice_index].cpu().detach().numpy(),     # OARs Ground Truth
-                #     y_list_ae[3][0, 0, slice_index].cpu().detach().numpy(),  # OARs Prediction
-                #     dose[0, 0, slice_index].cpu().detach().numpy(),          # Dose Ground Truth
-                #     z[0, 0, slice_index].cpu().detach().numpy(),             # Dose Prediction
-                # ]
 
         # Append to plot row
         plot_row.append(plot_col)
@@ -203,7 +175,7 @@ def test_model(
     for i in range(n_rows):
         ax[i, 0].set_ylabel(f'Example {i+1}')
         for j in range(n_cols):
-            ax[i, j].set_title(f'{plot_labels[j]}\n{plot_loss[i]}')
+            ax[i, j].set_title(f'{plot_labels[j]}' + (f'\n{plot_loss[i]}' if j == 2 else ''))
             ax[i, j].imshow(plot_row[i][j], cmap='hot')
             ax[i, j].axis('off')
     plt.tight_layout()
@@ -216,32 +188,68 @@ def test_model(
 # Main script
 if __name__ == '__main__':
 
-    # Make list of all jobs
-    all_jobs = [
-        'model_HaN_half_CrossAttnAE',
-        'model_HaN_half_Unet',
-        'model_HaN_Unet',
-        'model_HaN_ViT',
-    ]
+    # Loop over dataIDs
+    for dataID in ['HaN', 'HalfHaN']:
 
-    # Loop over savenames
-    for savename in all_jobs:
+        # Get all jobs
+        if dataID.lower() == 'han':
+            all_jobs = [
+                'model_HaN_CrossAttnAE',
+                'model_HaN_Unet',
+                'model_HaN_ViT',
+            ]
+        elif dataID.lower() == 'halfhan':
+            all_jobs = [
+                'model_HalfHaN_CrossAttnAE',
+                'model_HalfHaN_Unet',
+                'model_HalfHaN_ViT_scale=2_shape=64',
+            ]
 
-        # Load model and dataset
-        model, datasets, metadata = load_model_and_test_dataset(savename)
+        # Loop over savenames
+        figs = []
+        axs = []
+        for savename in all_jobs:
 
-        # Test model
-        dataset_test = datasets[2]
-        fig, ax = test_model(model, dataset_test, metadata)
-        fig.savefig(f'figs/{savename}_test.png')
-        plt.close()
+            # Load model and dataset
+            model, datasets, metadata = load_model_and_test_dataset(savename)
 
-        # Plot losses
-        losses_train = metadata['training_statistics']['losses_train']
-        losses_val = metadata['training_statistics']['losses_val']
-        fig, ax = plot_losses(losses_train, losses_val)
-        fig.savefig(f'figs/{savename}_losses.png')
-        plt.close()
+            # Plot losses
+            losses_train = metadata['training_statistics']['losses_train']
+            losses_val = metadata['training_statistics']['losses_val']
+            fig, ax = plot_losses(losses_train, losses_val)
+            fig.savefig(f'figs/{savename}_losses.png')
+            plt.close()
+
+            # Test model
+            dataset_test = datasets[2]
+            fig, ax = test_model(model, dataset_test, metadata)
+            fig.savefig(f'figs/{savename}_test.png')
+            figs.append(fig)
+            axs.append(ax)
+
+        # Create summary figure
+        n_rows = axs[0].shape[0]
+        n_cols = 2 + len(axs)
+        fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
+        plt.ion()
+        plt.show()
+        for i in range(n_rows):
+            ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
+            ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
+            for job in range(len(all_jobs)):
+                print(i, job+2)
+                ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
+                ax[i, job+2].set_title(
+                    all_jobs[job].split('_')[2]+'\n'+axs[job][i, 2].get_title().split('\n')[-1]
+                )
+        plt.tight_layout()
+        plt.pause(1)
+        fig.savefig(f'figs/summary_{dataID}.png')
+
+        # Close figures
+        plt.close(fig)
+        for fig in figs:
+            plt.close(fig)
     
     # Done
     print('Done.')
