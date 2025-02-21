@@ -148,6 +148,15 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
             n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
             **kwargs,
         )
+    elif modelID.lower() == 'crossvit':
+        # Cross Attention Vision Transformer model
+        from models.crossvit import CrossViT3d
+        model = CrossViT3d(
+            in_channels=4, 
+            out_channels=1,
+            n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
+            **{'shape': 128, **kwargs},
+        )
 
     # Return model
     return model
@@ -156,7 +165,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
 def main(
     dataID, modelID,
     data_kwargs=None, model_kwargs=None, train_kwargs=None,
-    continue_training=False,
+    continue_training=False, debug=False,
 ):
     """
     Main function to train a model on a dataset.
@@ -187,7 +196,7 @@ def main(
         for _ in range(10):
             print("WARNING: Be aware job is running with continue_training=True.")
         # Load old data
-        old_model_state = torch.load(os.path.join(path_output, f'{savename}.pth'))
+        old_model_state = torch.load(os.path.join(path_output, f'{savename}.pth'), weights_only=True)
         with open(os.path.join(path_output, f'{savename}.json'), 'r') as f:
             old_metadata = json.load(f)
         # Get epoch start
@@ -248,7 +257,7 @@ def main(
     # Train model
     model, training_statistics = train_model(
         model, dataset_train, dataset_val,
-        jobname=savename,
+        jobname=savename, debug=debug,
         **train_kwargs,
     )
 
@@ -309,7 +318,7 @@ if __name__ == '__main__':
     # Set job IDs
     all_jobs = []
     for dataID in ['HalfHaN', 'HaN']:
-        for modelID in ['CrossAttnAE', 'Unet', 'ViT']:
+        for modelID in ['ViT', 'CrossViT', 'CrossAttnAE', 'ViT', 'Unet']:
 
             # Initialize kwargs
             data_kwargs = {}
@@ -317,9 +326,13 @@ if __name__ == '__main__':
             train_kwargs = {}
 
             # Get job specific kwargs
+            if modelID == 'CrossViT':
+                train_kwargs = {'loss_type': 'crossae'}
             if modelID == 'CrossAttnAE':
                 train_kwargs = {'loss_type': 'crossae'}
             if (modelID == 'ViT') and ('half' in dataID.lower()):
+                model_kwargs = {'shape': 64, 'scale': 2}
+            if (modelID == 'CrossViT') and ('half' in dataID.lower()):
                 model_kwargs = {'shape': 64, 'scale': 2}
 
             # Add job
@@ -338,6 +351,13 @@ if __name__ == '__main__':
     # Run main function
     job_args = all_jobs[ID]
     model, metadata = main(**job_args, continue_training=bool(ITER > 0))
+
+    # # Debugging
+    # for ID in range(len(all_jobs)//2):
+    #     for ITER in range(2):
+    #         job_args = all_jobs[ID]
+    #         model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
+    #         print('\n'*5)
 
     # Done
     print('Done!')

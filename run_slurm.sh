@@ -27,8 +27,8 @@ if [ "$ITER" -eq 0 ]; then
     > "$ERR_LOG"
 else
     # Add spacing to separate job outputs in the logs
-    echo -e "\n\n===== New Job Resubmission (ITER $ITER) =====\n\n" >> "$OUT_LOG"
-    echo -e "\n\n===== New Job Resubmission (ITER $ITER) =====\n\n" >> "$ERR_LOG"
+    echo -e "\n\n===== New Job Resubmission (ITER $ITER/$N_ITER) =====\n\n" >> "$OUT_LOG"
+    echo -e "\n\n===== New Job Resubmission (ITER $ITER/$N_ITER) =====\n\n" >> "$ERR_LOG"
 fi
 
 
@@ -51,11 +51,11 @@ if [ "$EXIT_CODE" -ne 0 ]; then
 fi
 
 # If ITER is less than N_ITER, submit next job
+ITER=$((ITER+1))
 if [ $ITER -lt $N_ITER ]; then
-    ITER=$((ITER+1))
     echo "Submitting next job with iteration $ITER/$N_ITER at $(date)." >> "$OUT_LOG"
     sbatch run_slurm.sh $ARGS $ITER
 fi
 
 # Print completion message
-echo "Job finished at $(date)." >> "$OUT_LOG"
+echo "Job finished all iterations at $(date)." >> "$OUT_LOG"

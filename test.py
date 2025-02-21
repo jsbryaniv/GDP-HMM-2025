@@ -13,52 +13,13 @@ from torch.utils.data import DataLoader, Subset
 # Import custom libaries
 from main import load_dataset, load_model
 from plotting import plot_losses, copy_axis
+from utils import get_dvh
 
 # Get config 
 with open('config.json', 'r') as f:
     config = json.load(f)
 ROOT_DIR = config['PATH_OUTPUT']
 
-
-# Get DVH function
-def get_dvh(dose, structures, bins=100):
-
-    # If tensor, convert to numpy
-    if isinstance(dose, torch.Tensor):
-        dose = dose.cpu().detach().numpy()
-    if isinstance(structures, torch.Tensor):
-        structures = structures.cpu().detach().numpy()
-    
-    # Get dose range
-    bins = np.linspace(0, np.max(dose), bins)
-    dvh_bin = (bins[:-1] + bins[1:]) / 2
-    bins = np.append(bins, 2*bins[-1]-bins[-2])  # Add final point to ensure 0% above max dose
-    bins = np.append(0, bins)                    # Add initial point to ensure 100% at 0 dose
-
-    # Initialize dvhs
-    dvh_val = []
-
-    # Loop over structures
-    for i in range(structures.shape[1]):
-        structure = structures[0, i]
-        if np.sum(structure) == 0:
-            continue
-        
-        # Get dvh
-        hist, _ = np.histogram(dose[0, 0, structure.astype(bool)], bins=bins)  # Get histogram
-        dvh = np.cumsum(hist[::-1])[::-1]                                      # Get cumulative histogram (reverse order)
-        dvh = 100 * dvh / (dvh[0] + 1e-8)                                      # Normalize to 100%
-        dvh = np.append(dvh, 0)                                                # Add final point to ensure 0% above max dose
-        dvh = np.append(100, dvh)                                              # Add initial point to ensure 100% at 0 dose
-
-        # Append to list
-        dvh_val.append(dvh)
-
-    # Convert to numpy array
-    dvh_val = np.array(dvh_val)
-
-    # Return list
-    return dvh_val, dvh_bin
 
 # Load trained model and dataset
 def load_model_and_test_dataset(savename):
@@ -103,7 +64,7 @@ def load_model_and_test_dataset(savename):
     model = load_model(modelID, in_channels, out_channels, **model_kwargs)
 
     # Load weights from file
-    model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'))
+    model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'), weights_only=True)
     model.load_state_dict(model_state_dict)
 
     

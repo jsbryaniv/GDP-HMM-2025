@@ -7,8 +7,124 @@ A utility function is a function that is useful in multiple contexts.
 # Import libraries
 import os
 import torch
-import psutil
-# import pytorch_msssim
+import numpy as np
+import torch.nn.functional as F
+
+
+
+### CUSTOM FUNCTIONS ###
+
+# Randomly mask 3D volume
+def block_mask_3d(volume, block_size=8, p=0.2):
+    B, C, D, H, W = volume.shape
+    mask = torch.rand(B, 1, D // block_size, H // block_size, W // block_size, device=volume.device) > p
+    mask = F.interpolate(mask.float(), size=(D, H, W), mode='nearest')
+    return volume * mask
+
+# Get DVH function
+def get_dvh(dose, structures, bins=100, min_dose=0, max_dose=None):
+
+    # Check inputs
+    if max_dose is None:
+        max_dose = np.max(dose)
+
+    # If tensor, convert to numpy
+    if isinstance(dose, torch.Tensor):
+        dose = dose.cpu().detach().numpy()
+    if isinstance(structures, torch.Tensor):
+        structures = structures.cpu().detach().numpy()
+    
+    # Get dose range
+    bins = np.linspace(0, np.max(dose), bins)
+    dvh_bin = (bins[:-1] + bins[1:]) / 2
+    bins = np.append(bins, 2*bins[-1]-bins[-2])  # Add final point to ensure 0% above max dose
+    bins = np.append(0, bins)                    # Add initial point to ensure 100% at 0 dose
+
+    # Initialize dvhs
+    dvh_val = []
+
+    # Loop over structures
+    for i in range(structures.shape[1]):
+        structure = structures[0, i]
+        if np.sum(structure) == 0:
+            continue
+        
+        # Get dvh
+        hist, _ = np.histogram(dose[0, 0, structure.astype(bool)], bins=bins)  # Get histogram
+        dvh = np.cumsum(hist[::-1])[::-1]                                      # Get cumulative histogram (reverse order)
+        dvh = 100 * dvh / (dvh[0] + 1e-8)                                      # Normalize to 100%
+        dvh = np.append(dvh, 0)                                                # Add final point to ensure 0% above max dose
+        dvh = np.append(100, dvh)                                              # Add initial point to ensure 100% at 0 dose
+
+        # Append to list
+        dvh_val.append(dvh)
+
+    # Convert to numpy array
+    dvh_val = np.array(dvh_val)
+
+    # Return list
+    return dvh_val, dvh_bin
+
+
+
+### CUSTOM LOSS FUNCTIONS ###
+
+# Define Earth Mover's Distance (EMD) loss function
+def emd_loss(pred_cdf, target_cdf, structures, dx=1):
+    """
+    Calulate the Earth Mover's Distance (EMD) loss between two CDFs.
+    EMD loss simplifies to the L1 distance between the two CDFs.
+    """
+    
+    # Calculate EMD
+    loss = ((pred_cdf - target_cdf) * dx).abs().mean(dim=-1)
+
+    # Return loss
+    return loss
+
+# Define DVH loss function
+def dvh_loss(pred_dose, target_dose, structures, max_dose=None, bins=100):
+    """
+    Calulate the dose volume histogram (DVH) loss between the predicted dose and the target dose given the structures.
+    """
+
+    # Initialize loss
+    loss = 0
+
+    # Loop over batch
+    for B in range(pred_dose.shape[0]):
+        
+        # Loop over structures
+        for i in range(structures.shape[1]):
+            structure = structures[B, i]
+            if torch.sum(structure) == 0:
+                continue
+
+            # Get dose values
+            val_pred = pred_dose[B, 0, structure.bool()]
+            val_target = target_dose[B, 0, structure.bool()]
+
+            # Get max dose for binning
+            max_dose_i = max_dose
+            if max_dose_i is None:
+                with torch.no_grad():
+                    max_dose_i = max(val_pred.max().item(), val_target.max().item())
+
+            # Get DVH
+            dvh_pred = torch.histc(val_pred, bins=bins, min=0, max=max_dose_i)      # Histogram prediction
+            dvh_target = torch.histc(val_target, bins=bins, min=0, max=max_dose_i)  # Histogram target
+            dvh_pred = torch.cumsum(dvh_pred.flip(0), 0).flip(0) + 1e-8             # Cumulative histogram prediction
+            dvh_target = torch.cumsum(dvh_target.flip(0), 0).flip(0) + 1e-8         # Cumulative histogram target
+            dvh_pred = dvh_pred / dvh_pred[0]                                       # Normalize prediction DVH to 1
+            dvh_target = dvh_target / dvh_target[0]                                 # Normalize target DVH to 1
+
+            # Calculate loss
+            loss += emd_loss(dvh_pred, dvh_target, structures, dx=max_dose_i/bins)
+
+    # Return loss
+    return loss
+
+
 
 ### MEASURE CPU MEMORY ###
 
@@ -23,7 +139,10 @@ def estimate_memory_usage(model, x, print_stats=True, device=None):
     and OS-level memory fragmentation. For accurate measurements, restart the process before 
     each run.
     """
-    
+
+    # Import libraries
+    import psutil
+        
     # Check which method to use
     if device is None or device == 'cpu':
         """
@@ -103,18 +222,4 @@ def estimate_memory_usage(model, x, print_stats=True, device=None):
 
     # Return total memory
     return mem_total
-
-
-
-### CUSTOM LOSS FUNCTIONS ###
-
-# # Define 3D SSIM loss
-# def ssim3d_loss(pred, target):
-#     """Computes 3D SSIM efficiently by treating depth slices as batch elements."""
-#     B, C, D, H, W = pred.shape
-#     pred_2d = pred.reshape(B * D, C, H, W)  # Flatten depth into batch
-#     target_2d = target.reshape(B * D, C, H, W)
-#     return pytorch_msssim.ssim(pred_2d, target_2d, data_range=1.0)
-
-
 

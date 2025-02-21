@@ -8,6 +8,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+# Import custom libraries
+from utils import dvh_loss, block_mask_3d
+
 
 # Set up training function
 def train_model(
@@ -58,16 +61,19 @@ def train_model(
             x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
 
             # Forward pass
-            y = model(x)
+            pred = model(x)
 
             # Compute likelihood loss
-            likelihood_mse = F.mse_loss(y, dose)
+            likelihood_pred = F.mse_loss(pred, dose)
+
+            # Compute dvh loss
+            likelihood_dvh = dvh_loss(
+                 pred, dose, 
+                 structures=torch.cat([(ptvs!=0), oars, body], dim=1)
+            )
 
             # Combine losses
-            likelihood = (
-                likelihood_mse 
-                # + likelihood_ssim
-            )
+            likelihood = likelihood_pred + likelihood_dvh
 
         elif loss_type.lower() == 'crossae':
             """
@@ -76,32 +82,37 @@ def train_model(
             # Organize inputs
             x = torch.cat([beam, ptvs], dim=1).clone()
             y_list = [ct, beam, ptvs, oars, body]
+            
+            # Corrupt context for autoencoder loss
+            y_list_corrupted = [block_mask_3d(y.clone(), p=0.1) for y in y_list]
 
             # Forward pass
-            z, y_list_ae = model(x, y_list)
-
-            # Separate continuous and binary outputs
-            targets_cnt = y_list[:-2]
-            targets_bin = y_list[-2:]
-            predictions_cnt = y_list_ae[:-2]
-            predictions_bin = y_list_ae[-2:]
+            pred = model(x, y_list)
+            reconstructions = [ae(y) for ae, y in zip(model.context_autoencoders, y_list_corrupted)]
 
             # Compute likelihood loss
-            likelihood_pred_mse = F.mse_loss(z, dose)
+            likelihood_pred = F.mse_loss(pred, dose)
 
-            # Compute autoencoder loss
-            likelihood_cnt_mse = sum(  # Continuous MSE
-                F.mse_loss(recon, target) for recon, target in zip(predictions_cnt, targets_cnt)
+            # Compute dvh loss
+            likelihood_dvh = dvh_loss(
+                 pred, dose, 
+                 structures=torch.cat([(ptvs!=0), oars, body], dim=1)
             )
-            likelihood_bin_cel = sum(  # Binary Cross Entropy with Logits
-                F.binary_cross_entropy_with_logits(recon, target) for recon, target in zip(predictions_bin, targets_bin)
+
+            # Compute reconstruction loss
+            likelihood_recon_continous = (
+                sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-2], y_list[:-2])])
+            )
+            likelihood_recon_binary = (
+                sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-2:], y_list[-2:])])
             )
 
             # Combine losses
             likelihood = (
-                likelihood_pred_mse 
-                + likelihood_cnt_mse 
-                + likelihood_bin_cel
+                likelihood_pred 
+                + likelihood_dvh
+                + likelihood_recon_continous 
+                + likelihood_recon_binary
             )
 
         # Compute total loss
@@ -124,6 +135,10 @@ def train_model(
         # plt.close()
         # print(loss.item())
 
+        # Check for NaN and Inf
+        if torch.isnan(loss) or torch.isinf(loss):
+            raise ValueError('Loss is NaN or Inf.')
+
         # Return loss
         return loss
 
@@ -136,7 +151,7 @@ def train_model(
 
     # Training loop
     for epoch in range(epoch_start, epoch_start+n_epochs):
-        if debug and epoch > 1:
+        if debug and epoch > epoch_start + 1:
                 print('DEBUG MODE: Breaking early.')
                 break
 

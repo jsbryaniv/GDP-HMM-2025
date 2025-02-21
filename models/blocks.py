@@ -54,7 +54,7 @@ class ConvBlock(nn.Module):
 
         # Define convolutional layers
         if upsample:
-            conv_layers = [
+            self.conv = nn.Sequential(
                 # Upsample
                 nn.ConvTranspose3d(  
                     in_channels, out_channels,
@@ -67,33 +67,32 @@ class ConvBlock(nn.Module):
                     kernel_size=3, padding=1,
                     groups=groups,
                 ),
-            ]
+            )
         elif downsample:
-            conv_layers = [
+            self.conv = nn.Sequential(
                 nn.Conv3d(
                     in_channels, out_channels, 
                     kernel_size=2, stride=2,
                     groups=groups,
                 ),
-            ]
+            )
         else:
-            conv_layers = [
+            self.conv = nn.Sequential(
                 nn.Conv3d(
                     in_channels, out_channels, 
                     kernel_size=kernel_size, padding=(kernel_size//2),
                     groups=groups,
                 ),
-            ]
-        if groups > 1:
-            # Mix channels between groups
-            conv_layers.append(nn.Conv3d(out_channels, out_channels, kernel_size=1))  
-        self.conv = nn.Sequential(*conv_layers)
+            )
 
         # Define norm
         self.norm = nn.GroupNorm(groups, out_channels)
 
         # Define activation
         self.activation = nn.ReLU(inplace=True)
+
+        # Define mixing layer to allow negative values
+        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
         
@@ -102,6 +101,9 @@ class ConvBlock(nn.Module):
 
         # Convolutional block
         x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.mixing(x)
 
         # Combine with residual
         x = self.beta * x0 + (1 - self.beta) * x
@@ -143,11 +145,54 @@ class TransformerBlock(nn.Module):
     def forward(self, x):
 
         # Apply self-attention
-        attn_output, _ = self.self_attn(self.norm1(x), self.norm1(x), self.norm1(x))
+        x_normed = self.norm1(x)
+        attn_output, _ = self.self_attn(x_normed, x_normed, x_normed)
         x = x + attn_output
 
         # Feedforward layer
         x = x + self.mlp(self.norm2(x))
+
+        return x
+
+# Define cross attention transformer block
+class CrossTransformerBlock(nn.Module):
+    def __init__(self, n_features, n_heads=4, expansion=2):
+        super(CrossTransformerBlock, self).__init__()
+
+        # Set up attributes
+        self.n_features = n_features
+        self.n_heads = n_heads
+        self.expansion = expansion
+        
+        # Calculate constants
+        n_features_inner = int(n_features * expansion)
+        self.n_features_inner = n_features_inner
+
+        # Set up multi-head self-attention
+        self.self_attn = nn.MultiheadAttention(n_features, n_heads, batch_first=True)
+
+        # Set up feedforward layer
+        self.mlp = nn.Sequential(
+            nn.Linear(n_features, n_features_inner),
+            nn.ReLU(),
+            nn.Linear(n_features_inner, n_features),
+        )
+
+        # Set up normalization layers
+        self.norm1 = nn.LayerNorm(n_features)
+        self.norm2 = nn.LayerNorm(n_features)
+        self.norm3 = nn.LayerNorm(n_features)
+
+    def forward(self, x, y):
+
+        # Apply self-attention
+        x_normed = self.norm1(x)
+        y_normed = self.norm2(y)  # Normalize context separately
+        attn_output, _ = self.self_attn(x_normed, y_normed, y_normed)
+        x = x + attn_output
+
+        # Feedforward layer
+        x = x + self.mlp(self.norm3(x))
 
         return x
 

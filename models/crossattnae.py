@@ -104,7 +104,7 @@ class CrossAttnAEModel(nn.Module):
 
         # Apply dropout to context features and decode
         f_con_blk = [[dropout(f) for dropout, f in zip(self.context_dropout, f_con_blk[c])] for c in range(self.n_context)]
-        y_list = [autoencoder.decoder(fs) for autoencoder, fs in zip(self.context_autoencoders, f_con_blk)]
+        # y_list = [autoencoder.decoder(fs) for autoencoder, fs in zip(self.context_autoencoders, f_con_blk)]
 
         # Encode x
         feats = self.autoencoder.encoder(x)
@@ -136,7 +136,7 @@ class CrossAttnAEModel(nn.Module):
         x = self.autoencoder.output_block(x)
 
         # Return the output and autoencoded ys
-        return x, y_list
+        return x
 
 
 # Test the model
