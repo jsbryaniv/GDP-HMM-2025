@@ -20,7 +20,7 @@ class CrossViT3d(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
-        n_features=64, n_heads=4, n_layers=6, n_layers_context=6, n_mixing_blocks=4,
+        n_features=64, n_heads=4, n_layers=4, n_layers_context=6, n_mixing_blocks=4,
     ):
         super(CrossViT3d, self).__init__()
 
@@ -65,9 +65,11 @@ class CrossViT3d(nn.Module):
         self.shape_downscaled = shape_downscaled
         self.shape_patchgrid = shape_patchgrid
         
-        # Positional Encoding
+        # Positional and Context Encoding
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, n_patches, n_features))
-        self.pos_embedding_context = nn.Parameter(.1*torch.randn(1, n_patches*n_context, n_features))
+        self.context_embeddings = nn.ParameterList([
+            nn.Parameter(.1*torch.randn(1, 1, n_features)) for _ in range(n_context)
+        ])
 
         # Create main autoencoder
         self.autoencoder = ViT3D(
@@ -110,14 +112,15 @@ class CrossViT3d(nn.Module):
 
         # Encode input
         x = self.autoencoder.encode(x)
-        y_list = [ae.encode(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        context = [ae.encode(y) for ae, y in zip(self.context_autoencoders, y_list)]
+
+        # Add positional and context embeddings
+        x = x + self.pos_embedding 
+        context = [y + self.pos_embedding for y in context] 
+        context = [y + self.context_embeddings[i] for i, y in enumerate(context)]
         
         # Cat context tensors
-        context = torch.cat(y_list, dim=1)
-
-        # Add positional encoding
-        x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
-        context = context + self.pos_embedding_context.expand(context.shape[0], -1, -1)
+        context = torch.cat(context, dim=1)
 
         # Mix self and cross attention
         for transformer, cross_transformer in zip(self.self_mixing_blocks, self.cross_mixing_blocks):
