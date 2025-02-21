@@ -145,7 +145,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         model = CrossAttnAEModel(
             in_channels=4,
             out_channels=1,
-            n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
+            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
             **kwargs,
         )
     elif modelID.lower() == 'crossvit':
@@ -154,7 +154,7 @@ def load_model(modelID, in_channels, out_channels, **kwargs):
         model = CrossViT3d(
             in_channels=4, 
             out_channels=1,
-            n_cross_channels_list=[1, 1, 3, in_channels-6, 1],  # ct, beam, ptvs, oars, body
+            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
             **{'shape': 128, **kwargs},
         )
 
@@ -317,8 +317,8 @@ if __name__ == '__main__':
 
     # Set job IDs
     all_jobs = []
-    for dataID in ['HalfHaN', 'HaN']:
-        for modelID in ['ViT', 'CrossViT', 'CrossAttnAE', 'ViT', 'Unet']:
+    for dataID in ['HaN', 'HalfHaN']:
+        for modelID in ['CrossViT', 'CrossAttnAE', 'ViT', 'Unet']:
 
             # Initialize kwargs
             data_kwargs = {}

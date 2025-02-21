@@ -20,7 +20,7 @@ class CrossViT3d(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
-        n_features=64, n_heads=4, n_layers=8, n_layers_context=8, n_mixing_blocks=4,
+        n_features=64, n_heads=4, n_layers=6, n_layers_context=6, n_mixing_blocks=4,
     ):
         super(CrossViT3d, self).__init__()
 
@@ -139,15 +139,16 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (64, 64, 64)
-    n_channels = 3
-    n_channels_context = [1, 1, 3, 30, 1]
+    shape = (128, 128, 128)
+    n_channels = 4
+    n_channels_context = [1, 4, 30]
 
     # Create a model
     model = CrossViT3d(
         n_channels, 1, n_channels_context,
         shape=shape
     )
+    print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 
     # Create data
     x = torch.randn(1, n_channels, *shape)
@@ -167,7 +168,6 @@ if __name__ == '__main__':
 
     # Measure memory after execution
     mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-    print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
     print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
 
     # Done

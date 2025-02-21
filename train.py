@@ -81,7 +81,11 @@ def train_model(
             """
             # Organize inputs
             x = torch.cat([beam, ptvs], dim=1).clone()
-            y_list = [ct, beam, ptvs, oars, body]
+            y_list = [
+                ct, 
+                torch.cat([beam, ptvs], dim=1), 
+                torch.cat([oars, body], dim=1),
+            ]
             
             # Corrupt context for autoencoder loss
             y_list_corrupted = [block_mask_3d(y.clone(), p=0.1) for y in y_list]
@@ -101,10 +105,10 @@ def train_model(
 
             # Compute reconstruction loss
             likelihood_recon_continous = (
-                sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-2], y_list[:-2])])
+                sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-1], y_list[:-1])])
             )
             likelihood_recon_binary = (
-                sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-2:], y_list[-2:])])
+                sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-1:], y_list[-1:])])
             )
 
             # Combine losses
