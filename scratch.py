@@ -52,6 +52,135 @@ if __name__ == '__main__':
     # Done
     print('Done')
 
-{"losses_train": [0.02846313427042655, 0.03269330804239494], "losses_val": [0.08249649374108564, 0.07744296893738864], "loss_val_best": 0.07744296893738864}
-{"losses_train": [0.02846313427042655, 0.03269330804239494, 0.01695274965904975, 0.010123631326849012], "losses_val": [0.08249649374108564, 0.07744296893738864, 0.04097211486414859, 0.02718196270758646], "loss_val_best": 0.02718196270758646}
-{"losses_train": [0.02846313427042655, 0.03269330804239494, 0.01695274965904975, 0.010123631326849012, 0.0074497248494917205, 0.006111893815921931], "losses_val": [0.08249649374108564, 0.07744296893738864, 0.04097211486414859, 0.02718196270758646, 0.026415043860151054, 0.012504906821669192], "loss_val_best": 0.012504906821669192}
+
+# If you can do this...
+
+import numpy as np
+
+a = np.array([1, 2, 3, 4])
+b = np.zeros((1, 4))
+c = np.randn(1, 4)
+d = a + b * c
+
+# ...then you can do this
+
+import torch
+
+a = torch.tensor([1, 2, 3, 4])
+b = torch.zeros(1, 4)
+c = torch.randn(1, 4)
+d = a + b * c
+
+
+
+
+# If you can do this...
+    
+class MyClass:
+    def __init__(self, z):
+        self.y = 10
+        self.z = z
+
+    def myfunc(self, x):
+        x = x + self.y + self.z
+        return x
+
+myclass = MyClass(10)
+x = myclass.myfunc(20)
+
+# ...then you can do this
+
+class ParentClass:
+    def __init__(self):
+        self.y = 10
+
+    def parentfunc(self, x):
+        x = x + self.y
+        return x
+    
+class ChildClass(ParentClass):
+    def __init__(self, z):
+        super().__init__()
+        self.z = z
+
+    def myfunc(self, x):
+        x = self.parentfunc(x)
+        x = x + self.z
+        return x
+
+myclass = ChildClass(10)
+z = myclass.myfunc(20)
+
+
+
+
+# If you can do this...
+    
+class ChildClass(ParentClass):
+    def __init__(self, z):
+        super().__init__()
+        self.z = z
+
+    def myfunc(self, x):
+        x = self.parentfunc(x)
+        x = x + self.z
+        return x
+
+myclass = ChildClass(10)
+z = myclass.myfunc(20)
+
+# ...then you can do this...
+
+import torch
+import torch.nn as nn
+
+class MyModel(nn.Module):
+    def __init__(self, num_hidden):
+        super(MyModel, self).__init__()
+        self.fc = nn.Linear(1, num_hidden)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(num_hidden, 1)
+
+    def forward(self, x):
+        x = self.fc(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        return x
+
+model = MyModel(10)
+x = torch.randn(1, 1)
+y = model(x)
+
+# ...and you can do this
+
+from torch.utils.data import Dataset
+
+class MyDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+mydataset = MyDataset([1, 2, 3, 4, 5])
+x = mydataset[0]
+
+# If you can do this...
+
+data = np.array([1, 2, 3, 4, 5])
+
+for x in data:
+    y = myfunc(x)
+    loss = sum((x-y)**2)
+
+# ...then you can do this
+
+for x in mydataset:
+    torch.zero_grad()
+    y = model(x)
+    loss = sum((x-y)**2)
+    loss.backward()
+    optimizer.step()

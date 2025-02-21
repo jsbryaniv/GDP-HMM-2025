@@ -9,16 +9,46 @@ import matplotlib.pyplot as plt
 def copy_axis(ax_from, ax_to):
     """Copy all attributes, plots, and artist objects dynamically from one axis to another."""
 
-    # Copy all artists (lines, scatter, etc.)
-    artist_attrs = [attr for attr in dir(ax_from) if isinstance(getattr(ax_from, attr, None), list)]
-    for attr in artist_attrs:
-        for artist in getattr(ax_from, attr):
-            try:
-                ax_to.add_artist(artist)
-            except:
-                pass  # Skip non-artist objects
+    # # Copy all artists (lines, scatter, etc.)
+    # artist_attrs = [attr for attr in dir(ax_from) if isinstance(getattr(ax_from, attr, None), list)]
+    # for attr in artist_attrs:
+    #     for artist in getattr(ax_from, attr):
+    #         try:
+    #             ax_to.add_artist(artist)
+    #         except:
+    #             pass  # Skip non-artist objects
 
-    # Manually copy imshow images (since they need special handling)
+    # Copy all line plots
+    for line in ax_from.lines:
+        ax_to.plot(
+            line.get_xdata(), 
+            line.get_ydata(), 
+            label=line.get_label(),
+            color=line.get_color(), 
+            linestyle=line.get_linestyle(), 
+            linewidth=line.get_linewidth(),
+            marker=line.get_marker(),
+            markersize=line.get_markersize()
+        )
+
+    # Copy all scatter plots
+    for collection in ax_from.collections:
+        if isinstance(collection, plt.PathCollection):  # Ensures it's from scatter()
+            offsets = collection.get_offsets()
+            facecolors = collection.get_facecolors()
+            edgecolors = collection.get_edgecolors()
+            sizes = collection.get_sizes()
+
+            ax_to.scatter(
+                offsets[:, 0], offsets[:, 1], 
+                s=sizes if sizes.size > 0 else None,  # Preserve size if available
+                c=facecolors if len(facecolors) > 0 else None,  # Preserve colors
+                edgecolors=edgecolors if len(edgecolors) > 0 else None,
+                alpha=collection.get_alpha(),
+                label="Copied Scatter"
+            )
+
+    # Copy all image plots
     for img in ax_from.images:
         ax_to.imshow(
             img.get_array(), 
@@ -118,7 +148,52 @@ def plot_losses(losses_train, losses_val):
 
 
 # Plot dvhs
-def plot_dvh(dose, ptvs, oars, bins=100, ax=None):
+def plot_dvh(dose, structures, labels=None, bins=100, ax=None):
     """
+    Plot the dose-volume histogram.
+    """
+
+    # Check inputs
+    if labels is None:
+        labels = [f'Structure {i+1}' for i in range(structures.shape[1])]
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+        plt.ion()
+        plt.show()
+
+    # Get dose range
+    bins = np.linspace(0, np.max(dose), bins)
+
+    # Loop over structures
+    for i in range(structures.shape[1]):
+        structure = structures[0, i]
+        if np.sum(structure) == 0:
+            continue
+
+        # Get histogram
+        hist, bin_edges = np.histogram(dose[structure.astype(bool)], bins=bins, density=True)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+        # Get cumulative histogram (reverse order)
+        cum_hist = np.cumsum(hist[::-1])[::-1] * 100
+
+        # Plot
+        ax.plot(bin_centers, cum_hist, label=labels[i])
     
-    """
+    # If ax is provided, return it
+    if ax is not None:
+        return ax
+    
+    # Finalize plot
+    ax.set_title('DVH')
+    ax.set_xlabel('Dose (Gy)')
+    ax.set_ylabel('Volume (%)')
+    ax.legend()
+    plt.tight_layout()
+    plt.pause(0.1)
+
+    # Return figure and axis
+    return fig, ax
+
+
+

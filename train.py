@@ -143,9 +143,9 @@ def train_model(
         # Status update
         t_epoch = time.time()
         if jobname is not None:
-            print(f'████ {jobname} | Epoch {epoch+1}/{n_epochs} ████')
+            print(f'████ {jobname} | Epoch {epoch}/{n_epochs} ████')
         else:
-            print(f'████ Epoch {epoch+1}/{n_epochs} ████')
+            print(f'████ Epoch {epoch}/{n_epochs} ████')
 
         ### Training ###
         print('--Training')

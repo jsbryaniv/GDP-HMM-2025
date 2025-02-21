@@ -22,10 +22,16 @@ class ViT3D(nn.Module):
         super(ViT3D, self).__init__()
 
         # Check inputs
+        if n_layers % 2 != 0:
+            raise ValueError('Number of layers must be even!')
         if not isinstance(shape, tuple):
             shape = (shape, shape, shape)
         if not isinstance(patch_size, tuple):
             patch_size = (patch_size, patch_size, patch_size)
+        for i in range(3):
+            if shape[i] % patch_size[i] != 0:
+                raise ValueError('Shape must be divisible by patch size!')
+        
         
         # Set attributes
         self.in_channels = in_channels
@@ -116,13 +122,25 @@ class ViT3D(nn.Module):
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
 
         # Transformer Encoders
-        self.transformers = nn.ModuleList()
-        for _ in range(n_layers):
-            self.transformers.append(
+        self.transfomer_encoders = nn.ModuleList()
+        for _ in range(n_layers//2):
+            self.transfomer_encoders.append(
+                TransformerBlock(n_features, n_heads)
+            )
+
+        # Transformer Decoders
+        self.transfomer_decoders = nn.ModuleList()
+        for _ in range(n_layers//2):
+            self.transfomer_decoders.append(
                 TransformerBlock(n_features, n_heads)
             )
 
     def forward(self, x):
+        x = self.encode(x)
+        x = self.decode(x)
+        return x
+    
+    def encode(self, x):
 
         # Input block
         x = self.input_block(x)
@@ -136,8 +154,17 @@ class ViT3D(nn.Module):
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
 
         # Transformer Encoding
-        for transformer in self.transformers:
-            x = x + transformer(x)
+        for transformer in self.transfomer_encoders:
+            x = transformer(x)
+
+        # Return encoded features
+        return x
+    
+    def decode(self, x):
+
+        # Transformer Decoding
+        for transformer in self.transfomer_decoders:
+            x = transformer(x)
 
         # Patch unembedding
         x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
