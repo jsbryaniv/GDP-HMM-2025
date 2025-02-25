@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, Subset
 # Import custom libaries
 from main import load_dataset, load_model
 from plotting import plot_losses, copy_axis
-from utils import get_dvh
+from utils import get_dvh, competition_loss
 
 # Get config 
 with open('config.json', 'r') as f:
@@ -74,7 +74,7 @@ def load_model_and_test_dataset(savename):
     return model, datasets, metadata
 
 # Set up training function
-def test_model(
+def plot_test_results(
     model, dataset_test, metadata, n_show=5,
 ): 
 
@@ -127,44 +127,50 @@ def test_model(
                 """
                 Mean squared error loss
                 """
-                # Get prediction
+                # Organize inputs
                 x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
-                y = model(x)
-                pred = body*y
-                # Get plot data
-                slice_index = ct.shape[-3] // 2
-                plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
-                plot_col = [
-                    ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
-                    dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
-                    pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
-                ]
-                # Get loss
-                body_index = body.cpu().detach().numpy().astype(bool)
-                loss = f'MSE={F.mse_loss(y[body_index], dose[body_index]).item():.4f}; MAE={F.l1_loss(y[body_index], dose[body_index]).item():.4f}'
-                plot_loss.append(loss)
+                # Get prediction
+                pred = model(x)
 
             elif train_kwargs['loss_type'].lower() == 'crossae':
                 """
                 Cross Attention Autoencoder loss
                 """
-                # Get prediction
+                # Organize inputs
                 x = torch.cat([beam, ptvs], dim=1).clone()
-                y_list = [ct, beam, ptvs, oars, body]
-                z, y_list_ae = model(x, y_list)
-                pred = body*z
-                # Get plot data
-                slice_index = ct.shape[-3] // 2
-                plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
-                plot_col = [
-                    ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
-                    dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
-                    pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
+                y_list = [
+                    ct, 
+                    torch.cat([beam, ptvs], dim=1), 
+                    torch.cat([oars, body], dim=1),
                 ]
-                # Get loss
-                body_index = body.cpu().detach().numpy().astype(bool)
-                loss = f'MSE={F.mse_loss(z[body_index], dose[body_index]).item():.4f}; MAE={F.l1_loss(z[body_index], dose[body_index]).item():.4f}'
-                plot_loss.append(loss)
+                # Get prediction
+                pred = model(x, y_list)
+
+            # Ignore voxels outside body
+            pred = body*pred
+
+            # Rescale dose and prediction
+            dose_div_factor = dataset_test.dataset.dose_div_factor
+            dose = dose * dose_div_factor
+            pred = pred * dose_div_factor
+
+            # Get plot data
+            slice_index = ct.shape[-3] // 2
+            plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
+            plot_col = [
+                ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
+                dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
+                pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
+            ]
+
+            # Get loss
+            body_index = body.cpu().detach().numpy().astype(bool)
+            loss_info = '; '.join([
+                # f'MSE={F.mse_loss(pred[body_index], dose[body_index]).item():.4f}',
+                f'MAE={F.l1_loss(pred[body_index], dose[body_index]).item():.4f}',
+                f'GDP_MAE={competition_loss(pred, dose, body):.4f}',
+            ])
+            plot_loss.append(loss_info)
 
         # Append to plot row
         plot_row.append(plot_col)
@@ -188,8 +194,11 @@ def test_model(
         # Plot images
         for j in range(n_cols-2):
             ax[i, j].set_title(f'{plot_labels[j]}' + (f'\n{plot_loss[i]}' if j == 2 else ''))
-            ax[i, j].imshow(plot_row[i][j], cmap=('gray' if j == 0 else 'hot'))
             ax[i, j].axis('off')
+            if j == 0:
+                ax[i, j].imshow(plot_row[i][j], cmap='gray')
+            else:
+                ax[i, j].imshow(plot_row[i][j], cmap='jet', vmin=0, vmax=80)
         # Plot DVH ground truth
         ax[i, n_cols-2].set_title('DVH (Ground Truth)')
         ax[i, n_cols-2].set_xlabel('Dose (Gy)')
@@ -223,12 +232,14 @@ if __name__ == '__main__':
         if dataID.lower() == 'han':
             all_jobs = [
                 'model_HaN_CrossAttnAE',
+                'model_HaN_CrossViT',
                 'model_HaN_Unet',
                 'model_HaN_ViT',
             ]
         elif dataID.lower() == 'halfhan':
             all_jobs = [
                 'model_HalfHaN_CrossAttnAE',
+                'model_HalfHaN_CrossViT_scale=2_shape=64',
                 'model_HalfHaN_Unet',
                 'model_HalfHaN_ViT_scale=2_shape=64',
             ]
@@ -250,7 +261,7 @@ if __name__ == '__main__':
 
             # Test model
             dataset_test = datasets[2]
-            fig, ax = test_model(model, dataset_test, metadata)
+            fig, ax = plot_test_results(model, dataset_test, metadata)
             fig.savefig(f'figs/{savename}_test.png')
             figs.append(fig)
             axs.append(ax)
@@ -275,12 +286,12 @@ if __name__ == '__main__':
             # Plot ground truth DVH
             ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
             ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
-            ax[i, n_jobs+2].set_xlim([0, 8])
+            ax[i, n_jobs+2].set_xlim([0, 80])
             # Plot predicted DVH for each job
             for job in range(len(all_jobs)):
                 ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
                 ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
-                ax[i, n_jobs+3+job].set_xlim([0, 8])
+                ax[i, n_jobs+3+job].set_xlim([0, 80])
         plt.tight_layout()
         plt.pause(1)
         fig.savefig(f'figs/summary_{dataID}.png')

@@ -21,10 +21,11 @@ def train_model(
     # Set up constants
     device = next(model.parameters()).device
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    n_epochs = n_epochs + epoch_start  # Start counting epochs from epoch_start
     
     # Print status
     print('-'*50)
-    print(f'Training model with {n_parameters} parameters on {device} for {n_epochs} epochs.')
+    print(f'Training model with {n_parameters} parameters on {device} for epochs {epoch_start}-{n_epochs}.')
     print('-'*50)
     if debug:
         for _ in range(10):
@@ -154,7 +155,7 @@ def train_model(
     model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
     # Training loop
-    for epoch in range(epoch_start, epoch_start+n_epochs):
+    for epoch in range(epoch_start, n_epochs):
         if debug and epoch > epoch_start + 1:
                 print('DEBUG MODE: Breaking early.')
                 break

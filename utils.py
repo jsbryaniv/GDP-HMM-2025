@@ -22,23 +22,23 @@ def block_mask_3d(volume, block_size=8, p=0.2):
     return volume * mask
 
 # Get DVH function
-def get_dvh(dose, structures, bins=100, min_dose=0, max_dose=None):
-
-    # Check inputs
-    if max_dose is None:
-        max_dose = np.max(dose)
+def get_dvh(dose, structures, bins=100, max_dose=None):
 
     # If tensor, convert to numpy
     if isinstance(dose, torch.Tensor):
         dose = dose.cpu().detach().numpy()
     if isinstance(structures, torch.Tensor):
         structures = structures.cpu().detach().numpy()
+
+    # Check inputs
+    if max_dose is None:
+        max_dose = np.max(dose)
     
     # Get dose range
-    bins = np.linspace(0, np.max(dose), bins)
+    bins = np.linspace(0, max_dose, bins)
     dvh_bin = (bins[:-1] + bins[1:]) / 2
-    bins = np.append(bins, 2*bins[-1]-bins[-2])  # Add final point to ensure 0% above max dose
-    bins = np.append(0, bins)                    # Add initial point to ensure 100% at 0 dose
+    dvh_bin = np.append(bins, 2*bins[-1]-bins[-2])  # Add final point to ensure 0% above max dose
+    dvh_bin = np.append(0, bins)                    # Add initial point to ensure 100% at 0 dose
 
     # Initialize dvhs
     dvh_val = []
@@ -68,6 +68,23 @@ def get_dvh(dose, structures, bins=100, min_dose=0, max_dose=None):
 
 
 ### CUSTOM LOSS FUNCTIONS ###
+
+# Define competition loss function
+def competition_loss(prediction, ref_dose, body):
+
+    # Convert to numpy
+    prediction = prediction.cpu().detach().numpy()
+    ref_dose = ref_dose.cpu().detach().numpy()
+    body = body.cpu().detach().numpy()
+
+    # the mask include the body AND the region where the dose/prediction is higher than 5Gy
+    isodose_5Gy_mask = ((ref_dose > 5) | (prediction > 5)) & (body > 0) 
+
+    diff = ref_dose - prediction
+
+    error = np.mean(np.abs(diff)[isodose_5Gy_mask > 0])
+
+    return error
 
 # Define Earth Mover's Distance (EMD) loss function
 def emd_loss(pred_cdf, target_cdf, structures, dx=1):

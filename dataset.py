@@ -69,7 +69,8 @@ Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
 class GDPDataset(Dataset):
     def __init__(self, 
         treatment, shape=None, scale=None, return_dose=True, 
-        down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=10,
+        down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=1,
+        augment=True
     ):
         super(GDPDataset, self).__init__()
 
@@ -98,6 +99,7 @@ class GDPDataset(Dataset):
         self.up_HU = up_HU                      # Upper bound for HU values
         self.denom_norm_HU = denom_norm_HU      # Denominator for normalizing HU values
         self.dose_div_factor = dose_div_factor  # Division factor for dose normalization
+        self.augment = augment                  # Whether to augment data
         self.path_data = path_data              # Path to directory containing data files
         self.dose_dict = dose_dict              # Dictionary of dose data
         self.oar_list = oar_list                # List of organ-at-risk (OAR) names
@@ -194,7 +196,7 @@ class GDPDataset(Dataset):
             pad_y = (max(0, shape_delta[1] // 2), max(0, shape_delta[1] - shape_delta[1] // 2))
             pad_z = (max(0, shape_delta[2] // 2), max(0, shape_delta[2] - shape_delta[2] // 2))
             # Apply padding
-            ct = np.pad(ct, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
+            ct = np.pad(ct, ((0, 0), pad_x, pad_y, pad_z), mode='constant', constant_values=ct.min())
             beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             ptvs = np.pad(ptvs, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
             oars = np.pad(oars, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
@@ -232,6 +234,30 @@ class GDPDataset(Dataset):
         body = torch.tensor(body, dtype=torch.float32)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
+
+        # Augment data
+        if self.augment:
+            # Apply random flip
+            for dim in [1, 2, 3]:
+                if np.random.rand() > 0.5:
+                    ct = torch.flip(ct, (dim,))
+                    beam = torch.flip(beam, (dim,))
+                    ptvs = torch.flip(ptvs, (dim,))
+                    oars = torch.flip(oars, (dim,))
+                    body = torch.flip(body, (dim,))
+                    if self.return_dose:
+                        dose = torch.flip(dose, (dim,))
+            # Apply random 90 degree rotation around z-axis (dim 1)
+            if np.random.rand() > 0.5:
+                k = np.random.randint(1, 4)
+                ct = torch.rot90(ct, k, (2, 3))
+                beam = torch.rot90(beam, k, (2, 3))
+                ptvs = torch.rot90(ptvs, k, (2, 3))
+                oars = torch.rot90(oars, k, (2, 3))
+                body = torch.rot90(body, k, (2, 3))
+                if self.return_dose:
+                    dose = torch.rot90(dose, k, (2, 3))
+
 
         # Return data
         if self.return_dose:

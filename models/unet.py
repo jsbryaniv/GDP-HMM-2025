@@ -10,12 +10,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.blocks import ConvBlock
+from models.blocks import ConvBlock, DoseOutputBlock3d
 
 
 # Define simple 3D Unet model
 class Unet3D(nn.Module):
-    def __init__(self, in_channels, out_channels, n_features=16, n_groups=4, n_blocks=4, n_layers_per_block=4):
+    def __init__(self, 
+        in_channels, out_channels, 
+        n_features=16, n_groups=4, n_blocks=4, n_layers_per_block=4, 
+        dose_output=False
+    ):
         super(Unet3D, self).__init__()
         
         # Set attributes
@@ -25,6 +29,7 @@ class Unet3D(nn.Module):
         self.n_groups = n_groups
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
+        self.dose_output = dose_output
 
         # Get n_features per depth
         n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
@@ -86,15 +91,13 @@ class Unet3D(nn.Module):
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
+        # Dose output block
+        if dose_output:
+            self.dose_output_block = DoseOutputBlock3d()
+        
     def forward(self, x):
-
-        # Encode
         feats = self.encoder(x)
-
-        # Decode
         x = self.decoder(feats)
-
-        # Return the output
         return x
         
     def encoder(self, x):
@@ -135,6 +138,8 @@ class Unet3D(nn.Module):
 
         # Output block
         x = self.output_block(x)
+        if self.dose_output:
+            x = self.dose_output_block(x)
 
         # Return the output
         return x
@@ -147,7 +152,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Create a model
-    model = Unet3D(36, 1)
+    model = Unet3D(36, 1, dose_output=True)
 
     # Create data
     x = torch.randn(1, 36, 128, 128, 128)

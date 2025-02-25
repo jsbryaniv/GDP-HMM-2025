@@ -317,32 +317,35 @@ if __name__ == '__main__':
 
     # Set job IDs
     all_jobs = []
-    for dataID in ['HaN', 'HalfHaN']:
-        for modelID in ['CrossViT', 'CrossAttnAE', 'ViT', 'Unet']:
+    for dataID in ['HaN']:
+        for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
+            for dose_output in [True, False]:
 
-            # Initialize kwargs
-            data_kwargs = {}
-            model_kwargs = {}
-            train_kwargs = {}
+                # Initialize kwargs
+                data_kwargs = {}
+                model_kwargs = {}
+                train_kwargs = {}
 
-            # Get job specific kwargs
-            if modelID == 'CrossViT':
-                train_kwargs = {'loss_type': 'crossae'}
-            if modelID == 'CrossAttnAE':
-                train_kwargs = {'loss_type': 'crossae'}
-            if (modelID == 'ViT') and ('half' in dataID.lower()):
-                model_kwargs = {'shape': 64, 'scale': 2}
-            if (modelID == 'CrossViT') and ('half' in dataID.lower()):
-                model_kwargs = {'shape': 64, 'scale': 2}
+                # Get job specific kwargs
+                if modelID == 'CrossViT':
+                    train_kwargs = {'loss_type': 'crossae'}
+                if modelID == 'CrossAttnAE':
+                    train_kwargs = {'loss_type': 'crossae'}
+                if (modelID == 'ViT') and ('half' in dataID.lower()):
+                    model_kwargs = {'shape': 64, 'scale': 2}
+                if (modelID == 'CrossViT') and ('half' in dataID.lower()):
+                    model_kwargs = {'shape': 64, 'scale': 2}
+                if dose_output:
+                    model_kwargs['dose_output'] = True
 
-            # Add job
-            all_jobs.append({
-                'dataID': dataID, 
-                'modelID': modelID,
-                'data_kwargs': data_kwargs,
-                'model_kwargs': model_kwargs,
-                'train_kwargs': train_kwargs,
-            })
+                # Add job
+                all_jobs.append({
+                    'dataID': dataID, 
+                    'modelID': modelID,
+                    'data_kwargs': data_kwargs,
+                    'model_kwargs': model_kwargs,
+                    'train_kwargs': train_kwargs,
+                })
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
