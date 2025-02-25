@@ -95,7 +95,7 @@ class CrossAttnAEModel(nn.Module):
             )
 
         # Dose output block
-        if dose_output:
+        if self.dose_output:
             self.dose_output_block = DoseOutputBlock3d()
 
     def forward(self, x, y_list):
@@ -140,7 +140,7 @@ class CrossAttnAEModel(nn.Module):
 
         # Output block
         x = self.autoencoder.output_block(x)
-        if self.dose_output_block:
+        if self.dose_output:
             x = self.dose_output_block(x)
 
         # Return the output
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Create a model
-    model = CrossAttnAEModel(3, 1, (1, 1, 2, 8))
+    model = CrossAttnAEModel(3, 1, (1, 1, 2, 8), dose_output=True)
 
     # Create data
     x = torch.randn(1, 3, 64, 64, 64)
@@ -166,10 +166,10 @@ if __name__ == '__main__':
     mem_before = process.memory_info().rss  # Total RAM usage before forward pass
 
     # Forward pass
-    y, context_list_ae = model(x, context_list)
+    y = model(x, context_list)
 
     # Backward pass
-    loss = y.sum() + sum([c.sum() for c in context_list_ae])
+    loss = y.sum()
     loss.backward()
 
     # Measure memory after execution

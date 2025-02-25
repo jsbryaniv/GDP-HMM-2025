@@ -11,7 +11,7 @@ module load cuda
 source .env/bin/activate
 
 # Define constants
-N_ITER=5                 # Number of iterations to run
+N_ITER=10                # Number of iterations to run
 ARGS=$1                  # First argument is the Python script argument
 ITER=$2                  # Second argument is the iteration number
 if [ -z "$ITER" ]; then  # If ITER is not provided, set it to 0
@@ -19,8 +19,8 @@ if [ -z "$ITER" ]; then  # If ITER is not provided, set it to 0
 fi
 
 # Define log file paths manually, so jobs can append to the same file
-OUT_LOG="outfiles/logs/out_${ARGS}.txt"
-ERR_LOG="outfiles/logs/err_${ARGS}.txt"
+OUT_LOG="outfiles/logs/out_job${ARGS}.txt"
+ERR_LOG="outfiles/logs/err_job${ARGS}.txt"
 if [ "$ITER" -eq 0 ]; then
     # Clear logs if this is the first iteration
     > "$OUT_LOG"
