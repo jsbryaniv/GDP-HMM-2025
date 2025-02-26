@@ -75,10 +75,11 @@ class CrossAttnAEModel(nn.Module):
         # Create self convformer blocks
         self.self_mixing_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
+            n_in = n_features_per_depth[depth]
+            n_out = n_features_per_depth[depth]
             self.self_mixing_blocks.append(
-                ConvBlock(
-                    n_features_per_depth[depth], 
-                    n_features_per_depth[depth],
+                nn.Sequential(
+                    *[ConvBlock(n_in, n_out, groups=n_heads) for _ in range(n_layers_per_block)]
                 )
             )
 
@@ -150,8 +151,8 @@ if __name__ == '__main__':
     model = CrossAttnAEModel(3, 1, (1, 1, 2, 8))
 
     # Create data
-    x = torch.randn(1, 3, 64, 64, 64)
-    context_list = [torch.randn(1, c, 64, 64, 64) for c in (1, 1, 2, 8)]
+    x = torch.randn(1, 3, 128, 128, 128)
+    context_list = [torch.randn(1, c, 128, 128, 128) for c in (1, 1, 2, 8)]
 
     # Measure memory before execution
     process = psutil.Process(os.getpid())

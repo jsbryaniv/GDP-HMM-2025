@@ -6,7 +6,6 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
-
 # Get config variables
 with open('config.json', 'r') as f:
     config = json.load(f)

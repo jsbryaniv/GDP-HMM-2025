@@ -36,5 +36,5 @@ Replace `name-of-your-machine` with the name of your machine. This can be anythi
 
 To download the data, run the following command:
 ```bash
-python download_data.py
+python data/download_data.py
 ```

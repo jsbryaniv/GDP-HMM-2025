@@ -178,8 +178,7 @@ cython_debug/
 config.json
 
 # Ignore submodules
-submodules/
-submodules/challenge_repo
+submodules/*
 !submodules/.gitkeep
 
 # Ignore figs
@@ -197,6 +196,7 @@ outfiles/*
 
 # Ignore data except metadata
 data/*
+!data/download_data.py
 !data/.gitkeep
 !data/metadata/
 !data/metadata/*

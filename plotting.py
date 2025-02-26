@@ -73,49 +73,6 @@ def copy_axis(ax_from, ax_to):
     # Done
     return ax_to
 
-# Plot results of a single slice
-def plot_prediction(scan, target, prediction, z=None):
-    """
-    Plot results of a single slice.
-    Args:
-        scan (array): Input scan.
-        target (array): Ground truth.
-        prediction (array): Predicted.
-        z (int): Slice to plot.
-    """
-
-    # Convert to numpy
-    if isinstance(scan, torch.Tensor):
-        scan = scan.cpu().detach().numpy()
-    if isinstance(target, torch.Tensor):
-        target = target.cpu().detach().numpy()
-    if isinstance(prediction, torch.Tensor):
-        prediction = prediction.cpu().detach().numpy()
-
-    # Set up figure
-    fig, ax = plt.subplots(1, 3)
-    plt.ion()
-    plt.show()
-
-    # Find middle slice
-    if z is None:
-        z = target.shape[-3] // 2
-
-    # Plot data
-    ax[0].set_title('Input')
-    ax[0].imshow(scan[0, 0, z, :, :], cmap='gray')
-    ax[1].set_title('Target')
-    ax[1].imshow(target[0, 0, z, :, :], cmap='gray')
-    ax[2].set_title('Prediction')
-    ax[2].imshow(prediction[0, 0, z, :, :] > .5, cmap='gray')
-
-    # Finalize plot
-    plt.tight_layout()
-    plt.pause(0.1)
-
-    # Return figure and axis
-    return fig, ax
-
 # Plot training and validation losses
 def plot_losses(losses_train, losses_val):
     """
@@ -153,6 +110,18 @@ def plot_dvh(dose, structures, labels=None, bins=100, ax=None):
     """
 
     # Check inputs
+    if isinstance(dose, torch.Tensor):
+        # Convert dose to numpy
+        dose = dose.cpu().detach().numpy()
+    if isinstance(structures, torch.Tensor):
+        # Convert structures to numpy
+        structures = structures.cpu().detach().numpy()
+    if len(dose.shape) == 4:
+        # Remove batch dimension
+        dose = dose[0]
+    if len(structures.shape) == 4:
+        # Remove batch dimension
+        structures = structures[0]
     if labels is None:
         labels = [f'Structure {i+1}' for i in range(structures.shape[1])]
     if ax is None:
@@ -165,7 +134,7 @@ def plot_dvh(dose, structures, labels=None, bins=100, ax=None):
 
     # Loop over structures
     for i in range(structures.shape[1]):
-        structure = structures[0, i]
+        structure = structures[i]
         if np.sum(structure) == 0:
             continue
 
@@ -312,7 +281,6 @@ def plot_images(images=None, labels=None, cmap=None, **image_dict):
     
     # Return
     return fig, ax
-
 
 
 # Test

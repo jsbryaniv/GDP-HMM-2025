@@ -1,6 +1,7 @@
 
 # Import libraries
 import os
+import sys
 import json
 import shutil
 import zipfile
@@ -66,6 +67,9 @@ def download_data(path_data):
 
 # Download data
 if __name__ == '__main__':
+
+    # cd to one level up
+    os.chdir(os.path.dirname(os.getcwd()))
     
     # Get data path from config
     with open("config.json", "r") as f:

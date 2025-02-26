@@ -7,12 +7,14 @@ import time
 import torch
 
 # Import custom classes
+from test import test_model
 from train import train_model
 from utils import get_savename, initialize_dataset, initialize_model
 
-# Set environment
+# Get config
 with open('config.json', 'r') as f:
     config = json.load(f)
+path_output = config['PATH_OUTPUT']
 
 
 # Define main function
@@ -32,9 +34,6 @@ def main(
     # Get savename
     savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
     print(f"-- savename={savename}")
-
-    # Get constants
-    path_output = config['PATH_OUTPUT']
 
     # Check inputs
     if data_kwargs is None:
@@ -116,6 +115,13 @@ def main(
     )
 
 
+    ### TESTING ###
+    print("Testing model.")
+
+    # Test model
+    loss_test = test_model(model, dataset_test, debug=debug)
+
+
     ### SAVE RESULTS ###
     print("Saving results.")
 
@@ -146,6 +152,7 @@ def main(
         'indices_test': indices_test,
         'indices_train': indices_train,
         'training_statistics': training_statistics,
+        'loss_test': loss_test,
     }
 
     # Save model
@@ -170,36 +177,31 @@ def main(
 if __name__ == '__main__':
 
     # Set job IDs
+    dataID = 'HaN'
     all_jobs = []
-    for dataID in ['HaN']:
-        for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
-            for dose_output in [True, False]:
+    for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
 
-                # Initialize kwargs
-                data_kwargs = {}
-                model_kwargs = {}
-                train_kwargs = {}
+        # Initialize kwargs
+        data_kwargs = {}
+        model_kwargs = {}
+        train_kwargs = {}
 
-                # Get job specific kwargs
-                if modelID == 'CrossViT':
-                    train_kwargs = {'loss_type': 'crossae'}
-                if modelID == 'CrossAttnAE':
-                    train_kwargs = {'loss_type': 'crossae'}
-                if (modelID == 'ViT') and ('half' in dataID.lower()):
-                    model_kwargs = {'shape': 64, 'scale': 2}
-                if (modelID == 'CrossViT') and ('half' in dataID.lower()):
-                    model_kwargs = {'shape': 64, 'scale': 2}
-                if dose_output:
-                    model_kwargs['dose_output'] = True
+        # Get job specific kwargs
+        if modelID == 'CrossViT':
+            train_kwargs = {'loss_type': 'crossae'}
+        if modelID == 'CrossAttnAE':
+            train_kwargs = {'loss_type': 'crossae'}
+        if ('vit' in modelID.lower()) and ('half' in dataID.lower()):
+            model_kwargs = {'shape': 64, 'scale': 2}
 
-                # Add job
-                all_jobs.append({
-                    'dataID': dataID, 
-                    'modelID': modelID,
-                    'data_kwargs': data_kwargs,
-                    'model_kwargs': model_kwargs,
-                    'train_kwargs': train_kwargs,
-                })
+        # Add job
+        all_jobs.append({
+            'dataID': dataID, 
+            'modelID': modelID,
+            'data_kwargs': data_kwargs,
+            'model_kwargs': model_kwargs,
+            'train_kwargs': train_kwargs,
+        })
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0

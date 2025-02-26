@@ -9,7 +9,111 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 # Import custom libraries
-from utils import dvh_loss, block_mask_3d
+from utils import block_mask_3d
+from losses import dvh_loss, competition_loss
+
+
+# Set up loss function
+def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
+
+    # Compute likelihood loss
+    # TODO: Make formatting data a part of the model or something
+    if loss_type is None or loss_type.lower() == 'mse':
+        """
+        Mean squared error loss
+        """
+        # Organize inputs
+        x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
+
+        # Forward pass
+        pred = model(x)
+
+        # Compute likelihood loss
+        likelihood = F.mse_loss(pred, dose)
+
+    elif loss_type.lower() == 'crossae':
+        """
+        Cross attention autoencoder loss
+        """
+        # Organize inputs
+        x = torch.cat([beam, ptvs], dim=1).clone()
+        y_list = [
+            ct, 
+            torch.cat([beam, ptvs], dim=1), 
+            torch.cat([oars, body], dim=1),
+        ]
+        
+        # Corrupt context for autoencoder loss
+        y_list_corrupted = [block_mask_3d(y.clone(), p=0.1) for y in y_list]
+
+        # Forward pass
+        pred = model(x, y_list)
+        reconstructions = [ae(y) for ae, y in zip(model.context_autoencoders, y_list_corrupted)]
+
+        # Compute likelihood loss
+        likelihood_pred = F.mse_loss(pred, dose)
+
+        # Compute reconstruction loss
+        likelihood_recon_continous = (
+            sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-1], y_list[:-1])])
+        )
+        likelihood_recon_binary = (
+            sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-1:], y_list[-1:])])
+        )
+
+        # Combine losses
+        likelihood = (
+            likelihood_pred
+            + likelihood_recon_continous 
+            + likelihood_recon_binary
+        )
+
+    # Compute prior loss
+    prior = 0
+    n_parameters = 0
+    for name, param in model.named_parameters():
+        n_parameters += param.numel()
+        if 'bias' in name:
+            prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
+        else:
+            prior += param.pow(2).sum()
+    prior /= n_parameters
+
+    # Compute competition loss
+    loss_competition = competition_loss(pred, dose, body)
+
+    # Compute dose volume histogram loss
+    loss_dvh = dvh_loss(
+        pred, dose, 
+        structures=torch.cat([(ptvs!=0), oars, body], dim=1)
+    )
+
+    # Compute total loss
+    loss = likelihood + prior + loss_competition + loss_dvh
+
+    # # Plot
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
+    # index = x.shape[2] // 2
+    # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
+    #     if i > 3:
+    #         y_ae = torch.sigmoid(y_ae)
+    #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
+    #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
+    #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
+    #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
+    # plt.show()
+    # plt.pause(1)
+    # plt.savefig('_image.png')
+    # plt.close()
+    # print(loss.item())
+
+    # Check for NaN and Inf
+    if torch.isnan(loss) or torch.isinf(loss):
+        raise ValueError('Loss is NaN or Inf.')
+
+    # Return loss
+    return loss
 
 
 # Set up training function
@@ -41,113 +145,6 @@ def train_model(
     # Set up optimizer
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Set up loss function
-    def get_loss(ct, beam, ptvs, oars, body, dose, model):
-
-        # Compute prior loss
-        prior = 0
-        for name, param in model.named_parameters():
-            if 'bias' in name:
-                prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
-            else:
-                prior += param.pow(2).sum()
-        prior /= n_parameters
-
-        # Compute likelihood loss
-        if loss_type is None or loss_type.lower() == 'mse':
-            """
-            Mean squared error loss
-            """
-            # Organize inputs
-            x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
-
-            # Forward pass
-            pred = model(x)
-
-            # Compute likelihood loss
-            likelihood_pred = F.mse_loss(pred, dose)
-
-            # Compute dvh loss
-            likelihood_dvh = dvh_loss(
-                 pred, dose, 
-                 structures=torch.cat([(ptvs!=0), oars, body], dim=1)
-            )
-
-            # Combine losses
-            likelihood = likelihood_pred + likelihood_dvh
-
-        elif loss_type.lower() == 'crossae':
-            """
-            Cross attention autoencoder loss
-            """
-            # Organize inputs
-            x = torch.cat([beam, ptvs], dim=1).clone()
-            y_list = [
-                ct, 
-                torch.cat([beam, ptvs], dim=1), 
-                torch.cat([oars, body], dim=1),
-            ]
-            
-            # Corrupt context for autoencoder loss
-            y_list_corrupted = [block_mask_3d(y.clone(), p=0.1) for y in y_list]
-
-            # Forward pass
-            pred = model(x, y_list)
-            reconstructions = [ae(y) for ae, y in zip(model.context_autoencoders, y_list_corrupted)]
-
-            # Compute likelihood loss
-            likelihood_pred = F.mse_loss(pred, dose)
-
-            # Compute dvh loss
-            likelihood_dvh = dvh_loss(
-                 pred, dose, 
-                 structures=torch.cat([(ptvs!=0), oars, body], dim=1)
-            )
-
-            # Compute reconstruction loss
-            likelihood_recon_continous = (
-                sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-1], y_list[:-1])])
-            )
-            likelihood_recon_binary = (
-                sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-1:], y_list[-1:])])
-            )
-
-            # Combine losses
-            likelihood = (
-                likelihood_pred 
-                + likelihood_dvh
-                + likelihood_recon_continous 
-                + likelihood_recon_binary
-            )
-
-        # Compute total loss
-        loss = prior + likelihood
-
-        # # Plot
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-        # index = x.shape[2] // 2
-        # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
-        #     if i > 3:
-        #         y_ae = torch.sigmoid(y_ae)
-        #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
-        #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
-        #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-        #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-        # plt.show()
-        # plt.pause(1)
-        # plt.savefig('_image.png')
-        # plt.close()
-        # print(loss.item())
-
-        # Check for NaN and Inf
-        if torch.isnan(loss) or torch.isinf(loss):
-            raise ValueError('Loss is NaN or Inf.')
-
-        # Return loss
-        return loss
-
-    
     # Set up training statistics
     losses_train = []
     losses_val = []
@@ -173,7 +170,7 @@ def train_model(
         # Initialize average loss
         loss_train_avg = 0
 
-        # Loop over batches
+        # Loop over training batches
         t_batch = time.time()                           # Start timer
         if device.type != "cpu":
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
@@ -195,7 +192,7 @@ def train_model(
             dose = dose.to(device)
 
             # Get loss
-            loss = get_loss(ct, beam, ptvs, oars, body, dose, model)
+            loss = get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type)
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -227,7 +224,7 @@ def train_model(
         # Initialize average loss
         loss_val_avg = 0
 
-        # Loop over batches
+        # Loop over validation batches
         for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_val):
             if debug and batch_idx > 10:
                     print('DEBUG MODE: Breaking early.')
@@ -243,7 +240,7 @@ def train_model(
 
             # Get loss
             with torch.no_grad():
-                loss = get_loss(ct, beam, ptvs, oars, body, dose, model)
+                loss = get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type)
 
             # Update average loss
             loss_val_avg += loss.item() / len(loader_val)
@@ -251,6 +248,7 @@ def train_model(
             # Status update
             if batch_idx % print_every == 0:
                 print(f'---- E{epoch}/{n_epochs} Val Batch {batch_idx}/{len(loader_val)}')
+
 
         ### Finalize training statistics ###
         print('--Finalizing training statistics')
