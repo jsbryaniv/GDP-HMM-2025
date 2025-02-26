@@ -1,5 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=train_deeplearning         # Job name
+#SBATCH --output=outfiles/logs/slurm-%j.out   # Output file
+#SBATCH --error=outfiles/logs/slurm-%j.err    # Error file
 #SBATCH --time=12:00:00                       # Max execution time (HH:MM:SS)
 #SBATCH --partition=gpu                       # Specify GPU partition
 #SBATCH --gres=gpu:1                          # Request 1 GPU

@@ -225,81 +225,73 @@ def plot_test_results(
 # Main script
 if __name__ == '__main__':
 
-    # Loop over dataIDs
-    for dataID in ['HaN', 'HalfHaN']:
+    # Set data ID and jobs
+    dataID = 'HaN'
+    all_jobs = [
+        'model_HaN_CrossAttnAE',
+        'model_HaN_Unet',
+        'model_HaN_ViT',
+        'model_HaN_CrossAttnAE_dose_output=True',
+        'model_HaN_Unet_dose_output=True',
+        'model_HaN_ViT_dose_output=True',
+    ]
 
-        # Get all jobs
-        if dataID.lower() == 'han':
-            all_jobs = [
-                'model_HaN_CrossAttnAE',
-                'model_HaN_CrossViT',
-                'model_HaN_Unet',
-                'model_HaN_ViT',
-            ]
-        elif dataID.lower() == 'halfhan':
-            all_jobs = [
-                'model_HalfHaN_CrossAttnAE',
-                'model_HalfHaN_CrossViT_scale=2_shape=64',
-                'model_HalfHaN_Unet',
-                'model_HalfHaN_ViT_scale=2_shape=64',
-            ]
+    # Plot each job separately
+    figs = []
+    axs = []
+    for savename in all_jobs:
 
-        # Loop over savenames
-        figs = []
-        axs = []
-        for savename in all_jobs:
+        # Load model and dataset
+        model, datasets, metadata = load_model_and_test_dataset(savename)
 
-            # Load model and dataset
-            model, datasets, metadata = load_model_and_test_dataset(savename)
+        # Plot losses
+        losses_train = metadata['training_statistics']['losses_train']
+        losses_val = metadata['training_statistics']['losses_val']
+        fig, ax = plot_losses(losses_train, losses_val)
+        fig.savefig(f'figs/{savename}_losses.png')
+        plt.close()
 
-            # Plot losses
-            losses_train = metadata['training_statistics']['losses_train']
-            losses_val = metadata['training_statistics']['losses_val']
-            fig, ax = plot_losses(losses_train, losses_val)
-            fig.savefig(f'figs/{savename}_losses.png')
-            plt.close()
+        # Test model
+        dataset_test = datasets[2]
+        fig, ax = plot_test_results(model, dataset_test, metadata)
+        fig.savefig(f'figs/{savename}_test.png')
+        figs.append(fig)
+        axs.append(ax)
 
-            # Test model
-            dataset_test = datasets[2]
-            fig, ax = plot_test_results(model, dataset_test, metadata)
-            fig.savefig(f'figs/{savename}_test.png')
-            figs.append(fig)
-            axs.append(ax)
+    # Create summary figure
+    n_jobs = len(all_jobs)
+    n_rows = axs[0].shape[0]
+    n_cols = 3 + 2*n_jobs
+    fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
+    plt.ion()
+    plt.show()
+    for i in range(n_rows):
+        # Plot CT and ground truth Dose
+        ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
+        ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
+        # Plot predicted dose for each job
+        for job in range(n_jobs):
+            ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
+            ax[i, job+2].set_title(
+                all_jobs[job].split('_')[2]+'\n'+axs[job][i, 2].get_title().split('\n')[-1]
+            )
+        # Plot ground truth DVH
+        ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
+        ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
+        ax[i, n_jobs+2].set_xlim([0, 80])
+        # Plot predicted DVH for each job
+        for job in range(len(all_jobs)):
+            ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
+            ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
+            ax[i, n_jobs+3+job].set_xlim([0, 80])
+    plt.tight_layout()
+    plt.pause(1)
+    fig.savefig(f'figs/summary_{dataID}.png')
 
-        # Create summary figure
-        n_jobs = len(all_jobs)
-        n_rows = axs[0].shape[0]
-        n_cols = 3 + 2*n_jobs
-        fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
-        plt.ion()
-        plt.show()
-        for i in range(n_rows):
-            # Plot CT and ground truth Dose
-            ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
-            ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
-            # Plot predicted dose for each job
-            for job in range(n_jobs):
-                ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
-                ax[i, job+2].set_title(
-                    all_jobs[job].split('_')[2]+'\n'+axs[job][i, 2].get_title().split('\n')[-1]
-                )
-            # Plot ground truth DVH
-            ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
-            ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
-            ax[i, n_jobs+2].set_xlim([0, 80])
-            # Plot predicted DVH for each job
-            for job in range(len(all_jobs)):
-                ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-                ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
-                ax[i, n_jobs+3+job].set_xlim([0, 80])
-        plt.tight_layout()
-        plt.pause(1)
-        fig.savefig(f'figs/summary_{dataID}.png')
-
-        # Close figures
+    # Close figures
+    plt.close(fig)
+    for fig in figs:
         plt.close(fig)
-        for fig in figs:
-            plt.close(fig)
     
     # Done
     print('Done.')
