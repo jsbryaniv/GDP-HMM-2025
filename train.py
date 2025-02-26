@@ -142,7 +142,8 @@ def train_model(
         # pin_memory=True, n_workers=4, prefetch_factor=2,
     )
 
-    # Set up optimizer
+    # Set up model and optimizer
+    model.train()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Set up training statistics
