@@ -11,7 +11,7 @@ import torch.nn.functional as F
 
 # Import custom libraries
 from models.unet import Unet3D
-from models.blocks import ConvBlock, VolCrossTransformer3d, DoseOutputBlock3d
+from models.blocks import ConvBlock, VolCrossTransformer3d
 
 
 # Define cross attention autoencoder model
@@ -22,7 +22,6 @@ class CrossAttnAEModel(nn.Module):
         n_features=8, n_blocks=4, 
         n_layers_per_block=4, n_layers_per_block_context=2,
         n_heads=4, n_attn_repeats=2,
-        dose_output=False
     ):
         super(CrossAttnAEModel, self).__init__()
         
@@ -36,7 +35,6 @@ class CrossAttnAEModel(nn.Module):
         self.n_layers_per_block_context = n_layers_per_block_context
         self.n_attn_repeats = n_attn_repeats
         self.n_heads = n_heads
-        self.dose_output = dose_output
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -94,10 +92,6 @@ class CrossAttnAEModel(nn.Module):
                 )
             )
 
-        # Dose output block
-        if self.dose_output:
-            self.dose_output_block = DoseOutputBlock3d()
-
     def forward(self, x, y_list):
         """
         x is the input tensor
@@ -140,8 +134,6 @@ class CrossAttnAEModel(nn.Module):
 
         # Output block
         x = self.autoencoder.output_block(x)
-        if self.dose_output:
-            x = self.dose_output_block(x)
 
         # Return the output
         return x
@@ -155,7 +147,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Create a model
-    model = CrossAttnAEModel(3, 1, (1, 1, 2, 8), dose_output=True)
+    model = CrossAttnAEModel(3, 1, (1, 1, 2, 8))
 
     # Create data
     x = torch.randn(1, 3, 64, 64, 64)

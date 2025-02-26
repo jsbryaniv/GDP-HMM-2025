@@ -8,158 +8,12 @@ import torch
 
 # Import custom classes
 from train import train_model
+from utils import get_savename, initialize_dataset, initialize_model
 
 # Set environment
 with open('config.json', 'r') as f:
     config = json.load(f)
 
-
-# Get savename function
-def get_savename(dataID, modelID, **kwargs):
-    """
-    Get savename for a given dataset and model.
-    """
-
-    # Initialize savename
-    savename = f'model_{dataID}_{modelID}'
-
-    # Add kwargs to savename
-    kwargs_sorted = sorted(kwargs.items())
-    for key, value in kwargs_sorted:
-        if value:
-            savename += f'_{key}={value}'
-
-    # Return savename
-    return savename
-
-# Load dataset function
-def load_dataset(dataID, **kwargs):
-
-    # Load dataset
-    if dataID.lower() == 'han':
-        """
-        Regular Head and Neck dataset.
-        """
-
-        # Import dataset
-        from dataset import GDPDataset
-
-        # Set constants
-        in_channels = 36
-        out_channels = 1
-        shape = (128, 128, 128)
-        scale = 1
-
-        # Create dataset
-        dataset = GDPDataset(
-            treatment='HaN', 
-            shape=shape,
-            scale=scale,
-            return_dose=True,
-            **kwargs,
-        )
-
-        # Collect metadata
-        metadata = {
-            'dataID': dataID,
-            'in_channels': in_channels,
-            'out_channels': out_channels,
-            'shape': shape,
-            'scale': scale,
-        }
-
-    elif dataID.lower() == 'halfhan':
-        """
-        Half sized Head and Neck dataset.
-        """
-
-        # Import dataset
-        from dataset import GDPDataset
-
-        # Set constants
-        in_channels = 36
-        out_channels = 1
-        shape = (64, 64, 64)  # Half shape
-        scale = .5            # Half scale
-
-        # Create dataset
-        dataset = GDPDataset(
-            treatment='HaN', 
-            shape=shape,
-            scale=scale,
-            return_dose=True,
-            **kwargs,
-        )
-
-        # Collect metadata
-        metadata = {
-            'dataID': dataID,
-            'in_channels': in_channels,
-            'out_channels': out_channels,
-            'shape': shape,
-            'scale': scale,
-        }
-
-    # Return dataset
-    return dataset, metadata
-
-# Load model
-def load_model(modelID, in_channels, out_channels, **kwargs):
-
-    # Load model
-    if modelID.lower() == 'unet':
-        # Unet3D model
-        from models.unet import Unet3D
-        model = Unet3D(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **kwargs,
-        )
-    elif modelID.lower() == 'vit':
-        # Vision Transformer model
-        from models.vit import ViT3D
-        model = ViT3D(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **{'shape': 128, **kwargs},
-        )
-    elif modelID.lower() == 'convformer':
-        # Convolutional Transformer model
-        from models.convformer import ConvformerModel
-        model = ConvformerModel(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **kwargs,
-        )
-    elif modelID.lower() == 'uconvtrans':
-        # U-Convformer model
-        from models.uconvformer import UConvformerModel
-        model = UConvformerModel(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **kwargs,
-        )
-    elif modelID.lower() == 'crossattnae':
-        # Cross Attention Autoencoder model
-        from models.crossattnae import CrossAttnAEModel
-        model = CrossAttnAEModel(
-            in_channels=4,
-            out_channels=1,
-            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
-            **kwargs,
-        )
-    elif modelID.lower() == 'crossvit':
-        # Cross Attention Vision Transformer model
-        from models.crossvit import CrossViT3d
-        model = CrossViT3d(
-            in_channels=4, 
-            out_channels=1,
-            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
-            **{'shape': 128, **kwargs},
-        )
-
-    # Return model
-    return model
 
 # Define main function
 def main(
@@ -207,7 +61,7 @@ def main(
     print("Loading dataset.")
 
     # Load dataset
-    dataset, data_metadata = load_dataset(dataID, **data_kwargs)
+    dataset, data_metadata = initialize_dataset(dataID, **data_kwargs)
 
     # Get metadata
     in_channels = data_metadata['in_channels']
@@ -224,7 +78,7 @@ def main(
         dataset_test = torch.utils.data.Subset(dataset, indices_test)
         dataset_train = torch.utils.data.Subset(dataset, indices_train)
     else:
-        # If continuing training, split dataset into train, validation, and test sets
+        # Split dataset into train, validation, and test sets
         test_size = int(0.2 * len(dataset))
         dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
             dataset,
@@ -241,7 +95,7 @@ def main(
     print("Setting up model.")
 
     # Initialize model
-    model = load_model(modelID, in_channels, out_channels, **model_kwargs)
+    model = initialize_model(modelID, in_channels, out_channels, **model_kwargs)
 
     # Load model if continuing training
     if continue_training:

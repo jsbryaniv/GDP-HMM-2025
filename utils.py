@@ -6,9 +6,210 @@ A utility function is a function that is useful in multiple contexts.
 
 # Import libraries
 import os
+import json
 import torch
 import numpy as np
 import torch.nn.functional as F
+
+from torch.utils.data import Subset
+
+# Get config 
+with open('config.json', 'r') as f:
+    config = json.load(f)
+ROOT_DIR = config['PATH_OUTPUT']
+
+
+### DATA AND MODEL SAVING AND LOADING ###
+
+# Get savename function
+def get_savename(dataID, modelID, **kwargs):
+    """
+    Get savename for a given dataset and model.
+    """
+
+    # Initialize savename
+    savename = f'model_{dataID}_{modelID}'
+
+    # Add kwargs to savename
+    kwargs_sorted = sorted(kwargs.items())
+    for key, value in kwargs_sorted:
+        if value:
+            savename += f'_{key}={value}'
+
+    # Return savename
+    return savename
+
+# Initialize dataset function
+def initialize_dataset(dataID, **kwargs):
+
+    # Load dataset
+    if dataID.lower() == 'han':
+        """
+        Regular Head and Neck dataset.
+        """
+
+        # Import dataset
+        from dataset import GDPDataset
+
+        # Set constants
+        in_channels = 36
+        out_channels = 1
+        shape = (128, 128, 128)
+        scale = 1
+
+        # Create dataset
+        dataset = GDPDataset(
+            treatment='HaN', 
+            shape=shape,
+            scale=scale,
+            return_dose=True,
+            **kwargs,
+        )
+
+        # Collect metadata
+        metadata = {
+            'dataID': dataID,
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'shape': shape,
+            'scale': scale,
+        }
+
+    elif dataID.lower() == 'halfhan':
+        """
+        Half sized Head and Neck dataset.
+        """
+
+        # Import dataset
+        from dataset import GDPDataset
+
+        # Set constants
+        in_channels = 36
+        out_channels = 1
+        shape = (64, 64, 64)  # Half shape
+        scale = .5            # Half scale
+
+        # Create dataset
+        dataset = GDPDataset(
+            treatment='HaN', 
+            shape=shape,
+            scale=scale,
+            return_dose=True,
+            **kwargs,
+        )
+
+        # Collect metadata
+        metadata = {
+            'dataID': dataID,
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'shape': shape,
+            'scale': scale,
+        }
+
+    else:
+        raise ValueError(f'Dataset {dataID} not recognized.')
+
+    # Return dataset
+    return dataset, metadata
+
+# Initialize model
+def initialize_model(modelID, in_channels, out_channels, **kwargs):
+
+    # Identify model
+    if modelID.lower() == 'unet':
+        # Unet3D model
+        from models.unet import Unet3D
+        model = Unet3D(
+            in_channels=in_channels, 
+            out_channels=out_channels,
+            **kwargs,
+        )
+    elif modelID.lower() == 'vit':
+        # Vision Transformer model
+        from models.vit import ViT3D
+        model = ViT3D(
+            in_channels=in_channels, 
+            out_channels=out_channels,
+            **{'shape': 128, **kwargs},
+        )
+    elif modelID.lower() == 'convformer':
+        # Convolutional Transformer model
+        from models.old.convformer import ConvformerModel
+        model = ConvformerModel(
+            in_channels=in_channels, 
+            out_channels=out_channels,
+            **kwargs,
+        )
+    elif modelID.lower() == 'uconvtrans':
+        # U-Convformer model
+        from models.old.uconvformer import UConvformerModel
+        model = UConvformerModel(
+            in_channels=in_channels, 
+            out_channels=out_channels,
+            **kwargs,
+        )
+    elif modelID.lower() == 'crossattnae':
+        # Cross Attention Autoencoder model
+        from models.crossattnae import CrossAttnAEModel
+        model = CrossAttnAEModel(
+            in_channels=4,
+            out_channels=1,
+            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
+            **kwargs,
+        )
+    elif modelID.lower() == 'crossvit':
+        # Cross Attention Vision Transformer model
+        from models.old.crossvit import CrossViT3d
+        model = CrossViT3d(
+            in_channels=4, 
+            out_channels=1,
+            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
+            **{'shape': 128, **kwargs},
+        )
+    else:
+        raise ValueError(f'Model {modelID} not recognized.')
+
+    # Return model
+    return model
+
+# Load trained model and dataset
+def load_model_and_datasets(savename):
+
+    # Load metadata
+    with open(os.path.join(ROOT_DIR, f'{savename}.json'), 'r') as f:
+        metadata = json.load(f)
+
+    # Extract metadata
+    dataID = metadata['dataID']
+    modelID = metadata['modelID']
+    data_kwargs = metadata['data_kwargs']
+    model_kwargs = metadata['model_kwargs']
+    train_kwargs = metadata['train_kwargs']
+    indices_train = metadata['indices_train']
+    indices_val = metadata['indices_val']
+    indices_test = metadata['indices_test']
+    training_statistics = metadata['training_statistics']
+    
+    # Load dataset
+    dataset, data_metadata = initialize_dataset(dataID, **data_kwargs)
+    in_channels = data_metadata['in_channels']
+    out_channels = data_metadata['out_channels']
+    # Split into train, validation, and test sets
+    dataset_train = Subset(dataset, indices_train)
+    dataset_val = Subset(dataset, indices_val)
+    dataset_test = Subset(dataset, indices_test)
+    # Package into tuple
+    datasets = (dataset_train, dataset_val, dataset_test)
+
+    # Load model
+    model = initialize_model(modelID, in_channels, out_channels, **model_kwargs)
+    # Load weights from file
+    model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'), weights_only=True)
+    model.load_state_dict(model_state_dict)
+
+    # Return outputs
+    return model, datasets, metadata
 
 
 

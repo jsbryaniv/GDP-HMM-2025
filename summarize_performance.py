@@ -8,73 +8,19 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
 # Import custom libaries
-from main import load_dataset, load_model
 from plotting import plot_losses, copy_axis
-from utils import get_dvh, competition_loss
+from utils import get_dvh, competition_loss, load_model_and_datasets
 
 # Get config 
 with open('config.json', 'r') as f:
     config = json.load(f)
 ROOT_DIR = config['PATH_OUTPUT']
 
-
-# Load trained model and dataset
-def load_model_and_test_dataset(savename):
-
-    ### EXTRACT PARAMETERS ###
-
-    # Load json
-    with open(os.path.join(ROOT_DIR, f'{savename}.json'), 'r') as f:
-        metadata = json.load(f)
-
-    # Extract metadata
-    dataID = metadata['dataID']
-    modelID = metadata['modelID']
-    data_kwargs = metadata['data_kwargs']
-    model_kwargs = metadata['model_kwargs']
-    train_kwargs = metadata['train_kwargs']
-    indices_train = metadata['indices_train']
-    indices_val = metadata['indices_val']
-    indices_test = metadata['indices_test']
-    training_statistics = metadata['training_statistics']
-
-
-    ### LOAD DATASET ###
-    
-    # Load dataset
-    dataset, data_metadata = load_dataset(dataID, **data_kwargs)
-    in_channels = data_metadata['in_channels']
-    out_channels = data_metadata['out_channels']
-
-    # Split into train, validation, and test sets
-    dataset_train = Subset(dataset, indices_train)
-    dataset_val = Subset(dataset, indices_val)
-    dataset_test = Subset(dataset, indices_test)
-
-    # Package into tuple
-    datasets = (dataset_train, dataset_val, dataset_test)
-
-
-    ### LOAD MODEL ###
-
-    # Initialize model
-    model = load_model(modelID, in_channels, out_channels, **model_kwargs)
-
-    # Load weights from file
-    model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'), weights_only=True)
-    model.load_state_dict(model_state_dict)
-
-    
-    ### RETURN OUTPUTS ###
-
-    # Return outputs
-    return model, datasets, metadata
-
 # Set up training function
-def plot_test_results(
+def plot_model_results(
     model, dataset_test, metadata, n_show=5,
 ): 
 
@@ -220,6 +166,54 @@ def plot_test_results(
     
     # Return figure
     return fig, ax
+
+# Summarize multiple jobs
+def plot_results_summary(fig_ax_list):
+
+    # Get axes
+    axs = [ax for fig, ax in fig_ax_list]
+
+    # Get constants
+    n_jobs = len(all_jobs)
+    n_rows = axs[0].shape[0]
+    n_cols = 3 + 2*n_jobs
+
+    # Initialize figure
+    fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
+    plt.ion()
+    plt.show()
+
+    # Loop over rows
+    for i in range(n_rows):
+
+        # Plot CT and ground truth Dose
+        ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
+        ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
+
+        # Plot predicted dose for each job
+        for job in range(n_jobs):
+            ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
+            ax[i, job+2].set_title(
+                all_jobs[job].split('_')[2]+'\n'+axs[job][i, 2].get_title().split('\n')[-1]
+            )
+
+        # Plot ground truth DVH
+        ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
+        ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
+        ax[i, n_jobs+2].set_xlim([0, 80])
+
+        # Plot predicted DVH for each job
+        for job in range(len(all_jobs)):
+            ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
+            ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
+            ax[i, n_jobs+3+job].set_xlim([0, 80])
+
+    # Finalize plot
+    plt.tight_layout()
+    plt.pause(1)
+
+    # Return figure
+    return fig, ax
     
 
 # Main script
@@ -231,66 +225,35 @@ if __name__ == '__main__':
         'model_HaN_CrossAttnAE',
         'model_HaN_Unet',
         'model_HaN_ViT',
-        'model_HaN_CrossAttnAE_dose_output=True',
-        'model_HaN_Unet_dose_output=True',
-        'model_HaN_ViT_dose_output=True',
     ]
 
     # Plot each job separately
-    figs = []
-    axs = []
+    fig_ax_list = []
     for savename in all_jobs:
 
         # Load model and dataset
-        model, datasets, metadata = load_model_and_test_dataset(savename)
+        model, datasets, metadata = load_model_and_datasets(savename)
 
         # Plot losses
         losses_train = metadata['training_statistics']['losses_train']
         losses_val = metadata['training_statistics']['losses_val']
         fig, ax = plot_losses(losses_train, losses_val)
         fig.savefig(f'figs/{savename}_losses.png')
-        plt.close()
+        plt.close()  # Close figure
 
         # Test model
         dataset_test = datasets[2]
-        fig, ax = plot_test_results(model, dataset_test, metadata)
+        fig, ax = plot_model_results(model, dataset_test, metadata)
         fig.savefig(f'figs/{savename}_test.png')
-        figs.append(fig)
-        axs.append(ax)
+        fig_ax_list.append((fig, ax))
 
-    # Create summary figure
-    n_jobs = len(all_jobs)
-    n_rows = axs[0].shape[0]
-    n_cols = 3 + 2*n_jobs
-    fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
-    plt.ion()
-    plt.show()
-    for i in range(n_rows):
-        # Plot CT and ground truth Dose
-        ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
-        ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
-        # Plot predicted dose for each job
-        for job in range(n_jobs):
-            ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
-            ax[i, job+2].set_title(
-                all_jobs[job].split('_')[2]+'\n'+axs[job][i, 2].get_title().split('\n')[-1]
-            )
-        # Plot ground truth DVH
-        ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
-        ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
-        ax[i, n_jobs+2].set_xlim([0, 80])
-        # Plot predicted DVH for each job
-        for job in range(len(all_jobs)):
-            ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-            ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
-            ax[i, n_jobs+3+job].set_xlim([0, 80])
-    plt.tight_layout()
-    plt.pause(1)
+    # Plot summary
+    fig, ax = plot_results_summary(fig_ax_list)
     fig.savefig(f'figs/summary_{dataID}.png')
 
     # Close figures
     plt.close(fig)
-    for fig in figs:
+    for fig, ax in fig_ax_list:
         plt.close(fig)
     
     # Done

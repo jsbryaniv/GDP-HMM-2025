@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 # Import custom libraries
-from models.blocks import TransformerBlock, DoseOutputBlock3d
+from models.blocks import TransformerBlock
 
 
 # Create class
@@ -18,7 +18,6 @@ class ViT3D(nn.Module):
         in_channels, out_channels,
         shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
         n_features=64, n_heads=8, n_layers=16,
-        dose_output=False
     ):
         super(ViT3D, self).__init__()
 
@@ -43,7 +42,6 @@ class ViT3D(nn.Module):
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
-        self.dose_output = dose_output
 
         # Calculate constants
         self.shape_downscaled = (
@@ -137,10 +135,6 @@ class ViT3D(nn.Module):
                 TransformerBlock(n_features, n_heads)
             )
 
-        # Dose output
-        if dose_output:
-            self.dose_output_block = DoseOutputBlock3d()
-
     def forward(self, x):
         x = self.encode(x)
         x = self.decode(x)
@@ -179,8 +173,6 @@ class ViT3D(nn.Module):
 
         # Output block
         x = self.output_block(x)
-        if self.dose_output:
-            x = self.dose_output_block(x)
 
         # Return output
         return x
@@ -197,7 +189,6 @@ if __name__ == '__main__':
         36, 1, 
         shape=(128, 128, 128), patch_size=(8, 8, 8), 
         scale=1,
-        dose_output=True
     )
 
     # Create data

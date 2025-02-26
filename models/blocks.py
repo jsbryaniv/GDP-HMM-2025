@@ -6,34 +6,6 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 
-### OUTPUT BLOCK ###
-
-# Dose output block
-class DoseOutputBlock3d(nn.Module):
-    """
-    This block ensures that the output dose is positive.
-    """
-    def __init__(self,):
-        super(DoseOutputBlock3d, self).__init__()
-
-        # Set scale parameter
-        self.scale = nn.Parameter(torch.tensor(1.0))
-
-        # Set sigmoid layer
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        
-        # Apply sigmoid
-        x = self.sigmoid(x)
-
-        # Scale output
-        x = self.scale * x
-
-        # Return output
-        return x
-
-
 ### CONVOLUTIONAL BLOCK ###
 
 # Convolutional block

@@ -146,7 +146,6 @@ def plot_losses(losses_train, losses_val):
     # Return figure and axis
     return fig, ax
 
-
 # Plot dvhs
 def plot_dvh(dose, structures, labels=None, bins=100, ax=None):
     """
@@ -195,5 +194,136 @@ def plot_dvh(dose, structures, labels=None, bins=100, ax=None):
     # Return figure and axis
     return fig, ax
 
+# Quickly plot images
+@torch.no_grad()
+def plot_images(images=None, labels=None, cmap=None, **image_dict):
+    """
+    Quickly plot multiple images at once. Image arrays should be in the form (Batch, Channels, Height, Width).
+    This function will plot each image in the batch as a separate row, row labels are optionally specified with
+    the 'labels' argument. If multiple image arrays are provided, they will be plotted in different columns
+    with column labels given by the keys of the 'image_dict' dictionary. Accepts both numpy arrays and torch tensors.
+
+    Example use:
+
+    n_images = 5
+    x = torch.randn(n_images, 1, 128, 128)
+    y = torch.randn(n_images, 3, 128, 128)
+    labels = [0, 1, 2, 3, 'last']
+    plot_images(hello=x, goodbye=y, labels=labels, cmap='gray')
+
+    Output is a image with 2 columns and 5 rows:
+
+    |      | "hello" | "goodbye" |
+    |------|---------|-----------|
+    | 0    |  x[0]   |   y[0]    |
+    | 1    |  x[1]   |   y[1]    |
+    | 2    |  x[2]   |   y[2]    |
+    | 3    |  x[3]   |   y[3]    |
+    | last |  x[4]   |   y[4]    |
+
+    """
+
+    # Check inputs
+    if cmap is None:
+        cmap = 'jet'
+
+    # Set up image_dict
+    if images is not None:
+        image_dict['images'] = images
+    num_arrays = len(image_dict.keys())
+
+    # Send tensors to cpu and numpy
+    for key in image_dict.keys():
+        val = image_dict[key]
+        if isinstance(val, torch.Tensor):
+            image_dict[key] = image_dict[key].float().cpu().detach().numpy()
+        elif isinstance(val, np.ndarray):
+            image_dict[key] = image_dict[key].astype(float)
+
+    # Assert that all image arrays have the same number of images
+    num_images = image_dict[list(image_dict.keys())[0]].shape[0]
+    for key in image_dict.keys():
+        if image_dict[key].shape[0] != num_images:
+            raise ValueError("All image arrays must have the same number of images.")
+
+    # Set up colunm labels
+    if labels is None:
+        labels = [f'Image {i}' for i in range(num_images)]
+
+    # Set up figure
+    fig = plt.gcf()
+    num_rows = num_images
+    num_cols = num_arrays
+    fig.set_size_inches(num_cols, num_rows)
+    plt.clf()
+    plt.ion()
+    plt.show()
+    ax = np.empty((num_rows, num_cols), dtype=object)
+    for i in range(ax.shape[0]):
+        for j in range(ax.shape[1]):
+            ax[i, j] = fig.add_subplot(ax.shape[0], ax.shape[1], i * ax.shape[1] + j + 1)
+
+    # Loop over image lists
+    for i, (key, val) in enumerate(image_dict.items()):
+
+        # Loop over images
+        for j in range(val.shape[0]):
+
+            # Get image
+            img = val[j]
+
+            # Slice batch if necessary
+            if len(img.shape) > 3:
+                img = img[0]
+
+            # Pad image channels if necessary
+            if img.shape[0] == 1:
+                # Grayscale images, get rid of channel dimension
+                img = np.squeeze(img)
+            elif img.shape[0] == 2:
+                # Two-channel images, add empty channel and transpose to RGB format
+                img = np.concatenate((img, np.zeros((1,*img[0].shape))), axis=0)
+                img = np.transpose(img, (1, 2, 0))
+            elif img.shape[0] == 3:
+                # Three-channel images, transpose to RGB format
+                img = np.transpose(img, (1, 2, 0))
+
+            # Normalize image
+            img = img - img.min()
+            if img.max() > 0:
+                img = img / img.max()
+
+            # Plot image
+            if len(img.shape) == 2:
+                ax[j, i].imshow(img, cmap=cmap)  # Use cmap for grayscale images
+            else:
+                ax[j, i].imshow(img)
+
+    # Finalize plot
+    for j in range(ax.shape[1]):
+        ax[0, j].set_title(list(image_dict.keys())[j])
+    for i in range(ax.shape[0]):
+        ax[i, 0].set_ylabel(f'Example {labels[i]}')
+        for j in range(ax.shape[1]):
+            ax[i, j].set_xticks([])
+            ax[i, j].set_yticks([])
+    plt.tight_layout()
+    plt.pause(1)
+    
+    # Return
+    return fig, ax
 
 
+
+# Test
+if __name__ == "__main__":
+
+    # Test plot_images
+    x = torch.randn(5, 1, 128, 128)
+    y = torch.randn(5, 3, 128, 128)
+    labels = [0, 1, 2, 3, 'last']
+    plot_images(hello=x, goodbye=y, labels=labels, cmap='gray')
+    plt.savefig('_image.png')
+
+    # Done
+    print('Done!')
