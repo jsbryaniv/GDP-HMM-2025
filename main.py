@@ -177,8 +177,7 @@ def main(
 if __name__ == '__main__':
 
     # Set job IDs
-    # dataID = 'HaN'
-    dataID = 'HalfHaN'  # TODO: Debugging
+    dataID = 'HaN'
     all_jobs = []
     for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
 
