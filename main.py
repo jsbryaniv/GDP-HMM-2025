@@ -213,8 +213,7 @@ if __name__ == '__main__':
 
     # Run main function
     job_args = all_jobs[ID]
-    # model, metadata = main(**job_args, continue_training=bool(ITER > 0))
-    model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True) # TODO: Remove debug=True
+    model, metadata = main(**job_args, continue_training=bool(ITER > 0))
 
     # # Debugging
     # for ID in range(len(all_jobs)//2):
