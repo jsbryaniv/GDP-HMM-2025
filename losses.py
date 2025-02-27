@@ -25,25 +25,24 @@ def competition_loss(pred, target, body):
     # Calculate loss
     loss = (target[mask] - pred[mask]).abs().mean()
 
-    # Plot error
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(1, 4)
-    plt.ion()
-    plt.show()
-    z_slice = pred.shape[2] // 2
-    ax[0].set_title('Target')
-    ax[0].imshow(target[0, 0, z_slice].cpu().detach().numpy())
-    ax[1].set_title('Prediction')
-    ax[1].imshow(pred[0, 0, z_slice].cpu().detach().numpy())
-    ax[2].set_title('Mask')
-    ax[2].imshow(mask[0, 0, z_slice].cpu().detach().numpy())
-    ax[3].set_title('Error')
-    ax[3].imshow((target - pred)[0, 0, z_slice].cpu().detach().numpy())
-    plt.tight_layout()
-    plt.pause(.1)
-    plt.savefig('_image.png')
+    # # Plot error
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots(1, 4)
+    # plt.ion()
+    # plt.show()
+    # z_slice = pred.shape[2] // 2
+    # ax[0].set_title('Target')
+    # ax[0].imshow(target[0, 0, z_slice].cpu().detach().numpy())
+    # ax[1].set_title('Prediction')
+    # ax[1].imshow(pred[0, 0, z_slice].cpu().detach().numpy())
+    # ax[2].set_title('Mask')
+    # ax[2].imshow(mask[0, 0, z_slice].cpu().detach().numpy())
+    # ax[3].set_title('Error')
+    # ax[3].imshow((target - pred)[0, 0, z_slice].cpu().detach().numpy())
+    # plt.tight_layout()
+    # plt.pause(.1)
+    # plt.savefig('_image.png')
 
-    
     # Return loss
     return loss
 
