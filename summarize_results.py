@@ -25,9 +25,6 @@ ROOT_DIR = config['PATH_OUTPUT']
 def plot_model_results(
     model, dataset_test, metadata, n_show=5,
 ): 
-    
-    # Get test loss
-    loss_test = test_model(model, dataset_test)
 
     # Extract metadata
     dataID = metadata['dataID']
@@ -39,6 +36,7 @@ def plot_model_results(
     indices_val = metadata['indices_val']
     indices_test = metadata['indices_test']
     training_statistics = metadata['training_statistics']
+    loss_test = metadata['loss_test']
 
     # Set up model
     model.eval()

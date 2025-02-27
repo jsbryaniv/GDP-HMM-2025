@@ -11,9 +11,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 # Import custom libaries
-from utils import get_dvh, load_model_and_datasets
 from losses import competition_loss
-from plotting import plot_losses, copy_axis
 
 # Get config 
 with open('config.json', 'r') as f:
@@ -87,3 +85,18 @@ def test_model(model, dataset_test, debug=False):
     return loss_test
 
 
+# Test model
+if __name__ == '__main__':
+
+    # Import custom libraries
+    from utils import load_model_and_datasets
+
+    # Load model and datasets
+    savename = 'model_HaN_CrossAttnAE'
+    model, datasets, metadata = load_model_and_datasets(savename)
+
+    # Test model
+    loss_test = test_model(model, datasets[-1])
+    
+    # Done
+    print('Done.')

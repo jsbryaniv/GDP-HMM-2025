@@ -66,7 +66,7 @@ class CrossAttnAEModel(nn.Module):
         # Create context feature dropout layers
         self.context_dropout = nn.ModuleList()
         for depth in range(n_blocks+1):
-            p = (1-(1-1/n_features)**(n_blocks-depth))  # No dropouts at final layer; roughly half at first
+            p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at final layer; slightly over half at first
             self.context_dropout.append(nn.Dropout(p=p))
 
         
@@ -99,13 +99,9 @@ class CrossAttnAEModel(nn.Module):
         y is a list of context tensors.
         """
 
-        # Encode y_list, copying transpose
+        # Encode y_list
         f_con_blk = [autoencoder.encoder(y) for autoencoder, y in zip(self.context_autoencoders, y_list)]
-        f_blk_con = [[f.clone() for f in row] for row in zip(*f_con_blk)]
-
-        # Apply dropout to context features and decode
-        f_con_blk = [[dropout(f) for dropout, f in zip(self.context_dropout, f_con_blk[c])] for c in range(self.n_context)]
-        # y_list = [autoencoder.decoder(fs) for autoencoder, fs in zip(self.context_autoencoders, f_con_blk)]
+        f_blk_con = [[f for f in row] for row in zip(*f_con_blk)]  # Transpose list of lists
 
         # Encode x
         feats = self.autoencoder.encoder(x)
@@ -138,6 +134,23 @@ class CrossAttnAEModel(nn.Module):
 
         # Return the output
         return x
+    
+    def autoencode_context(self, y_list):
+        """Autoencode context."""
+
+        # Encode y_list
+        y_list = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
+
+        # Apply dropout to context features
+        y_list = [
+            [dropout(f) for dropout, f in zip(self.context_dropout, y_list[c])] for c in range(self.n_context)
+        ]
+
+        # Decode y_list
+        y_list = [ae.decoder(fs) for ae, fs in zip(self.context_autoencoders, y_list)]
+
+        # Return the output
+        return y_list
 
 
 # Test the model

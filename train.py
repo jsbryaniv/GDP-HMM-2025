@@ -42,23 +42,20 @@ def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
             torch.cat([beam, ptvs], dim=1), 
             torch.cat([oars, body], dim=1),
         ]
-        
-        # Corrupt context for autoencoder loss
-        y_list_corrupted = [block_mask_3d(y.clone(), p=0.1) for y in y_list]
 
         # Forward pass
-        pred = model(x, y_list)
-        reconstructions = [ae(y) for ae, y in zip(model.context_autoencoders, y_list_corrupted)]
+        pred = model(x, y_list)                    # Predict dose
+        recons = model.autoencode_context(y_list)  # Autoencode context
 
         # Compute likelihood loss
         likelihood_pred = F.mse_loss(pred, dose)
 
         # Compute reconstruction loss
         likelihood_recon_continous = (
-            sum([F.mse_loss(recon, y) for recon, y in zip(reconstructions[:-1], y_list[:-1])])
+            sum([F.mse_loss(recon, y) for recon, y in zip(recons[:-1], y_list[:-1])])
         )
         likelihood_recon_binary = (
-            sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(reconstructions[-1:], y_list[-1:])])
+            sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(recons[-1:], y_list[-1:])])
         )
 
         # Combine losses
@@ -67,6 +64,23 @@ def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
             + likelihood_recon_continous 
             + likelihood_recon_binary
         )
+
+        # # Plot
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots(2, len(y_list)+1)
+        # plt.ion()
+        # plt.show()
+        # z_slice = pred.shape[2] // 2
+        # ax[0, 0].imshow(dose[0,0,z_slice,:,:].detach().cpu().numpy())
+        # ax[1, 0].imshow(pred[0,0,z_slice,:,:].detach().cpu().numpy())
+        # for i, (y, y_ae) in enumerate(zip(y_list, recons)):
+        #     ax[0, i+1].imshow(y[0,0,z_slice,:,:].detach().cpu().numpy())
+        #     ax[1, i+1].imshow(y_ae[0,0,z_slice,:,:].detach().cpu().numpy())
+        # plt.tight_layout()
+        # plt.pause(.1)
+        # plt.savefig('_image.png')
+        # plt.close()
+
 
     # Compute prior loss
     prior = 0
