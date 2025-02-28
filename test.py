@@ -42,7 +42,7 @@ def test_model(model, dataset_test, debug=False):
             break
         
         # Status update
-        if batch_idx % 10 == 0:
+        if batch_idx % 100 == 0:
             print(f'-- Batch {batch_idx}/{len(loader_test)}')
         
         # Send to device

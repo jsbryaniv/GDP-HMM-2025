@@ -69,7 +69,7 @@ class GDPDataset(Dataset):
     def __init__(self, 
         treatment, shape=None, scale=None, return_dose=True, 
         down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=1,
-        augment=True
+        augment=False,
     ):
         super(GDPDataset, self).__init__()
 
@@ -257,7 +257,6 @@ class GDPDataset(Dataset):
                 if self.return_dose:
                     dose = torch.rot90(dose, k, (2, 3))
 
-
         # Return data
         if self.return_dose:
             return ct, beam, ptvs, oars, body, dose
@@ -271,20 +270,33 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='HaN', 
-        shape=(128, 128, 128),
+        treatment='Lung', 
+        # shape=(128, 128, 128),
         return_dose=True,
     )
 
     # Get first item
     ct, beam, ptvs, oars, body, dose = dataset[0]
 
+    # # Plot data
+    # import matplotlib.pyplot as plt
+    # fig, ax = plt.subplots(1, 1)
+    # plt.ion()
+    # plt.show()
+    # z_slice = ct.shape[1] // 2
+    # ax.imshow(ct[0, z_slice], cmap='gray')
+    # plt.tight_layout()
+    # plt.pause(0.1)
+    # plt.savefig('_image.png')
+    # plt.close()
+
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
-        if i % 10 == 0:
-            print(f'-- {i}/{len(dataset)} --')
+        # if i % 10 == 0:
+        #     print(f'-- {i}/{len(dataset)} --')
         ct, beam, ptvs, oars, body, dose = dataset[i]
+        print(i, ct.shape)
 
     # Done
     print("Done")

@@ -128,6 +128,38 @@ def initialize_dataset(dataID, **kwargs):
             'scale': scale,
         }
 
+    elif dataID.lower() == 'lung':
+        """
+        Lung dataset.
+        """
+
+        # Import dataset
+        from dataset import GDPDataset
+
+        # Set constants
+        in_channels = 16
+        out_channels = 1
+        shape = (128, 128, 128)
+        scale = 1
+
+        # Create dataset
+        dataset = GDPDataset(
+            treatment='Lung', 
+            shape=shape,
+            scale=scale,
+            return_dose=True,
+            **kwargs,
+        )
+
+        # Collect metadata
+        metadata = {
+            'dataID': dataID,
+            'in_channels': in_channels,
+            'out_channels': out_channels,
+            'shape': shape,
+            'scale': scale,
+        }
+
     elif dataID.lower() == 'halfhan':
         """
         Half sized Head and Neck dataset.
@@ -192,7 +224,7 @@ def initialize_model(modelID, in_channels, out_channels, **kwargs):
         model = CrossAttnAEModel(
             in_channels=4,
             out_channels=1,
-            n_cross_channels_list=[1, 4, in_channels-5],  # ct, beam, ptvs, oars, body
+            n_cross_channels_list=[1, 4, in_channels-5],  # ct,( beam, ptvs), (oars, body)
             **kwargs,
         )
     else:

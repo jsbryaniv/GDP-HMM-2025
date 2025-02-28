@@ -181,46 +181,46 @@ def main(
 if __name__ == '__main__':
 
     # Set job IDs
-    dataID = 'HaN'
     all_jobs = []
-    for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
+    for dataID in ['Lung', 'HaN']:
+        for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
 
-        # Initialize kwargs
-        data_kwargs = {}
-        model_kwargs = {}
-        train_kwargs = {}
+            # Initialize kwargs
+            data_kwargs = {}
+            model_kwargs = {}
+            train_kwargs = {}
 
-        # Get job specific kwargs
-        if modelID == 'CrossViT':
-            train_kwargs = {'loss_type': 'crossae'}
-        if modelID == 'CrossAttnAE':
-            train_kwargs = {'loss_type': 'crossae'}
-        if ('vit' in modelID.lower()) and ('half' in dataID.lower()):
-            model_kwargs = {'shape': 64, 'scale': 2}
+            # Get job specific kwargs
+            if modelID == 'CrossViT':
+                train_kwargs = {'loss_type': 'crossae'}
+            if modelID == 'CrossAttnAE':
+                train_kwargs = {'loss_type': 'crossae'}
+            if ('vit' in modelID.lower()) and ('half' in dataID.lower()):
+                model_kwargs = {'shape': 64, 'scale': 2}
 
-        # Add job
-        all_jobs.append({
-            'dataID': dataID, 
-            'modelID': modelID,
-            'data_kwargs': data_kwargs,
-            'model_kwargs': model_kwargs,
-            'train_kwargs': train_kwargs,
-        })
+            # Add job
+            all_jobs.append({
+                'dataID': dataID, 
+                'modelID': modelID,
+                'data_kwargs': data_kwargs,
+                'model_kwargs': model_kwargs,
+                'train_kwargs': train_kwargs,
+            })
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # Run main function
-    job_args = all_jobs[ID]
-    model, metadata = main(**job_args, continue_training=bool(ITER > 0))
+    # Debugging
+    for ID in range(len(all_jobs)//2):
+        for ITER in [0, 1]:
+            job_args = all_jobs[ID]
+            model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
+            print('\n'*5)
 
-    # # Debugging
-    # for ID in range(len(all_jobs)//2):
-    #     for ITER in range(2):
-    #         job_args = all_jobs[ID]
-    #         model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
-    #         print('\n'*5)
+    # # Run main function
+    # job_args = all_jobs[ID]
+    # model, metadata = main(**job_args, continue_training=bool(ITER > 0))
 
     # Done
     print('Done!')

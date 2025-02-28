@@ -66,7 +66,7 @@ class CrossAttnAEModel(nn.Module):
         # Create context feature dropout layers
         self.context_dropout = nn.ModuleList()
         for depth in range(n_blocks+1):
-            p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at final layer; slightly over half at first
+            p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at last layer; slightly over half at first
             self.context_dropout.append(nn.Dropout(p=p))
 
         
@@ -100,7 +100,7 @@ class CrossAttnAEModel(nn.Module):
         """
 
         # Encode y_list
-        f_con_blk = [autoencoder.encoder(y) for autoencoder, y in zip(self.context_autoencoders, y_list)]
+        f_con_blk = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
         f_blk_con = [[f for f in row] for row in zip(*f_con_blk)]  # Transpose list of lists
 
         # Encode x
@@ -118,11 +118,11 @@ class CrossAttnAEModel(nn.Module):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.up_blocks[i](x)
+            x = self.autoencoder.up_blocks[i](x)  # TODO: Switch from i index to depth index
             # Merge with skip
             x_skip = feats[depth]
             x = torch.cat([x, x_skip], dim=1)
-            x = self.autoencoder.merge_blocks[i](x)
+            x = self.autoencoder.merge_blocks[i](x)  # TODO: Switch from i index to depth index
             # Apply context
             fcon = f_blk_con[depth]
             for _ in range((depth+1)*self.n_attn_repeats):
