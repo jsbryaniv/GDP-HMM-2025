@@ -51,19 +51,15 @@ def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
         likelihood_pred = F.mse_loss(pred, dose)
 
         # Compute reconstruction loss
-        likelihood_recon_continous = (
-            sum([F.mse_loss(recon, y) for recon, y in zip(recons[:-1], y_list[:-1])])
-        )
-        likelihood_recon_binary = (
-            sum([F.binary_cross_entropy_with_logits(recon, y) for recon, y in zip(recons[-1:], y_list[-1:])])
-        )
+        likelihood_recon = 0
+        for recon, y in zip(recons, y_list):
+            if y.dtype == torch.float32:
+                likelihood_recon += F.mse_loss(recon, y)
+            elif y.dtype == torch.bool:
+                likelihood_recon += F.binary_cross_entropy_with_logits(recon, y.float())
 
         # Combine losses
-        likelihood = (
-            likelihood_pred
-            + likelihood_recon_continous 
-            + likelihood_recon_binary
-        )
+        likelihood = likelihood_pred + likelihood_recon
 
         # # Plot
         # import matplotlib.pyplot as plt
@@ -103,7 +99,12 @@ def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
     )
 
     # Compute total loss
-    loss = likelihood + prior + loss_competition + loss_dvh
+    loss = (
+        likelihood 
+        + prior 
+        + loss_competition 
+        + loss_dvh
+    )
 
     # # Plot
     # import matplotlib.pyplot as plt

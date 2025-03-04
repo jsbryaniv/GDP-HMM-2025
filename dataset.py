@@ -81,6 +81,8 @@ class GDPDataset(Dataset):
         # Check inputs
         if validation_set:
             return_dose = False
+        if isinstance(shape, int):
+            shape = (shape, shape, shape)
 
         # Get treatment specific variables
         if treatment.lower() not in ['han', 'lung', 'all']:
@@ -261,7 +263,7 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='all', 
+        treatment='Lung', 
         # shape=(128, 128, 128),
         validation_set=True,
     )

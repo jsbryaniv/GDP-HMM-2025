@@ -211,12 +211,12 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # # DEBUGGING
-    # for ID in range(len(all_jobs)//2):
-    #     for ITER in [0, 1]:
-    #         job_args = all_jobs[ID]
-    #         model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
-    #         print('\n'*5)
+    # DEBUGGING
+    for ID in range(len(all_jobs)//2):
+        for ITER in [0, 1]:
+            job_args = all_jobs[ID]
+            model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
+            print('\n'*5)
 
     # Run main function
     job_args = all_jobs[ID]

@@ -200,6 +200,7 @@ def initialize_dataset(dataID, **kwargs):
     # Set constants
     in_channels = 43  # 1 CT + 1 Beam + 3 PTVs + 37 OARs + 1 Body
     out_channels = 1
+    shape = 128
 
     # Load dataset
     if dataID.lower() == 'all':
@@ -219,6 +220,7 @@ def initialize_dataset(dataID, **kwargs):
     # Create dataset
     dataset = GDPDataset(
         treatment=treatment,
+        shape=shape,
         **kwargs,
     )
 
@@ -227,6 +229,7 @@ def initialize_dataset(dataID, **kwargs):
         'dataID': dataID,
         'in_channels': in_channels,
         'out_channels': out_channels,
+        'shape': shape,
         **kwargs,
     }
 

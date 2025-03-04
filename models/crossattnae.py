@@ -100,7 +100,7 @@ class CrossAttnAEModel(nn.Module):
         """
 
         # Encode y_list
-        f_con_blk = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        f_con_blk = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
         f_blk_con = [[f for f in row] for row in zip(*f_con_blk)]  # Transpose list of lists
 
         # Encode x
@@ -139,7 +139,7 @@ class CrossAttnAEModel(nn.Module):
         """Autoencode context."""
 
         # Encode y_list
-        y_list = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
 
         # Apply dropout to context features
         y_list = [
