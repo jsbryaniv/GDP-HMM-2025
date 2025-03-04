@@ -6,6 +6,9 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
+# Import custom libraries
+from utils import resize_image_3d
+
 # Get config variables
 with open('config.json', 'r') as f:
     config = json.load(f)
@@ -67,32 +70,38 @@ Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
 # Create dataset class
 class GDPDataset(Dataset):
     def __init__(self, 
-        treatment, shape=None, scale=None, return_dose=True, 
+        treatment, shape=None, return_dose=True, 
         down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=1,
         augment=False,
     ):
         super(GDPDataset, self).__init__()
 
         # Get treatment specific variables
-        if treatment.lower() not in ['han', 'lung']:
-            raise ValueError("Treatment must be either 'HaN' or 'Lung'")
+        if treatment.lower() not in ['han', 'lung', 'han_val', 'lung_val']:
+            raise ValueError("Treatment must be either 'HaN', 'Lung', 'HaN_val', or 'Lung_val'.")
         elif treatment.lower() == 'han':
-            path_data = os.path.join(PATH_DATA, 'han/train/')
+            path_data = os.path.join(PATH_DATA, 'han', 'train')
             oar_list = HaN_OAR_LIST
             oar_dict = HaN_OAR_DICT
         elif treatment.lower() == 'lung':
-            path_data = os.path.join(PATH_DATA, 'lung/train/')
+            path_data = os.path.join(PATH_DATA, 'lung', 'train')
+            oar_list = Lung_OAR_LIST
+            oar_dict = Lung_OAR_DICT
+        elif treatment.lower() == 'han_val':
+            path_data = os.path.join(PATH_DATA, 'han', 'valid_nodose')
+            oar_list = HaN_OAR_LIST
+            oar_dict = HaN_OAR_DICT
+        elif treatment.lower() == 'lung_val':
+            path_data = os.path.join(PATH_DATA, 'lung', 'valid_nodose')
             oar_list = Lung_OAR_LIST
             oar_dict = Lung_OAR_DICT
         
         # Load dose dictionary
-        if return_dose:
-            dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
+        dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
 
         # Set attributes
         self.treatment = treatment              # Treatment type (HaN or Lung)
         self.shape = shape                      # Shape of output data
-        self.scale = scale                      # Scale of output data
         self.return_dose = return_dose          # Whether to return dose data
         self.down_HU = down_HU                  # Lower bound for HU values
         self.up_HU = up_HU                      # Upper bound for HU values
@@ -173,58 +182,6 @@ class GDPDataset(Dataset):
             # Add channel dimension
             dose = np.expand_dims(dose, axis=0)
 
-        # Rescale data
-        if self.scale is not None:
-            downsample_factor = int(1/self.scale)
-            ct = ct[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            beam = beam[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            ptvs = ptvs[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            oars = oars[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            body = body[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-            if self.return_dose:
-                dose = dose[:, ::downsample_factor, ::downsample_factor, ::downsample_factor]
-
-        # Reshape data
-        if self.shape is not None:
-            # Get shape info
-            shape_old = np.array(ct.shape[1:])  # Exclude channel dimension
-            shape_new = np.array(self.shape)  # Target shape
-            shape_delta = shape_new - shape_old
-            # Pad image to target shape
-            pad_x = (max(0, shape_delta[0] // 2), max(0, shape_delta[0] - shape_delta[0] // 2))
-            pad_y = (max(0, shape_delta[1] // 2), max(0, shape_delta[1] - shape_delta[1] // 2))
-            pad_z = (max(0, shape_delta[2] // 2), max(0, shape_delta[2] - shape_delta[2] // 2))
-            # Apply padding
-            ct = np.pad(ct, ((0, 0), pad_x, pad_y, pad_z), mode='constant', constant_values=ct.min())
-            beam = np.pad(beam, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            ptvs = np.pad(ptvs, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            oars = np.pad(oars, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            body = np.pad(body, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            if self.return_dose:
-                dose = np.pad(dose, ((0, 0), pad_x, pad_y, pad_z), mode='constant')
-            # Cropping centered at center
-            center = np.array(ct.shape[1:]) // 2
-            slice_x = slice(center[0] - shape_new[0] // 2, center[0] + shape_new[0] // 2)
-            slice_y = slice(center[1] - shape_new[1] // 2, center[1] + shape_new[1] // 2)
-            slice_z = slice(center[2] - shape_new[2] // 2, center[2] + shape_new[2] // 2)
-            # Apply cropping
-            ct = ct[:, slice_x, slice_y, slice_z]
-            beam = beam[:, slice_x, slice_y, slice_z]
-            ptvs = ptvs[:, slice_x, slice_y, slice_z]
-            oars = oars[:, slice_x, slice_y, slice_z]
-            body = body[:, slice_x, slice_y, slice_z]
-            if self.return_dose:
-                dose = dose[:, slice_x, slice_y, slice_z]
-
-        # # Normalize data
-        # ct = (ct - ct.mean()) / ct.std()
-        # beam = (beam - beam.mean()) / beam.std()
-        # ptvs = (ptvs - ptvs.mean()) / ptvs.std()
-        # oars = (oars - oars.mean()) / oars.std()
-        # body = (body - body.mean()) / body.std()
-        # if self.return_dose:
-        #     dose = (dose - dose.mean()) / dose.std()
-
         # Convert to torch tensors
         ct = torch.tensor(ct, dtype=torch.float32)
         beam = torch.tensor(beam, dtype=torch.float32)
@@ -233,6 +190,25 @@ class GDPDataset(Dataset):
         body = torch.tensor(body, dtype=torch.bool)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
+
+        # Resize data
+        if self.shape is not None:
+            ct, _ = resize_image_3d(ct, self.shape, fill_value=ct.min())
+            beam, _ = resize_image_3d(beam, self.shape)
+            ptvs, _ = resize_image_3d(ptvs, self.shape)
+            oars, _ = resize_image_3d(oars, self.shape)
+            body, _ = resize_image_3d(body, self.shape)
+            if self.return_dose:
+                dose, _ = resize_image_3d(dose, self.shape)
+        
+        # # Normalize data
+        # ct = (ct - ct.mean()) / ct.std()
+        # beam = (beam - beam.mean()) / beam.std()
+        # ptvs = (ptvs - ptvs.mean()) / ptvs.std()
+        # oars = (oars - oars.mean()) / oars.std()
+        # body = (body - body.mean()) / body.std()
+        # if self.return_dose:
+        #     dose = (dose - dose.mean()) / dose.std()
 
         # Augment data
         if self.augment:
@@ -268,35 +244,37 @@ class GDPDataset(Dataset):
 # Example usage
 if __name__ == "__main__":
 
+    # Import libraries
+    import matplotlib.pyplot as plt
+
     # Create dataset
     dataset = GDPDataset(
-        treatment='Lung', 
-        # shape=(128, 128, 128),
-        return_dose=True,
+        treatment='Lung_Val', 
+        shape=(128, 128, 128),
+        return_dose=False,
     )
 
     # Get first item
-    ct, beam, ptvs, oars, body, dose = dataset[0]
-
-    # # Plot data
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots(1, 1)
-    # plt.ion()
-    # plt.show()
-    # z_slice = ct.shape[1] // 2
-    # ax.imshow(ct[0, z_slice], cmap='gray')
-    # plt.tight_layout()
-    # plt.pause(0.1)
-    # plt.savefig('_image.png')
-    # plt.close()
+    ct, beam, ptvs, oars, body = dataset[0][:5]
+    if dataset.return_dose:
+        dose = dataset[0][5]
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
-        # if i % 10 == 0:
-        #     print(f'-- {i}/{len(dataset)} --')
-        ct, beam, ptvs, oars, body, dose = dataset[i]
+        ct = dataset[i][0]
         print(i, ct.shape)
+        fig, ax = plt.subplots(1, 1)
+        plt.ion()
+        plt.show()
+        z_slice = ct.shape[1] // 2
+        ax.imshow(ct[0, z_slice], cmap='gray')
+        plt.tight_layout()
+        plt.pause(0.1)
+        plt.savefig('_image.png')
+        plt.close()
+
+
 
     # Done
     print("Done")
