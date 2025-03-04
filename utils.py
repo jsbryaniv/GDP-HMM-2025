@@ -194,105 +194,41 @@ def get_savename(dataID, modelID, **kwargs):
 # Initialize dataset function
 def initialize_dataset(dataID, **kwargs):
 
+    # Import dataset
+    from dataset import GDPDataset
+
+    # Set constants
+    in_channels = 43  # 1 CT + 1 Beam + 3 PTVs + 37 OARs + 1 Body
+    out_channels = 1
+
     # Load dataset
-    if dataID.lower() == 'han':
-        """
-        Regular Head and Neck dataset.
-        """
-
-        # Import dataset
-        from dataset import GDPDataset
-
-        # Set constants
-        in_channels = 36
-        out_channels = 1
-        shape = (128, 128, 128)
-        scale = 1
-
-        # Create dataset
-        dataset = GDPDataset(
-            treatment='HaN', 
-            shape=shape,
-            scale=scale,
-            return_dose=True,
-            **kwargs,
-        )
-
-        # Collect metadata
-        metadata = {
-            'dataID': dataID,
-            'in_channels': in_channels,
-            'out_channels': out_channels,
-            'shape': shape,
-            'scale': scale,
-        }
-
+    if dataID.lower() == 'all':
+        # All datasets
+        treatment = 'All'
+    elif dataID.lower() == 'han':
+        # Head and Neck dataset
+        in_channels = 36  # 1 CT + 1 Beam + 3 PTVs + 30 OARs + 1 Body
+        treatment = 'HaN'
     elif dataID.lower() == 'lung':
-        """
-        Lung dataset.
-        """
-
-        # Import dataset
-        from dataset import GDPDataset
-
-        # Set constants
-        in_channels = 16
-        out_channels = 1
-        shape = (128, 128, 128)
-        scale = 1
-
-        # Create dataset
-        dataset = GDPDataset(
-            treatment='Lung', 
-            shape=shape,
-            scale=scale,
-            return_dose=True,
-            **kwargs,
-        )
-
-        # Collect metadata
-        metadata = {
-            'dataID': dataID,
-            'in_channels': in_channels,
-            'out_channels': out_channels,
-            'shape': shape,
-            'scale': scale,
-        }
-
-    elif dataID.lower() == 'halfhan':
-        """
-        Half sized Head and Neck dataset.
-        """
-
-        # Import dataset
-        from dataset import GDPDataset
-
-        # Set constants
-        in_channels = 36
-        out_channels = 1
-        shape = (64, 64, 64)  # Half shape
-        scale = .5            # Half scale
-
-        # Create dataset
-        dataset = GDPDataset(
-            treatment='HaN', 
-            shape=shape,
-            scale=scale,
-            return_dose=True,
-            **kwargs,
-        )
-
-        # Collect metadata
-        metadata = {
-            'dataID': dataID,
-            'in_channels': in_channels,
-            'out_channels': out_channels,
-            'shape': shape,
-            'scale': scale,
-        }
-
+        # Head and Neck dataset
+        in_channels = 16  # 1 CT + 1 Beam + 3 PTVs + 10 OARs + 1 Body
+        treatment = 'Lung'
     else:
         raise ValueError(f'Dataset {dataID} not recognized.')
+
+    # Create dataset
+    dataset = GDPDataset(
+        treatment=treatment,
+        **kwargs,
+    )
+
+    # Collect metadata
+    metadata = {
+        'dataID': dataID,
+        'in_channels': in_channels,
+        'out_channels': out_channels,
+        **kwargs,
+    }
 
     # Return dataset
     return dataset, metadata

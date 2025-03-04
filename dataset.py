@@ -63,38 +63,37 @@ Lung_OAR_LIST = [
     'Trachea', 
     'Body_Ring0-3', 
 ]
+All_OAR_LIST = list(set(HaN_OAR_LIST + Lung_OAR_LIST))
 HaN_OAR_DICT = {key: i for i, key in enumerate(HaN_OAR_LIST)}
 Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
+All_OAR_DICT = {key: i for i, key in enumerate(All_OAR_LIST)}
 
 
 # Create dataset class
 class GDPDataset(Dataset):
     def __init__(self, 
-        treatment, shape=None, return_dose=True, 
+        treatment, shape=None, return_dose=True, validation_set=False,
         down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=1,
         augment=False,
     ):
         super(GDPDataset, self).__init__()
 
+        # Check inputs
+        if validation_set:
+            return_dose = False
+
         # Get treatment specific variables
-        if treatment.lower() not in ['han', 'lung', 'han_val', 'lung_val']:
-            raise ValueError("Treatment must be either 'HaN', 'Lung', 'HaN_val', or 'Lung_val'.")
-        elif treatment.lower() == 'han':
-            path_data = os.path.join(PATH_DATA, 'han', 'train')
+        if treatment.lower() not in ['han', 'lung', 'all']:
+            raise ValueError("Treatment must be either 'HaN', 'Lung' or 'All'.")
+        if treatment.lower() == 'han':
             oar_list = HaN_OAR_LIST
             oar_dict = HaN_OAR_DICT
         elif treatment.lower() == 'lung':
-            path_data = os.path.join(PATH_DATA, 'lung', 'train')
             oar_list = Lung_OAR_LIST
             oar_dict = Lung_OAR_DICT
-        elif treatment.lower() == 'han_val':
-            path_data = os.path.join(PATH_DATA, 'han', 'valid_nodose')
-            oar_list = HaN_OAR_LIST
-            oar_dict = HaN_OAR_DICT
-        elif treatment.lower() == 'lung_val':
-            path_data = os.path.join(PATH_DATA, 'lung', 'valid_nodose')
-            oar_list = Lung_OAR_LIST
-            oar_dict = Lung_OAR_DICT
+        elif treatment.lower() == 'all':
+            oar_list = All_OAR_LIST
+            oar_dict = All_OAR_DICT
         
         # Load dose dictionary
         dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
@@ -108,14 +107,27 @@ class GDPDataset(Dataset):
         self.denom_norm_HU = denom_norm_HU      # Denominator for normalizing HU values
         self.dose_div_factor = dose_div_factor  # Division factor for dose normalization
         self.augment = augment                  # Whether to augment data
-        self.path_data = path_data              # Path to directory containing data files
         self.dose_dict = dose_dict              # Dictionary of dose data
         self.oar_list = oar_list                # List of organ-at-risk (OAR) names
         self.oar_dict = oar_dict                # Dictionary of OAR names and indices
 
         # Get list of files
-        self.files = os.listdir(self.path_data)
-        self.files = [f for f in self.files if f not in BAD_FILES]
+        # self.files = os.listdir(self.path_data)
+        # self.files = [f for f in self.files if f not in BAD_FILES]
+        path_train_or_val = 'valid_nodose' if validation_set else 'train'
+        if self.treatment.lower() == 'han':
+            path_data = os.path.join(PATH_DATA, 'han', path_train_or_val)
+            files = [os.path.join(path_data, f) for f in os.listdir(path_data) if f not in BAD_FILES]
+        elif self.treatment.lower() == 'lung':
+            path_data = os.path.join(PATH_DATA, 'lung', path_train_or_val)
+            files = [os.path.join(path_data, f) for f in os.listdir(path_data) if f not in BAD_FILES]
+        elif self.treatment.lower() == 'all':
+            path_han = os.path.join(PATH_DATA, 'han', path_train_or_val)
+            path_lung = os.path.join(PATH_DATA, 'lung', path_train_or_val)
+            files_han = [os.path.join(path_han, f) for f in os.listdir(path_han) if f not in BAD_FILES]
+            files_lung = [os.path.join(path_lung, f) for f in os.listdir(path_lung) if f not in BAD_FILES]
+            files = files_han + files_lung
+        self.files = files
 
     def __len__(self):
         return len(self.files)
@@ -130,7 +142,7 @@ class GDPDataset(Dataset):
         PatientID = ID.split('+')[0]
 
         # Load data dictionary
-        data_npz = np.load(os.path.join(self.path_data, file), allow_pickle=True)
+        data_npz = np.load(file, allow_pickle=True)
         data_dict = dict(data_npz)['arr_0'].item()
 
         # Load CT scan
@@ -193,7 +205,7 @@ class GDPDataset(Dataset):
 
         # Resize data
         if self.shape is not None:
-            ct, _ = resize_image_3d(ct, self.shape, fill_value=ct.min())
+            ct, _ = resize_image_3d(ct, self.shape)
             beam, _ = resize_image_3d(beam, self.shape)
             ptvs, _ = resize_image_3d(ptvs, self.shape)
             oars, _ = resize_image_3d(oars, self.shape)
@@ -239,7 +251,7 @@ class GDPDataset(Dataset):
         else:
             return ct, beam, ptvs, oars, body
 
-        
+
 
 # Example usage
 if __name__ == "__main__":
@@ -249,34 +261,33 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='Lung_Val', 
-        shape=(128, 128, 128),
-        return_dose=False,
+        treatment='all', 
+        # shape=(128, 128, 128),
+        validation_set=True,
     )
-
-    # Get first item
-    ct, beam, ptvs, oars, body = dataset[0][:5]
-    if dataset.return_dose:
-        dose = dataset[0][5]
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
-        ct = dataset[i][0]
+        # Get data
+        ct, beam, ptvs, oars, body = dataset[i][:5]
+        if len(dataset[i]) > 5:
+            dose = dataset[i][-1]
         print(i, ct.shape)
+        # Plot data
         fig, ax = plt.subplots(1, 1)
         plt.ion()
         plt.show()
-        z_slice = ct.shape[1] // 2
-        ax.imshow(ct[0, z_slice], cmap='gray')
+        z_slize = ct.shape[1] // 2
+        ax.imshow(ct[0, z_slize].detach().cpu().numpy(), cmap='gray')
         plt.tight_layout()
         plt.pause(0.1)
         plt.savefig('_image.png')
         plt.close()
 
-
-
     # Done
     print("Done")
+
+
 
 

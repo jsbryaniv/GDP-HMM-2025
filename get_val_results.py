@@ -21,10 +21,13 @@ path_output = config['PATH_OUTPUT']
 def get_val_results(dataset, model):
 
     # Loop over dataset
+    pass
 
 
 # Run main function
 if __name__ == '__main__':
+
+    # Get model and dataset
 
     # Done
     print('Done!')

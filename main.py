@@ -182,7 +182,7 @@ if __name__ == '__main__':
 
     # Set job IDs
     all_jobs = []
-    for dataID in ['Lung', 'HaN']:
+    for dataID in ['All']:
         for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
 
             # Initialize kwargs
@@ -195,8 +195,8 @@ if __name__ == '__main__':
                 train_kwargs = {'loss_type': 'crossae'}
             if modelID == 'CrossAttnAE':
                 train_kwargs = {'loss_type': 'crossae'}
-            if ('vit' in modelID.lower()) and ('half' in dataID.lower()):
-                model_kwargs = {'shape': 64, 'scale': 2}
+            if modelID == 'ViT':
+                data_kwargs = {'shape': 128}
 
             # Add job
             all_jobs.append({
