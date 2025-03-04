@@ -229,42 +229,51 @@ def plot_results_summary(fig_ax_list):
 # Main script
 if __name__ == '__main__':
 
-    # Set data ID and jobs
-    dataID = 'HaN'
-    all_jobs = [
-        'model_HaN_CrossAttnAE',
-        'model_HaN_Unet',
-        'model_HaN_ViT',
-    ]
+    # Loop over datasets
+    for dataID in ['Lung', 'HaN']:
 
-    # Plot each job separately
-    data_list = []
-    for savename in all_jobs:
+        # Get all jobs
+        if dataID == 'Lung':
+            all_jobs = [
+                'model_Lung_CrossAttnAE',
+                'model_Lung_Unet',
+                'model_Lung_ViT',
+            ]
+        elif dataID == 'HaN':
+            all_jobs = [
+                'model_HaN_CrossAttnAE',
+                'model_HaN_Unet',
+                'model_HaN_ViT',
+            ]
 
-        # Load model and dataset
-        model, datasets, metadata = load_model_and_datasets(savename)
+        # Plot each job separately
+        data_list = []
+        for savename in all_jobs:
 
-        # Plot losses
-        losses_train = metadata['training_statistics']['losses_train']
-        losses_val = metadata['training_statistics']['losses_val']
-        fig, ax = plot_losses(losses_train, losses_val)
-        fig.savefig(f'figs/{savename}_losses.png')
-        plt.close()  # Close figure
+            # Load model and dataset
+            model, datasets, metadata = load_model_and_datasets(savename)
 
-        # Test model
-        dataset_test = datasets[2]
-        fig, ax, loss_test = plot_model_results(model, dataset_test, metadata)
-        fig.savefig(f'figs/{savename}_test.png')
-        data_list.append((fig, ax, loss_test))
+            # Plot losses
+            losses_train = metadata['training_statistics']['losses_train']
+            losses_val = metadata['training_statistics']['losses_val']
+            fig, ax = plot_losses(losses_train, losses_val)
+            fig.savefig(f'figs/{savename}_losses.png')
+            plt.close()  # Close figure
 
-    # Plot summary
-    fig, ax = plot_results_summary(data_list)
-    fig.savefig(f'figs/summary_{dataID}.png')
+            # Test model
+            dataset_test = datasets[2]
+            fig, ax, loss_test = plot_model_results(model, dataset_test, metadata)
+            fig.savefig(f'figs/{savename}_test.png')
+            data_list.append((fig, ax, loss_test))
 
-    # Close figures
-    plt.close(fig)
-    for fig, ax, _ in data_list:
+        # Plot summary
+        fig, ax = plot_results_summary(data_list)
+        fig.savefig(f'figs/summary_{dataID}.png')
+
+        # Close figures
         plt.close(fig)
+        for fig, ax, _ in data_list:
+            plt.close(fig)
     
     # Done
     print('Done.')

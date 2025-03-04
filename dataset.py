@@ -229,8 +229,8 @@ class GDPDataset(Dataset):
         ct = torch.tensor(ct, dtype=torch.float32)
         beam = torch.tensor(beam, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)
-        oars = torch.tensor(oars, dtype=torch.float32)
-        body = torch.tensor(body, dtype=torch.float32)
+        oars = torch.tensor(oars, dtype=torch.bool)
+        body = torch.tensor(body, dtype=torch.bool)
         if self.return_dose:
             dose = torch.tensor(dose, dtype=torch.float32)
 
