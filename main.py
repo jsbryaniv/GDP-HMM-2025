@@ -30,10 +30,6 @@ def main(
 
     # Get device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if debug:
-        device = torch.device('cpu')
-        for _ in range(10): 
-            print("Debugging: Running on CPU.")
         
     # Get savename
     savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
@@ -211,12 +207,13 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # DEBUGGING
-    for ID in range(len(all_jobs)//2):
-        for ITER in [0, 1]:
-            job_args = all_jobs[ID]
-            model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
-            print('\n'*5)
+    # # DEBUGGING
+    # for ID in range(len(all_jobs)//2):
+    #     for ITER in [0, 1]:
+    #         job_args = all_jobs[ID]
+    #         job_args['data_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    #         model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
+    #         print('\n'*5)
 
     # Run main function
     job_args = all_jobs[ID]

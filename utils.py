@@ -220,8 +220,7 @@ def initialize_dataset(dataID, **kwargs):
     # Create dataset
     dataset = GDPDataset(
         treatment=treatment,
-        shape=shape,
-        **kwargs,
+        **{'shape': shape, **kwargs},
     )
 
     # Collect metadata
