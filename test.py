@@ -89,9 +89,13 @@ if __name__ == '__main__':
     # Import custom libraries
     from utils import load_model_and_datasets
 
+    # Get device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     # Load model and datasets
     savename = 'model_HaN_CrossAttnAE'
     model, datasets, metadata = load_model_and_datasets(savename)
+    model.to(device)
 
     # Test model
     loss_test = test_model(model, datasets[-1])

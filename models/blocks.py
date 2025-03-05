@@ -116,7 +116,7 @@ class ConvBlock(nn.Module):
 
 # Define transformer block
 class TransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads=4, expansion=2):
+    def __init__(self, n_features, n_heads=4, expansion=2, dropout=0.1):
         super(TransformerBlock, self).__init__()
 
         # Set up attributes
@@ -134,7 +134,8 @@ class TransformerBlock(nn.Module):
         # Set up feedforward layer
         self.mlp = nn.Sequential(
             nn.Linear(n_features, n_features_inner),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.Dropout(dropout),
             nn.Linear(n_features_inner, n_features),
         )
 
@@ -152,6 +153,7 @@ class TransformerBlock(nn.Module):
         # Feedforward layer
         x = x + self.mlp(self.norm2(x))
 
+        # Return output
         return x
 
 # Define cross attention transformer block
@@ -239,18 +241,18 @@ class ConvAttn3d(nn.Module):
         attn_weights = torch.zeros(B, self.kernel_size**3, D, H, W, device=device)
 
         # Get attention from each kernel position
-        xyz = -1
+        index = -1
         for x in range(self.kernel_size):
             for y in range(self.kernel_size):
                 for z in range(self.kernel_size):
-                    xyz += 1
+                    index += 1
 
-                    # Get shifted key and positional embedding
-                    pos_emb = self.pos_emb[:, x, y, z].view(1, self.n_features, 1, 1, 1)
-                    k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb
+            # Get shifted key and positional embedding
+            pos_emb_shift = self.pos_emb[:, x, y, z].view(1, self.n_features, 1, 1, 1)
+            k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb_shift
 
-                    # Calculate attention weights
-                    attn_weights[:, xyz] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
+            # Calculate attention weights
+            attn_weights[:, index] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
 
         # Softmax attention weights
         attn_weights = F.softmax(attn_weights, dim=1)
@@ -259,26 +261,53 @@ class ConvAttn3d(nn.Module):
         out = torch.zeros_like(q)
 
         # Get output from each kernel position
-        xyz = -1
+        index = -1
         for x in range(self.kernel_size):
             for y in range(self.kernel_size):
                 for z in range(self.kernel_size):
-                    xyz += 1
+                    index += 1
 
-                    # Get shifted values
-                    v_shift = v[:, :, x:x+D, y:y+H, z:z+W]
+            # Get shifted values
+            v_shift = v[:, :, x:x+D, y:y+H, z:z+W]
 
-                    # Apply attention weights
-                    dout = attn_weights[:, xyz] * v_shift
+            # Apply attention weights
+            dout = attn_weights[:, index] * v_shift
 
-                    # Update output
-                    out = out + dout
+            # Update output
+            out += dout
 
         # Finalize output
         out = self.out_proj(out)
 
         # Return output
         return out
+
+# Test the ConvAttn3d
+if __name__ == "__main__":
+
+    import time
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    class MyModel(nn.Module):
+        def __init__(self, n_layers=100, n_features=64):
+            super(MyModel, self).__init__()
+            self.layers = nn.ModuleList([
+                ConvAttn3d(n_features, kernel_size=5) for _ in range(n_layers)
+            ])
+        def forward(self, x):
+            for layer in self.layers:
+                x = layer(x, x, x)
+            return x
+        
+    model = MyModel().to(device)
+    x = torch.randn(1, 64, 32, 32, 32)
+    x = x.to(device)
+
+    t = time.time()
+    y = model(x)
+    dt = time.time() - t
+    print('Time:', dt)
+    print('Output shape:', y.shape)
     
 
 # Make confolutional multi-head attention block

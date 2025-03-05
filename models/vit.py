@@ -16,7 +16,7 @@ from models.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
+        shape=(128, 128, 128), scale=2, patch_size=(16, 16, 16),
         n_features=64, n_heads=8, n_layers=16,
     ):
         super(ViT3D, self).__init__()
@@ -122,16 +122,16 @@ class ViT3D(nn.Module):
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
 
         # Transformer Encoders
-        self.transfomer_encoders = nn.ModuleList()
+        self.transformer_encoders = nn.ModuleList()
         for _ in range(n_layers//2):
-            self.transfomer_encoders.append(
+            self.transformer_encoders.append(
                 TransformerBlock(n_features, n_heads)
             )
 
         # Transformer Decoders
-        self.transfomer_decoders = nn.ModuleList()
+        self.transformer_decoders = nn.ModuleList()
         for _ in range(n_layers//2):
-            self.transfomer_decoders.append(
+            self.transformer_decoders.append(
                 TransformerBlock(n_features, n_heads)
             )
 
@@ -147,14 +147,14 @@ class ViT3D(nn.Module):
 
         # Patch embedding
         x = self.downscale(x)
-        x = self.patch_embed(x)  # Shape: [B, n_features, D//pD, H//pH, W//pW]
+        x = self.patch_embed(x)           # Shape: [B, n_features, D//pD, H//pH, W//pW]
         x = x.flatten(2).transpose(1, 2)  # Shape: [B, n_patches, n_features]
 
         # Add positional encoding
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
 
         # Transformer Encoding
-        for transformer in self.transfomer_encoders:
+        for transformer in self.transformer_encoders:
             x = transformer(x)
 
         # Return encoded features
@@ -163,7 +163,7 @@ class ViT3D(nn.Module):
     def decode(self, x):
 
         # Transformer Decoding
-        for transformer in self.transfomer_decoders:
+        for transformer in self.transformer_decoders:
             x = transformer(x)
 
         # Patch unembedding
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     # Create a model
     model = ViT3D(
         36, 1, 
-        shape=(128, 128, 128), patch_size=(8, 8, 8), 
+        shape=(128, 128, 128), patch_size=(4, 4, 4), 
         scale=1,
     )
 
