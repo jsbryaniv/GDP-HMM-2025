@@ -16,8 +16,8 @@ from models.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), scale=2, patch_size=(16, 16, 16),
-        n_features=64, n_heads=8, n_layers=16,
+        shape=(128, 128, 128), scale=2, patch_size=(8, 8, 8),
+        n_features=64, n_heads=8, n_layers=8,
     ):
         super(ViT3D, self).__init__()
 
@@ -44,34 +44,37 @@ class ViT3D(nn.Module):
         self.n_layers = n_layers
 
         # Calculate constants
-        self.shape_downscaled = (
+        patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
+        shape_downscaled = (
             shape[0] // scale,
             shape[1] // scale,
             shape[2] // scale,
         )
-        self.shape_patchgrid = (
-            self.shape_downscaled[0] // patch_size[0],
-            self.shape_downscaled[1] // patch_size[1],
-            self.shape_downscaled[2] // patch_size[2],
+        shape_patchgrid = (
+            (shape_downscaled[0] - patch_size[0]) // patch_stride[0] + 1,
+            (shape_downscaled[1] - patch_size[1]) // patch_stride[1] + 1,
+            (shape_downscaled[2] - patch_size[2]) // patch_stride[2] + 1,
         )
-        self.n_patches = self.shape_patchgrid[0] * self.shape_patchgrid[1] * self.shape_patchgrid[2]
+        n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
+        self.path_stride = patch_stride
+        self.shape_downscaled = shape_downscaled
+        self.shape_patchgrid = shape_patchgrid
+        self.n_patches = n_patches
 
-        # Create input block
+        # Create input and output blocks
         self.input_block = nn.Sequential(
             # # Normalize
             # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
         )
-
-        # Create output block
         self.output_block = nn.Sequential(
             # Mix channels
             nn.Conv3d(n_features, n_features, kernel_size=1),
             # Smooth output
             nn.Conv3d(
                 n_features, n_features, 
-                kernel_size=3, padding=1,
+                kernel_size=max(patch_size), padding=max(patch_size)//2,
                 groups=n_features//n_heads,
             ),
             # Project to output channels
@@ -104,7 +107,7 @@ class ViT3D(nn.Module):
                 n_features, 
                 n_features,
                 kernel_size=patch_size, 
-                stride=patch_size,
+                stride=patch_stride,
                 groups=n_features  # Channel-wise patching
             )
         )
@@ -113,7 +116,7 @@ class ViT3D(nn.Module):
                 n_features, 
                 n_features, 
                 kernel_size=patch_size, 
-                stride=patch_size,
+                stride=patch_stride,
                 groups=n_features  # Channel-wise unpatching
             )
         )
@@ -187,9 +190,9 @@ if __name__ == '__main__':
     # Create a model
     model = ViT3D(
         36, 1, 
-        shape=(128, 128, 128), patch_size=(4, 4, 4), 
-        scale=1,
+        shape=(128, 128, 128), 
     )
+    print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
 
     # Create data
     x = torch.randn(1, 36, 128, 128, 128)

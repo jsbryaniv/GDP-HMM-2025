@@ -5,6 +5,7 @@ import sys
 import json
 import time
 import torch
+import numpy as np
 import matplotlib.pyplot as plt
 
 # Import custom classes
@@ -92,7 +93,11 @@ def package_results(model, model_type=None, shape=None):
 
         # Save prediction
         filename = filenames[i]
-        torch.save(pred, os.path.join(path_results, f'{filename[:-4]}_pred.npy'))
+        np.save(os.path.join(path_results, f'{filename[:-4]}_pred.npy'), pred)
+
+        # Open prediction and ensure it was saved correctly
+        pred_new = np.load(os.path.join(path_results, f'{filename[:-4]}_pred.npy'))
+        assert np.allclose(pred, pred_new), 'Prediction was not saved correctly!'
 
     # Zip results folder
     full_path = os.path.abspath(path_results)

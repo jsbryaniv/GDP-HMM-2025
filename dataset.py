@@ -63,7 +63,7 @@ Lung_OAR_LIST = [
     'Trachea', 
     'Body_Ring0-3', 
 ]
-All_OAR_LIST = list(set(HaN_OAR_LIST + Lung_OAR_LIST))
+All_OAR_LIST = sorted(list(set(HaN_OAR_LIST + Lung_OAR_LIST)))
 HaN_OAR_DICT = {key: i for i, key in enumerate(HaN_OAR_LIST)}
 Lung_OAR_DICT = {key: i for i, key in enumerate(Lung_OAR_LIST)}
 All_OAR_DICT = {key: i for i, key in enumerate(All_OAR_LIST)}
@@ -114,8 +114,6 @@ class GDPDataset(Dataset):
         self.oar_dict = oar_dict                # Dictionary of OAR names and indices
 
         # Get list of files
-        # self.files = os.listdir(self.path_data)
-        # self.files = [f for f in self.files if f not in BAD_FILES]
         path_train_or_val = 'valid_nodose' if validation_set else 'train'
         if self.treatment.lower() == 'han':
             path_data = os.path.join(PATH_DATA, 'han', path_train_or_val)
@@ -129,6 +127,7 @@ class GDPDataset(Dataset):
             files_han = [os.path.join(path_han, f) for f in os.listdir(path_han) if f not in BAD_FILES]
             files_lung = [os.path.join(path_lung, f) for f in os.listdir(path_lung) if f not in BAD_FILES]
             files = files_han + files_lung
+        files = sorted(files)
         self.files = files
 
     def __len__(self):
@@ -223,29 +222,6 @@ class GDPDataset(Dataset):
         # body = (body - body.mean()) / body.std()
         # if self.return_dose:
         #     dose = (dose - dose.mean()) / dose.std()
-
-        # Augment data
-        if self.augment:
-            # Apply random flip
-            for dim in [1, 2, 3]:
-                if np.random.rand() > 0.5:
-                    ct = torch.flip(ct, (dim,))
-                    beam = torch.flip(beam, (dim,))
-                    ptvs = torch.flip(ptvs, (dim,))
-                    oars = torch.flip(oars, (dim,))
-                    body = torch.flip(body, (dim,))
-                    if self.return_dose:
-                        dose = torch.flip(dose, (dim,))
-            # Apply random 90 degree rotation around z-axis (dim 1)
-            if np.random.rand() > 0.5:
-                k = np.random.randint(1, 4)
-                ct = torch.rot90(ct, k, (2, 3))
-                beam = torch.rot90(beam, k, (2, 3))
-                ptvs = torch.rot90(ptvs, k, (2, 3))
-                oars = torch.rot90(oars, k, (2, 3))
-                body = torch.rot90(body, k, (2, 3))
-                if self.return_dose:
-                    dose = torch.rot90(dose, k, (2, 3))
 
         # Return data
         if self.return_dose:
