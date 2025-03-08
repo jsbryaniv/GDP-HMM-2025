@@ -46,14 +46,14 @@ def package_results(model, model_type=None, shape=None):
         print(f'--{i}/{len(dataset)}')
 
         # Format data
-        ct0 = ct.clone()  # Copy ct for visualization
+        scan0 = scan.clone()  # Copy scan for visualization
         if shape is not None:
-            ct, transform_params = resize_image_3d(ct, shape)
+            scan, transform_params = resize_image_3d(scan, shape)
             beam, _ = resize_image_3d(beam, shape)
             ptvs, _ = resize_image_3d(ptvs, shape)
             oars, _ = resize_image_3d(oars, shape)
             body, _ = resize_image_3d(body, shape)
-        ct = ct.unsqueeze(0).to(device)
+        scan = scan.unsqueeze(0).to(device)
         beam = beam.unsqueeze(0).to(device)
         ptvs = ptvs.unsqueeze(0).to(device)
         oars = oars.unsqueeze(0).to(device)
@@ -62,13 +62,13 @@ def package_results(model, model_type=None, shape=None):
         # Get prediction
         if model_type is None:
             # All in one
-            x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
+            x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
             pred = model(x)
         elif model_type == 'crossae':
             # Cross attention
             x = torch.cat([beam, ptvs], dim=1).clone()
             y_list = [
-                ct, 
+                scan, 
                 torch.cat([beam, ptvs], dim=1), 
                 torch.cat([oars, body], dim=1),
             ]
@@ -84,7 +84,7 @@ def package_results(model, model_type=None, shape=None):
         fig, ax = plt.subplots(1, 2)
         plt.ion()
         plt.show()
-        ax[0].imshow(ct0[0, shape[0]//2, :, :])
+        ax[0].imshow(scan0[0, shape[0]//2, :, :])
         ax[1].imshow(pred[0, shape[0]//2, :, :])
         plt.tight_layout()
         plt.pause(0.1)

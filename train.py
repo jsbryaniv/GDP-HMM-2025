@@ -8,133 +8,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# Import custom libraries
-from utils import block_mask_3d
-from losses import dvh_loss, competition_loss
-
-
-# Set up loss function
-def get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type):
-
-    # Compute likelihood loss
-    # TODO: Make formatting data a part of the model or something
-    if loss_type is None or loss_type.lower() == 'mse':
-        """
-        Mean squared error loss
-        """
-        # Organize inputs
-        x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
-
-        # Forward pass
-        pred = model(x)
-
-        # Compute likelihood loss
-        likelihood = F.mse_loss(pred, dose)
-
-    elif loss_type.lower() == 'crossae':
-        """
-        Cross attention autoencoder loss
-        """
-        # Organize inputs
-        x = torch.cat([beam, ptvs], dim=1).clone()
-        y_list = [
-            ct, 
-            torch.cat([beam, ptvs], dim=1), 
-            torch.cat([oars, body], dim=1),
-        ]
-
-        # Forward pass
-        pred = model(x, y_list)                    # Predict dose
-        recons = model.autoencode_context(y_list)  # Autoencode context
-
-        # Compute likelihood loss
-        likelihood_pred = F.mse_loss(pred, dose)
-
-        # Compute reconstruction loss
-        likelihood_recon = 0
-        for recon, y in zip(recons, y_list):
-            if y.dtype == torch.float32:
-                likelihood_recon += F.mse_loss(recon, y)
-            elif y.dtype == torch.bool:
-                likelihood_recon += F.binary_cross_entropy_with_logits(recon, y.float())
-
-        # Combine losses
-        likelihood = likelihood_pred + likelihood_recon
-
-        # # Plot
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2, len(y_list)+1)
-        # plt.ion()
-        # plt.show()
-        # z_slice = pred.shape[2] // 2
-        # ax[0, 0].imshow(dose[0,0,z_slice,:,:].detach().cpu().numpy())
-        # ax[1, 0].imshow(pred[0,0,z_slice,:,:].detach().cpu().numpy())
-        # for i, (y, y_ae) in enumerate(zip(y_list, recons)):
-        #     ax[0, i+1].imshow(y[0,0,z_slice,:,:].detach().cpu().numpy())
-        #     ax[1, i+1].imshow(y_ae[0,0,z_slice,:,:].detach().cpu().numpy())
-        # plt.tight_layout()
-        # plt.pause(.1)
-        # plt.savefig('_image.png')
-        # plt.close()
-
-
-    # Compute prior loss
-    prior = 0
-    n_parameters = 0
-    for name, param in model.named_parameters():
-        n_parameters += param.numel()
-        if 'bias' in name:
-            prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
-        else:
-            prior += param.pow(2).sum()
-    prior /= n_parameters
-
-    # Compute competition loss
-    loss_competition = competition_loss(pred, dose, body)
-
-    # Compute dose volume histogram loss
-    loss_dvh = dvh_loss(
-        pred, dose, 
-        structures=torch.cat([(ptvs!=0), oars, body], dim=1)
-    )
-
-    # Compute total loss
-    loss = (
-        likelihood 
-        + prior 
-        + loss_competition 
-        + loss_dvh
-    )
-
-    # # Plot
-    # import matplotlib.pyplot as plt
-    # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-    # index = x.shape[2] // 2
-    # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
-    #     if i > 3:
-    #         y_ae = torch.sigmoid(y_ae)
-    #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
-    #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
-    #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-    #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-    # plt.show()
-    # plt.pause(1)
-    # plt.savefig('_image.png')
-    # plt.close()
-    # print(loss.item())
-
-    # Check for NaN and Inf
-    if torch.isnan(loss) or torch.isinf(loss):
-        raise ValueError('Loss is NaN or Inf.')
-
-    # Return loss
-    return loss
-
 
 # Set up training function
 def train_model(
     model, dataset_train, dataset_val,
-    batch_size=1, loss_type=None, learning_rate=0.001, max_grad=1, n_epochs=10, epoch_start=0,
+    learning_rate=0.001, max_grad=1, n_epochs=5, epoch_start=0, loss_val_best=float('inf'),
     jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
@@ -151,9 +29,9 @@ def train_model(
             print("WARNING: Be aware job is running with debug=True.")
 
     # Set up data loaders
-    loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False)
+    loader_val = DataLoader(dataset_val, batch_size=1, shuffle=False)
     loader_train = DataLoader(
-        dataset_train, batch_size=batch_size, shuffle=True,
+        dataset_train, batch_size=1, shuffle=True,
         # pin_memory=True, n_workers=4, prefetch_factor=2,
     )
 
@@ -164,7 +42,6 @@ def train_model(
     # Set up training statistics
     losses_train = []
     losses_val = []
-    loss_val_best = float('inf')
     model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
     # Training loop
@@ -190,7 +67,7 @@ def train_model(
         t_batch = time.time()                           # Start timer
         if device.type != "cpu":
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
-        for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_train):
+        for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_train):
             if debug and batch_idx > 10:
                     print('DEBUG MODE: Breaking early.')
                     break
@@ -200,7 +77,7 @@ def train_model(
                 print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)}')
 
             # Send to device
-            ct = ct.to(device)
+            scan = scan.to(device)
             beam = beam.to(device)
             ptvs = ptvs.to(device)
             oars = oars.to(device)
@@ -208,7 +85,7 @@ def train_model(
             dose = dose.to(device)
 
             # Get loss
-            loss = get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type)
+            loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Backward pass and optimization
             optimizer.zero_grad()
@@ -224,10 +101,10 @@ def train_model(
                 # Get time per batch
                 t_elapsed = (time.time() - t_batch) / (1 if batch_idx == 0 else print_every)
                 # Get memory usage 
-                mem = 0 if device.type == "cpu" else torch.cuda.max_memory_allocated() / 1024**3
+                mem = 'n/a' if device.type == "cpu" else f'{torch.cuda.max_memory_allocated() / 1024**3:.2f}'
                 # Print status
                 print(
-                    f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}'
+                    f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem} GB | Loss: {loss.item():.4f}'
                 )
                 # Reset timer and memory tracker
                 t_batch = time.time()
@@ -241,13 +118,13 @@ def train_model(
         loss_val_avg = 0
 
         # Loop over validation batches
-        for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_val):
+        for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_val):
             if debug and batch_idx > 10:
                     print('DEBUG MODE: Breaking early.')
                     break
 
             # Send to device
-            ct = ct.to(device)
+            scan = scan.to(device)
             beam = beam.to(device)
             ptvs = ptvs.to(device)
             oars = oars.to(device)
@@ -256,7 +133,7 @@ def train_model(
 
             # Get loss
             with torch.no_grad():
-                loss = get_loss(ct, beam, ptvs, oars, body, dose, model, loss_type)
+                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Update average loss
             loss_val_avg += loss.item() / len(loader_val)
@@ -291,6 +168,7 @@ def train_model(
     
     # Finalize training statistics
     training_statistics = {
+        'epoch': epoch,
         'losses_train': losses_train,
         'losses_val': losses_val,
         'loss_val_best': loss_val_best,

@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.blocks import ConvBlock
+from architectures.blocks import ConvBlock
 
 
 # Define simple 3D Unet model
@@ -35,8 +35,6 @@ class Unet3D(nn.Module):
 
         # Define input block
         self.input_block = nn.Sequential(
-            # # Normalize
-            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Additional convolutional layers
@@ -88,6 +86,16 @@ class Unet3D(nn.Module):
             *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block)],
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
+
+    def get_config(self):
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'n_features': self.n_features,
+            'n_groups': self.n_groups,
+            'n_blocks': self.n_blocks,
+            'n_layers_per_block': self.n_layers_per_block,
+        }
         
     def forward(self, x):
         feats = self.encoder(x)

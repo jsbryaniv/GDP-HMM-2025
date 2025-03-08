@@ -6,8 +6,6 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 
-# Import custom libraries
-from utils import resize_image_3d
 
 # Get config variables
 with open('config.json', 'r') as f:
@@ -71,20 +69,17 @@ All_OAR_DICT = {key: i for i, key in enumerate(All_OAR_LIST)}
 
 # Create dataset class
 class GDPDataset(Dataset):
-    def __init__(self, 
-        treatment, shape=None, return_dose=True, validation_set=False,
-        down_HU=-1000, up_HU=1000, denom_norm_HU=500, dose_div_factor=1,
-        augment=False,
-    ):
+    def __init__(self, treatment, validation_set=False):
         super(GDPDataset, self).__init__()
 
-        # Check inputs
-        if validation_set:
-            return_dose = False
-        if isinstance(shape, int):
-            shape = (shape, shape, shape)
+        # Get treatment
+        if treatment is None:
+            treatment = 'All'
+        
+        # Load dose dictionary
+        dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
 
-        # Get treatment specific variables
+        # Get OAR info
         if treatment.lower() not in ['han', 'lung', 'all']:
             raise ValueError("Treatment must be either 'HaN', 'Lung' or 'All'.")
         if treatment.lower() == 'han':
@@ -96,32 +91,32 @@ class GDPDataset(Dataset):
         elif treatment.lower() == 'all':
             oar_list = All_OAR_LIST
             oar_dict = All_OAR_DICT
-        
-        # Load dose dictionary
-        dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
+
+        # Get constants
+        n_channels = 6 + len(oar_list)  # Number of input channels
+        scan_min=-1000
+        scan_max=1000 
+        scan_norm=500
 
         # Set attributes
-        self.treatment = treatment              # Treatment type (HaN or Lung)
-        self.shape = shape                      # Shape of output data
-        self.return_dose = return_dose          # Whether to return dose data
-        self.down_HU = down_HU                  # Lower bound for HU values
-        self.up_HU = up_HU                      # Upper bound for HU values
-        self.denom_norm_HU = denom_norm_HU      # Denominator for normalizing HU values
-        self.dose_div_factor = dose_div_factor  # Division factor for dose normalization
-        self.augment = augment                  # Whether to augment data
+        self.treatment = treatment              # Treatment type (HaN, Lung, or All)
+        self.validation_set = validation_set    # Validation set flag
         self.dose_dict = dose_dict              # Dictionary of dose data
         self.oar_list = oar_list                # List of organ-at-risk (OAR) names
         self.oar_dict = oar_dict                # Dictionary of OAR names and indices
+        self.n_channels = n_channels            # Number of channels
+        self.scan_min = scan_min                # Lower bound for HU values
+        self.scan_max = scan_max                # Upper bound for HU values
+        self.scan_norm = scan_norm              # Denominator for normalizing HU values
 
         # Get list of files
         path_train_or_val = 'valid_nodose' if validation_set else 'train'
-        if self.treatment.lower() == 'han':
-            path_data = os.path.join(PATH_DATA, 'han', path_train_or_val)
-            files = [os.path.join(path_data, f) for f in os.listdir(path_data) if f not in BAD_FILES]
-        elif self.treatment.lower() == 'lung':
-            path_data = os.path.join(PATH_DATA, 'lung', path_train_or_val)
+        if (treatment.lower() == 'han') or (treatment.lower() == 'lung'):
+            # Get either HaN or Lung files
+            path_data = os.path.join(PATH_DATA, treatment.lower(), path_train_or_val)
             files = [os.path.join(path_data, f) for f in os.listdir(path_data) if f not in BAD_FILES]
         elif self.treatment.lower() == 'all':
+            # Get all files
             path_han = os.path.join(PATH_DATA, 'han', path_train_or_val)
             path_lung = os.path.join(PATH_DATA, 'lung', path_train_or_val)
             files_han = [os.path.join(path_han, f) for f in os.listdir(path_han) if f not in BAD_FILES]
@@ -129,6 +124,12 @@ class GDPDataset(Dataset):
             files = files_han + files_lung
         files = sorted(files)
         self.files = files
+
+    def get_config(self):
+        return {
+            'treatment': self.treatment,
+            'validation_set': self.validation_set
+        }
 
     def __len__(self):
         return len(self.files)
@@ -147,9 +148,9 @@ class GDPDataset(Dataset):
         data_dict = dict(data_npz)['arr_0'].item()
 
         # Load CT scan
-        ct = data_dict['img']
-        ct = np.clip(ct, self.down_HU, self.up_HU) / self.denom_norm_HU  # Clip and normalize HU values
-        ct = np.expand_dims(ct, axis=0)  # Add channel dimension
+        scan = data_dict['img']
+        scan = np.clip(scan, self.scan_min, self.scan_max) / self.scan_norm  # Clip and normalize HU values
+        scan = np.expand_dims(scan, axis=0)  # Add channel dimension
 
         # Load beam plate
         beam = data_dict['beam_plate']
@@ -157,17 +158,17 @@ class GDPDataset(Dataset):
         beam = np.expand_dims(beam, axis=0)  # Add channel dimension
 
         # Load PTVs (initialize as zeros)
-        ptvs = np.zeros((3, *ct.shape[1:]), dtype=np.float32)
+        ptvs = np.zeros((3, *scan.shape[1:]), dtype=np.float32)
         for i, key in enumerate(['PTV_High', 'PTV_Mid', 'PTV_Low']):
             if key in self.dose_dict[PatientID]:  # Check if PTV exists in dose_dict
                 opt_name = self.dose_dict[PatientID][key]['OPTName']
                 ptv_dose = self.dose_dict[PatientID][key]['PDose']
                 if opt_name in data_dict:  # Check if mask exists in data_dict
                     ptv_mask = data_dict[opt_name]
-                    ptvs[i] = ptv_mask * ptv_dose / self.dose_div_factor
+                    ptvs[i] = ptv_mask * ptv_dose
 
         # Load organ-at-risk (OAR) data
-        oars = np.zeros((len(self.oar_list), *ct.shape[1:]), dtype=bool)
+        oars = np.zeros((len(self.oar_list), *scan.shape[1:]), dtype=bool)
         for oar in self.oar_list:
             if oar in data_dict:
                 oar_data = data_dict[oar]
@@ -178,56 +179,37 @@ class GDPDataset(Dataset):
         body = np.expand_dims(body, axis=0)  # Add channel dimension
 
         # Load dose
-        if self.return_dose:
+        if self.validation_set:
+            dose = None
+        else:
             # Get dose data
             dose = data_dict['dose']
             # Get dose parameters
             dose_scale = data_dict['dose_scale']
-            dose_div_factor = self.dose_div_factor
             dose_ptvhigh_opt = self.dose_dict[PatientID]['PTV_High']['OPTName']
             dose_ptvhigh_dose = self.dose_dict[PatientID]['PTV_High']['PDose']
             dose_ptvhigh_mask = data_dict[dose_ptvhigh_opt].astype('bool')
             # Normalize using D97 of PTV_High
             dose = dose * dose_scale
             norm_scale = dose_ptvhigh_dose / (np.percentile(dose[dose_ptvhigh_mask], 3) + 1e-5)
-            dose = dose * norm_scale / dose_div_factor
+            dose = dose * norm_scale
             dose = np.clip(dose, 0, dose_ptvhigh_dose * 1.2)
             # Add channel dimension
             dose = np.expand_dims(dose, axis=0)
 
         # Convert to torch tensors
-        ct = torch.tensor(ct, dtype=torch.float32)
+        scan = torch.tensor(scan, dtype=torch.float32)
         beam = torch.tensor(beam, dtype=torch.float32)
         ptvs = torch.tensor(ptvs, dtype=torch.float32)
         oars = torch.tensor(oars, dtype=torch.bool)
         body = torch.tensor(body, dtype=torch.bool)
-        if self.return_dose:
+        if self.validation_set:
+            dose = None
+        else:
             dose = torch.tensor(dose, dtype=torch.float32)
 
-        # Resize data
-        if self.shape is not None:
-            ct, _ = resize_image_3d(ct, self.shape)
-            beam, _ = resize_image_3d(beam, self.shape)
-            ptvs, _ = resize_image_3d(ptvs, self.shape)
-            oars, _ = resize_image_3d(oars, self.shape)
-            body, _ = resize_image_3d(body, self.shape)
-            if self.return_dose:
-                dose, _ = resize_image_3d(dose, self.shape)
-        
-        # # Normalize data
-        # ct = (ct - ct.mean()) / ct.std()
-        # beam = (beam - beam.mean()) / beam.std()
-        # ptvs = (ptvs - ptvs.mean()) / ptvs.std()
-        # oars = (oars - oars.mean()) / oars.std()
-        # body = (body - body.mean()) / body.std()
-        # if self.return_dose:
-        #     dose = (dose - dose.mean()) / dose.std()
-
         # Return data
-        if self.return_dose:
-            return ct, beam, ptvs, oars, body, dose
-        else:
-            return ct, beam, ptvs, oars, body
+        return scan, beam, ptvs, oars, body, dose
 
 
 
@@ -239,8 +221,7 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='Lung', 
-        # shape=(128, 128, 128),
+        treatment='All', 
         validation_set=True,
     )
 
@@ -248,16 +229,14 @@ if __name__ == "__main__":
     print('Looping over dataset')
     for i in range(len(dataset)):
         # Get data
-        ct, beam, ptvs, oars, body = dataset[i][:5]
-        if len(dataset[i]) > 5:
-            dose = dataset[i][-1]
-        print(i, ct.shape)
+        scan, beam, ptvs, oars, body, dose = dataset[i]
+        print(i, scan.shape)
         # Plot data
         fig, ax = plt.subplots(1, 1)
         plt.ion()
         plt.show()
-        z_slize = ct.shape[1] // 2
-        ax.imshow(ct[0, z_slize].detach().cpu().numpy(), cmap='gray')
+        z_slize = scan.shape[1] // 2
+        ax.imshow(scan[0, z_slize].detach().cpu().numpy(), cmap='gray')
         plt.tight_layout()
         plt.pause(0.1)
         plt.savefig('_image.png')

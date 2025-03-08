@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 # Import custom libraries
-from models.blocks import TransformerBlock
+from architectures.blocks import TransformerBlock
 
 
 # Create class
@@ -137,6 +137,18 @@ class ViT3D(nn.Module):
             self.transformer_decoders.append(
                 TransformerBlock(n_features, n_heads)
             )
+
+    def get_config(self):
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'shape': self.shape,
+            'scale': self.downscaling_factor,
+            'patch_size': self.patch_size,
+            'n_features': self.n_features,
+            'n_heads': self.n_heads,
+            'n_layers': self.n_layers,
+        }
 
     def forward(self, x):
         x = self.encode(x)

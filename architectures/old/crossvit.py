@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.vit import ViT3D
-from models.blocks import TransformerBlock, CrossTransformerBlock
+from architectures.vit import ViT3D
+from architectures.blocks import TransformerBlock, CrossTransformerBlock
 
 
 # Define cross attention vistion transformer model

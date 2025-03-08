@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.blocks import ConvformerBlock3d
+from architectures.blocks import ConvformerBlock3d
 
 
 # Define full convolutional transformer model

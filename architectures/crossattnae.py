@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from models.unet import Unet3D
-from models.blocks import ConvBlock, VolCrossTransformer3d
+from architectures.unet import Unet3D
+from architectures.blocks import ConvBlock, VolCrossTransformer3d
 
 
 # Define cross attention autoencoder model
@@ -92,6 +92,20 @@ class CrossAttnAEModel(nn.Module):
                     n_heads=n_heads
                 )
             )
+    
+    def get_config(self):
+        """Get configuration."""
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'n_cross_channels_list': self.n_cross_channels_list,
+            'n_features': self.n_features,
+            'n_blocks': self.n_blocks,
+            'n_layers_per_block': self.n_layers_per_block,
+            'n_layers_per_block_context': self.n_layers_per_block_context,
+            'n_attn_repeats': self.n_attn_repeats,
+            'n_heads': self.n_heads,
+        }
 
     def forward(self, x, y_list):
         """

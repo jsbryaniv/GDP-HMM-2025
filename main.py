@@ -9,7 +9,7 @@ import torch
 # Import custom classes
 from test import test_model
 from train import train_model
-from utils import get_savename, initialize_dataset, initialize_model
+from utils import get_savename, save_checkpoint, load_checkpoint, initialize_datasets, initialize_model
 
 # Get config
 with open('config.json', 'r') as f:
@@ -19,88 +19,53 @@ path_output = config['PATH_OUTPUT']
 
 # Define main function
 def main(
-    dataID, modelID,
-    data_kwargs=None, model_kwargs=None, train_kwargs=None,
-    continue_training=False, debug=False,
+    dataID, modelID, model_kwargs=None,
+    from_checkpoint=False, debug=False,
 ):
     """
     Main function to train a model on a dataset.
     """
     print(f"Running main function for model {modelID} on dataset {dataID}.")
 
-    # Get device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        
-    # Get savename
-    savename = get_savename(dataID, modelID, **data_kwargs, **model_kwargs)
-    print(f"-- savename={savename}")
-
     # Check inputs
-    if data_kwargs is None:
-        data_kwargs = {}
     if model_kwargs is None:
         model_kwargs = {}
-    if train_kwargs is None:
-        train_kwargs = {}
+        
+    # Get save info
+    savename = get_savename(dataID, modelID, **model_kwargs)
+    checkpoint_path = os.path.join(path_output, f'{savename}.pth')
+    print(f"-- savename={savename}")
     
     # If continuing training, load previous files
-    if continue_training:
-        # Print warning message
+    if from_checkpoint:
+        # Load previous dataset and model
         for _ in range(10):
-            print("WARNING: Be aware job is running with continue_training=True.")
-        # Load old data
-        old_model_state = torch.load(os.path.join(path_output, f'{savename}.pth'), weights_only=True)
-        with open(os.path.join(path_output, f'{savename}.json'), 'r') as f:
-            old_metadata = json.load(f)
-        # Get epoch start
-        epoch_start = len(old_metadata['training_statistics']['losses_train'])
-        train_kwargs['epoch_start'] = epoch_start
-
-    ### DATASET ###
-    print("Loading dataset.")
-
-    # Load dataset
-    dataset, data_metadata = initialize_dataset(dataID, **data_kwargs)
-
-    # Get metadata
-    in_channels = data_metadata['in_channels']
-    out_channels = data_metadata['out_channels']
-
-    # Split into train, validation, and test sets
-    if continue_training:
-        # Get indices of each subset
-        indices_val = old_metadata['indices_val']
-        indices_test = old_metadata['indices_test']
-        indices_train = old_metadata['indices_train']
-        # Initialize datasets as Subset objects
-        dataset_val = torch.utils.data.Subset(dataset, indices_val)
-        dataset_test = torch.utils.data.Subset(dataset, indices_test)
-        dataset_train = torch.utils.data.Subset(dataset, indices_train)
+            print("WARNING: Be aware job is running with from_checkpoint=True.")  # Print warning message
+        print("Loading checkpoint.")
+        model, datasets, metadata = load_checkpoint(checkpoint_path)  # Load model, datasets, and metadata
+        dataset_val, dataset_test, dataset_train = datasets    # Unpack datasets
     else:
-        # Split dataset into train, validation, and test sets
-        test_size = int(0.2 * len(dataset))
-        dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
-            dataset,
-            [test_size, test_size, len(dataset) - 2*test_size],
-            generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
-        )
-        # Get indices of each subset
-        indices_val = dataset_val.indices
-        indices_test = dataset_test.indices
-        indices_train = dataset_train.indices
-
-
-    ### MODEL ###
-    print("Setting up model.")
-
-    # Initialize model
-    model = initialize_model(modelID, in_channels, out_channels, **model_kwargs)
-
-    # Load model if continuing training
-    if continue_training:
-        model.load_state_dict(old_model_state)
+        # Initialize datasets and model
+        print("Initializing datasets and model.")
+        datasets = initialize_datasets(dataID)                                       # Initialize datasets
+        dataset_val, dataset_test, dataset_train = datasets                          # Unpack datasets
+        n_channels = dataset_train.dataset.n_channels                                # Get number of channels
+        model = initialize_model(modelID, n_channels, **model_kwargs)  # Initialize model
+        metadata = {                                                                 # Initialize metadata
+            'dataID': dataID,
+            'modelID': modelID,
+            'model_kwargs': model_kwargs,
+            'train_stats': {
+                'epoch': 0,
+                'losses_val': [],
+                'losses_train': [],
+                'loss_val_best': float('inf'),
+                'loss_test': None,
+            },
+        }
 
     # Move model to device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
 
@@ -108,12 +73,12 @@ def main(
     print("Starting training.")
 
     # Train model
-    model, training_statistics = train_model(
+    model, train_stats_new = train_model(
         model, dataset_train, dataset_val,
         jobname=savename, debug=debug,
-        **train_kwargs,
+        epoch_start=metadata['train_stats']['epoch'],
+        loss_val_best=metadata['train_stats']['loss_val_best'],
     )
-
 
     ### TESTING ###
     print("Testing model.")
@@ -125,45 +90,13 @@ def main(
     ### SAVE RESULTS ###
     print("Saving results.")
 
-    # Merge new and old training statistics
-    if continue_training:
-        # Get old training statistics
-        old_training_statistics = old_metadata['training_statistics']
-        # Find the best loss
-        old_loss_val_bset = old_training_statistics['loss_val_best']
-        new_loss_val_best = training_statistics['loss_val_best']
-        if old_loss_val_bset < new_loss_val_best:
-            # If old loss is better, keep old loss and load old model state
-            training_statistics['loss_val_best'] = old_loss_val_bset
-            model.load_state_dict(old_model_state)  # Load old model state
-        # Merge loss lists
-        for key in ['losses_train', 'losses_val']:
-            training_statistics[key] = old_training_statistics[key] + training_statistics[key]
+    # Merge training statistics
+    metadata['train_stats']['loss_test'] = loss_test
+    metadata['train_stats']['losses_val'] += train_stats_new['losses_val']
+    metadata['train_stats']['losses_train'] += train_stats_new['losses_train']
 
-    # Collect metadata
-    metadata = {
-        'dataID': dataID,
-        'modelID': modelID,
-        'data_metadata': data_metadata,
-        'data_kwargs': data_kwargs,
-        'model_kwargs': model_kwargs,
-        'train_kwargs': train_kwargs,
-        'indices_val': indices_val,
-        'indices_test': indices_test,
-        'indices_train': indices_train,
-        'training_statistics': training_statistics,
-        'loss_test': loss_test,
-    }
-
-    # Save model
-    torch.save(
-        model.state_dict(), 
-        os.path.join(path_output, f'{savename}.pth')
-    )
-
-    # Save training statistics
-    with open(os.path.join(path_output, f'{savename}.json'), 'w') as f:
-        json.dump(metadata, f)
+    # Save checkpoint
+    save_checkpoint(checkpoint_path, model, datasets, metadata)
 
 
     ### DONE ###
@@ -181,26 +114,11 @@ if __name__ == '__main__':
     for dataID in ['All']:
         for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
 
-            # Initialize kwargs
-            data_kwargs = {}
-            model_kwargs = {}
-            train_kwargs = {}
-
-            # Get job specific kwargs
-            if modelID == 'CrossViT':
-                train_kwargs = {'loss_type': 'crossae'}
-            if modelID == 'CrossAttnAE':
-                train_kwargs = {'loss_type': 'crossae'}
-            if modelID == 'ViT':
-                data_kwargs = {'shape': 128}
-
             # Add job
             all_jobs.append({
                 'dataID': dataID, 
                 'modelID': modelID,
-                'data_kwargs': data_kwargs,
-                'model_kwargs': model_kwargs,
-                'train_kwargs': train_kwargs,
+                'model_kwargs': {'shape': 128},
             })
     
     # Get training IDs from system arguments
@@ -208,16 +126,16 @@ if __name__ == '__main__':
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
     # # DEBUGGING
-    # for ID in range(len(all_jobs)//2):
+    # for ID in range(len(all_jobs)):
     #     for ITER in [0, 1]:
     #         job_args = all_jobs[ID]
-    #         job_args['data_kwargs']['shape'] = 64  # Set shape to 64 for debugging
-    #         model, metadata = main(**job_args, continue_training=bool(ITER > 0), debug=True)
+    #         job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
     #         print('\n'*5)
 
     # Run main function
     job_args = all_jobs[ID]
-    model, metadata = main(**job_args, continue_training=bool(ITER > 0))
+    model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
 
     # Done
     print('Done!')

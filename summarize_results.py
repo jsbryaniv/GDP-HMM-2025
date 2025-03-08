@@ -58,12 +58,12 @@ def plot_model_results(
 
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
-    for batch_idx, (ct, beam, ptvs, oars, body, dose) in enumerate(loader_test):
+    for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_test):
         if batch_idx >= n_show:
             break
 
         # Send to device
-        ct = ct.to(device)
+        scan = scan.to(device)
         beam = beam.to(device)
         ptvs = ptvs.to(device)
         oars = oars.to(device)
@@ -75,12 +75,12 @@ def plot_model_results(
 
             # Get prediction
             if ('loss_type' not in train_kwargs) or (train_kwargs['loss_type'].lower() == 'mse'):
-                x = torch.cat([ct, beam, ptvs, oars, body], dim=1)
+                x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
                 pred = model(x)
             elif train_kwargs['loss_type'].lower() == 'crossae':
                 x = torch.cat([beam, ptvs], dim=1).clone()
                 y_list = [
-                    ct, 
+                    scan, 
                     torch.cat([beam, ptvs], dim=1), 
                     torch.cat([oars, body], dim=1),
                 ]
@@ -95,10 +95,10 @@ def plot_model_results(
             pred = pred * dose_div_factor
 
             # Get plot data
-            slice_index = ct.shape[-3] // 2
-            plot_labels = ['CT', 'Dose (Ground Truth)', 'Dose (Prediction)']
+            slice_index = scan.shape[-3] // 2
+            plot_labels = ['Scan', 'Dose (Ground Truth)', 'Dose (Prediction)']
             plot_col = [
-                ct[0, 0, slice_index].cpu().detach().numpy(),        # CT
+                scan[0, 0, slice_index].cpu().detach().numpy(),      # Scan
                 dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
                 pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
             ]
@@ -193,7 +193,7 @@ def plot_results_summary(fig_ax_list):
     # Loop over rows
     for i in range(n_rows):
 
-        # Plot CT and ground truth Dose
+        # Plot scan and ground truth Dose
         ax[i, 0] = copy_axis(axs[0][i, 0], ax[i, 0])
         ax[i, 1] = copy_axis(axs[0][i, 1], ax[i, 1])
 

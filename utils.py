@@ -81,7 +81,7 @@ def resize_image_3d(image, target_shape, fill_value=0):
     Automatically handles boolean data by using nearest-neighbor interpolation.
 
     Args:
-        image (torch.Tensor): 3D image tensor of shape (C, D, H, W)
+        image (torch.Tensor): 3D image tensor of shape (B, C, D, H, W)
         target_shape (tuple): Desired shape (D_target, H_target, W_target)
 
     Returns:
@@ -90,7 +90,7 @@ def resize_image_3d(image, target_shape, fill_value=0):
     """
 
     # Get image shape
-    _, D, H, W = image.shape
+    _, _, D, H, W = image.shape
     D_target, H_target, W_target = target_shape
 
     # Determine interpolation mode based on dtype
@@ -104,11 +104,11 @@ def resize_image_3d(image, target_shape, fill_value=0):
 
     # Resize the image
     resized_image = F.interpolate(
-        image.float().unsqueeze(0), 
+        image.float(), 
         size=new_size, 
         mode=interp_mode, 
         align_corners=interp_align
-    ).squeeze(0)
+    )
     if is_boolean:
         resized_image = resized_image.bool()
 
@@ -137,7 +137,7 @@ def reverse_resize_3d(image, transform_params):
     Reverse the resize and padding operation.
 
     Args:
-        image (torch.Tensor): Padded image tensor of shape (C, D_target, H_target, W_target)
+        image (torch.Tensor): Padded image tensor of shape (B, C, D_target, H_target, W_target)
         transform_params (dict): Parameters from forward transform
 
     Returns:
@@ -145,12 +145,12 @@ def reverse_resize_3d(image, transform_params):
     """
 
     # Get variables
-    _, D_target, H_target, W_target = image.shape
+    _, _, D_target, H_target, W_target = image.shape
     D, H, W = transform_params["original_shape"]
     pad = transform_params["pad"]
 
     # Remove padding
-    unpadded_image = image[:, pad[4]:D_target-pad[5], pad[2]:H_target-pad[3], pad[0]:W_target-pad[1]]
+    unpadded_image = image[:, :, pad[4]:D_target-pad[5], pad[2]:H_target-pad[3], pad[0]:W_target-pad[1]]
 
     # Determine interpolation mode
     is_boolean = image.dtype == torch.bool
@@ -159,11 +159,11 @@ def reverse_resize_3d(image, transform_params):
 
     # Resize back to original shape
     restored_image = F.interpolate(
-        unpadded_image.float().unsqueeze(0), 
+        unpadded_image.float(), 
         size=(D, H, W), 
         mode=interp_mode, 
         align_corners=interp_align
-    ).squeeze(0)
+    )
     if is_boolean:
         restored_image = restored_image.bool()
 
@@ -192,82 +192,29 @@ def get_savename(dataID, modelID, **kwargs):
     return savename
 
 # Initialize dataset function
-def initialize_dataset(dataID, **kwargs):
+def initialize_datasets(dataID, validation_set=False):
 
     # Import dataset
     from dataset import GDPDataset
 
-    # Set constants
-    in_channels = 43  # 1 CT + 1 Beam + 3 PTVs + 37 OARs + 1 Body
-    out_channels = 1
-    shape = 128
-
-    # Load dataset
-    if dataID.lower() == 'all':
-        # All datasets
-        treatment = 'All'
-    elif dataID.lower() == 'han':
-        # Head and Neck dataset
-        in_channels = 36  # 1 CT + 1 Beam + 3 PTVs + 30 OARs + 1 Body
-        treatment = 'HaN'
-    elif dataID.lower() == 'lung':
-        # Head and Neck dataset
-        in_channels = 16  # 1 CT + 1 Beam + 3 PTVs + 10 OARs + 1 Body
-        treatment = 'Lung'
-    else:
-        raise ValueError(f'Dataset {dataID} not recognized.')
-
     # Create dataset
-    dataset = GDPDataset(
-        treatment=treatment,
-        **{'shape': shape, **kwargs},
+    dataset = GDPDataset(treatment=dataID, validation_set=validation_set)
+
+    # Split into train, validation, and test sets
+    test_size = int(0.2 * len(dataset))
+    dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
+        dataset,
+        [test_size, test_size, len(dataset) - 2*test_size],
+        generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
     )
 
-    # Collect metadata
-    metadata = {
-        'dataID': dataID,
-        'in_channels': in_channels,
-        'out_channels': out_channels,
-        'shape': shape,
-        **kwargs,
-    }
-
     # Return dataset
-    return dataset, metadata
+    return dataset_val, dataset_test, dataset_train
 
 # Initialize model
-def initialize_model(modelID, in_channels, out_channels, **kwargs):
-
-    # Identify model
-    if modelID.lower() == 'unet':
-        # Unet3D model
-        from models.unet import Unet3D
-        model = Unet3D(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **kwargs,
-        )
-    elif modelID.lower() == 'vit':
-        # Vision Transformer model
-        from models.vit import ViT3D
-        model = ViT3D(
-            in_channels=in_channels, 
-            out_channels=out_channels,
-            **{'shape': 128, **kwargs},
-        )
-    elif modelID.lower() == 'crossattnae':
-        # Cross Attention Autoencoder model
-        from models.crossattnae import CrossAttnAEModel
-        model = CrossAttnAEModel(
-            in_channels=4,
-            out_channels=1,
-            n_cross_channels_list=[1, 4, in_channels-5],  # ct,( beam, ptvs), (oars, body)
-            **kwargs,
-        )
-    else:
-        raise ValueError(f'Model {modelID} not recognized.')
-
-    # Return model
+def initialize_model(modelID, in_channels, **kwargs):
+    from model import DosePredictionModel
+    model = DosePredictionModel(modelID, in_channels, **kwargs)
     return model
 
 # Load trained model and dataset
@@ -304,6 +251,50 @@ def load_model_and_datasets(savename):
     # Load weights from file
     model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'), weights_only=True)
     model.load_state_dict(model_state_dict)
+
+    # Return outputs
+    return model, datasets, metadata
+
+
+# Save checkpoint
+def save_checkpoint(checkpoint_path, model, datasets, metadata):
+    torch.save(
+        {
+            'model_config': model.get_config(),
+            'model_state_dict': model.state_dict(),
+            'data_config': datasets[0].dataset.get_config(),
+            'data_indices': {
+                'train': datasets[0].indices,
+                'val': datasets[1].indices,
+                'test': datasets[2].indices,
+            },
+            'metadata': metadata,
+        }, 
+        checkpoint_path
+    )
+
+# Load checkpoint
+def load_checkpoint(checkpoint_path):
+
+    # Load model from checkpoint
+    from model import DosePredictionModel
+    model = DosePredictionModel.from_checkpoint(checkpoint_path)
+    
+    # Load checkpoint
+    checkpoint = torch.load(checkpoint_path)
+
+    # Load datasets from checkpoint
+    from dataset import GDPDataset
+    data_config = checkpoint['data_config']
+    data_indices = checkpoint['data_indices']
+    dataset = GDPDataset(**data_config)
+    dataset_train = Subset(dataset, data_indices['train'])
+    dataset_val = Subset(dataset, data_indices['val'])
+    dataset_test = Subset(dataset, data_indices['test'])
+    datasets = (dataset_train, dataset_val, dataset_test)
+
+    # Load metadata
+    metadata = checkpoint['metadata']
 
     # Return outputs
     return model, datasets, metadata
