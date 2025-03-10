@@ -225,22 +225,21 @@ class DosePredictionModel(nn.Module):
         if torch.isnan(loss) or torch.isinf(loss):
             raise ValueError('Loss is NaN or Inf.')
 
-        # Plot
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-        index = scan.shape[2] // 2
-        for i, (y, y_ae) in enumerate(zip([dose]+y_list_corrupt, [pred]+recons)):
-            if i >= 3:
-                y_ae = torch.sigmoid(y_ae)
-            ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
-            ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
-            ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-            ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-        plt.show()
-        plt.pause(1)
-        plt.savefig('_image.png')
-        plt.close()
-        print(loss.item())
+        # # Plot
+        # import matplotlib.pyplot as plt
+        # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
+        # for i, (y, y_ae) in enumerate(zip([dose]+y_list_corrupt, [pred]+recons)):
+        #     if i >= 3:
+        #         y_ae = torch.sigmoid(y_ae)
+        #     ax[0, i].imshow(y[0,0,y.shape[2]//2].detach().cpu().numpy())
+        #     ax[1, i].imshow(y_ae[0,0,y.shape[2]//2].detach().cpu().numpy())
+        #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
+        #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
+        # plt.show()
+        # plt.pause(1)
+        # plt.savefig('_image.png')
+        # plt.close()
+        # print(loss.item())
 
         # Return loss
         return loss

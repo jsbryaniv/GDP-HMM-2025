@@ -116,7 +116,7 @@ class ConvBlock(nn.Module):
 
 # Define transformer block
 class TransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads=4, expansion=2, dropout=0.1):
+    def __init__(self, n_features, n_heads=4, expansion=1, dropout=0.1):
         super(TransformerBlock, self).__init__()
 
         # Set up attributes
@@ -158,7 +158,7 @@ class TransformerBlock(nn.Module):
 
 # Define cross attention transformer block
 class CrossTransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads=4, expansion=2):
+    def __init__(self, n_features, n_heads=4, expansion=1):
         super(CrossTransformerBlock, self).__init__()
 
         # Set up attributes

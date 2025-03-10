@@ -16,7 +16,7 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), scale_factor=1, patch_size=(8, 8, 8),
+        shape=(128, 128, 128), patch_size=(16, 16, 16),
         n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
@@ -38,26 +38,19 @@ class ViT3D(nn.Module):
         self.out_channels = out_channels
         self.shape = shape
         self.patch_size = patch_size
-        self.scale_factor = scale_factor
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
 
         # Calculate constants
         patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
-        shape_downscaled = (
-            shape[0] // scale_factor,
-            shape[1] // scale_factor,
-            shape[2] // scale_factor,
-        )
         shape_patchgrid = (
-            (shape_downscaled[0] - patch_size[0]) // patch_stride[0] + 1,
-            (shape_downscaled[1] - patch_size[1]) // patch_stride[1] + 1,
-            (shape_downscaled[2] - patch_size[2]) // patch_stride[2] + 1,
+            (shape[0] - patch_size[0]) // patch_stride[0] + 1,
+            (shape[1] - patch_size[1]) // patch_stride[1] + 1,
+            (shape[2] - patch_size[2]) // patch_stride[2] + 1,
         )
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
         self.path_stride = patch_stride
-        self.shape_downscaled = shape_downscaled
         self.shape_patchgrid = shape_patchgrid
         self.n_patches = n_patches
 
@@ -78,30 +71,6 @@ class ViT3D(nn.Module):
             # Project to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
-
-        # Create downscaling and upscaling layers
-        if scale_factor == 1:
-            self.downscale = nn.Identity()
-            self.upscale = nn.Identity()
-        else:
-            self.downscale = nn.Sequential(
-                nn.Conv3d(
-                    n_features, 
-                    n_features, 
-                    kernel_size=scale_factor, 
-                    stride=scale_factor,
-                    groups=n_features  # Channel-wise downscaling
-                )
-            )
-            self.upscale = nn.Sequential(
-                nn.ConvTranspose3d(
-                    n_features,
-                    n_features,
-                    kernel_size=scale_factor,
-                    stride=scale_factor,
-                    groups=n_features  # Channel-wise upscaling
-                )
-            )
         
         # 3D Patch Embedding and Unembedding Layers
         self.patch_embed = nn.Sequential(
@@ -127,25 +96,40 @@ class ViT3D(nn.Module):
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
 
         # Transformer Encoders
-        self.transformer_encoders = nn.ModuleList()
-        for _ in range(n_layers//2):
-            self.transformer_encoders.append(
-                TransformerBlock(n_features, n_heads)
-            )
+        # self.transformer_encoders = nn.ModuleList()
+        # for _ in range(n_layers//2):
+        #     self.transformer_encoders.append(
+        #         TransformerBlock(n_features, n_heads)
+        #     )
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                n_features, n_heads, 
+                dim_feedforward=n_features,
+                batch_first=True
+            ),
+            num_layers=n_layers//2
+        )
 
         # Transformer Decoders
-        self.transformer_decoders = nn.ModuleList()
-        for _ in range(n_layers//2):
-            self.transformer_decoders.append(
-                TransformerBlock(n_features, n_heads)
-            )
+        # self.transformer_decoders = nn.ModuleList()
+        # for _ in range(n_layers//2):
+        #     self.transformer_decoders.append(
+        #         TransformerBlock(n_features, n_heads)
+        #     )
+        self.transformer_decoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                n_features, n_heads, 
+                dim_feedforward=n_features,
+                batch_first=True
+            ),
+            num_layers=n_layers//2
+        )
 
     def get_config(self):
         return {
             'in_channels': self.in_channels,
             'out_channels': self.out_channels,
             'shape': self.shape,
-            'scale_factor': self.scale_factor,
             'patch_size': self.patch_size,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
@@ -163,7 +147,6 @@ class ViT3D(nn.Module):
         x = self.input_block(x)
 
         # Patch embedding
-        x = self.downscale(x)
         x = self.patch_embed(x)           # Shape: [B, n_features, D//pD, H//pH, W//pW]
         x = x.flatten(2).transpose(1, 2)  # Shape: [B, n_patches, n_features]
 
@@ -171,8 +154,9 @@ class ViT3D(nn.Module):
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
 
         # Transformer Encoding
-        for transformer in self.transformer_encoders:
-            x = transformer(x)
+        # for transformer in self.transformer_encoders:
+        #     x = transformer(x)
+        x = self.transformer_encoder(x)
 
         # Return encoded features
         return x
@@ -180,13 +164,13 @@ class ViT3D(nn.Module):
     def decoder(self, x):
 
         # Transformer Decoding
-        for transformer in self.transformer_decoders:
-            x = transformer(x)
+        # for transformer in self.transformer_decoders:
+        #     x = transformer(x)
+        x = self.transformer_decoder(x)
 
         # Patch unembedding
         x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
         x = self.patch_unembed(x)
-        x = self.upscale(x)
 
         # Output block
         x = self.output_block(x)
