@@ -112,7 +112,7 @@ if __name__ == '__main__':
     # Set job IDs
     all_jobs = []
     for dataID in ['All']:
-        for modelID in ['CrossAttnAE', 'ViT', 'Unet']:
+        for modelID in ['CrossAttnAE', 'ViT', 'Unet', 'CrossVit']:
 
             # Add job
             all_jobs.append({
@@ -125,7 +125,15 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # # DEBUGGING
+    
+    # DEBUGGING one file
+    ID = 3
+    job_args = all_jobs[ID]
+    job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    for ITER in [0, 1]:
+        model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+
+    # # DEBUGGING all files
     # for ID in range(len(all_jobs)):
     #     for ITER in [0, 1]:
     #         job_args = all_jobs[ID]

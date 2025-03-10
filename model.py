@@ -181,12 +181,12 @@ class DosePredictionModel(nn.Module):
         )
 
         # Compute reconstruction loss
-        if self.architecture in ['crossae']:
+        if self.architecture.lower() in ['crossae']:
             """Compute reconstruction loss for cross-attention-unet."""
             # Get context
             y_list = inputs[1]
             # Get reconstructions
-            recons = model.autoencode_context(y_list)
+            recons = self.model.autoencode_context(y_list)
             # Compute likelihood loss
             likelihood_recon = (
                 F.mse_loss(y_list[0], recons[0])
@@ -196,14 +196,14 @@ class DosePredictionModel(nn.Module):
             # Combine losses
             likelihood += likelihood_recon
 
-        elif self.architecture in ['crossvit']:
+        elif self.architecture.lower() in ['crossvit']:
             """Compute reconstruction loss for cross-attention-vit."""
             # Get context
             y_list = inputs[1]
             # Corrupt context
             y_list_corrupt = [block_mask_3d(y, p=0.5) for y in y_list]
             # Get reconstructions
-            recons = model.autoencode_context(y_list_corrupt)
+            recons = self.model.autoencode_context(y_list_corrupt)
             # Compute likelihood loss
             likelihood_recon = (
                 F.mse_loss(y_list[0], recons[0])
@@ -225,22 +225,22 @@ class DosePredictionModel(nn.Module):
         if torch.isnan(loss) or torch.isinf(loss):
             raise ValueError('Loss is NaN or Inf.')
 
-        # # Plot
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-        # index = x.shape[2] // 2
-        # for i, (y, y_ae) in enumerate(zip([dose]+y_list, [z]+y_list_ae)):
-        #     if i > 3:
-        #         y_ae = torch.sigmoid(y_ae)
-        #     ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
-        #     ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
-        #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-        #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-        # plt.show()
-        # plt.pause(1)
-        # plt.savefig('_image.png')
-        # plt.close()
-        # print(loss.item())
+        # Plot
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
+        index = scan.shape[2] // 2
+        for i, (y, y_ae) in enumerate(zip([dose]+y_list_corrupt, [pred]+recons)):
+            if i >= 3:
+                y_ae = torch.sigmoid(y_ae)
+            ax[0, i].imshow(y[0,0,index,:,:].detach().cpu().numpy())
+            ax[1, i].imshow(y_ae[0,0,index,:,:].detach().cpu().numpy())
+            ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
+            ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
+        plt.show()
+        plt.pause(1)
+        plt.savefig('_image.png')
+        plt.close()
+        print(loss.item())
 
         # Return loss
         return loss

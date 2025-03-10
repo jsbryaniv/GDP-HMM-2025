@@ -16,7 +16,7 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), scale=4, patch_size=(8, 8, 8),
+        shape=(128, 128, 128), scale_factor=1, patch_size=(8, 8, 8),
         n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
@@ -38,7 +38,7 @@ class ViT3D(nn.Module):
         self.out_channels = out_channels
         self.shape = shape
         self.patch_size = patch_size
-        self.downscaling_factor = scale
+        self.scale_factor = scale_factor
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -46,9 +46,9 @@ class ViT3D(nn.Module):
         # Calculate constants
         patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
         shape_downscaled = (
-            shape[0] // scale,
-            shape[1] // scale,
-            shape[2] // scale,
+            shape[0] // scale_factor,
+            shape[1] // scale_factor,
+            shape[2] // scale_factor,
         )
         shape_patchgrid = (
             (shape_downscaled[0] - patch_size[0]) // patch_stride[0] + 1,
@@ -72,7 +72,7 @@ class ViT3D(nn.Module):
             # Smooth output
             nn.Conv3d(
                 n_features, n_features, 
-                kernel_size=max(patch_size), padding=max(patch_size)//2,
+                kernel_size=2*max(patch_size)//2+1, padding=max(patch_size)//2,
                 groups=n_features//n_heads,
             ),
             # Project to output channels
@@ -80,24 +80,28 @@ class ViT3D(nn.Module):
         )
 
         # Create downscaling and upscaling layers
-        self.downscale = nn.Sequential(
-            nn.Conv3d(
-                n_features, 
-                n_features, 
-                kernel_size=scale, 
-                stride=scale,
-                groups=n_features  # Channel-wise downscaling
+        if scale_factor == 1:
+            self.downscale = nn.Identity()
+            self.upscale = nn.Identity()
+        else:
+            self.downscale = nn.Sequential(
+                nn.Conv3d(
+                    n_features, 
+                    n_features, 
+                    kernel_size=scale_factor, 
+                    stride=scale_factor,
+                    groups=n_features  # Channel-wise downscaling
+                )
             )
-        )
-        self.upscale = nn.Sequential(
-            nn.ConvTranspose3d(
-                n_features,
-                n_features,
-                kernel_size=scale,
-                stride=scale,
-                groups=n_features  # Channel-wise upscaling
+            self.upscale = nn.Sequential(
+                nn.ConvTranspose3d(
+                    n_features,
+                    n_features,
+                    kernel_size=scale_factor,
+                    stride=scale_factor,
+                    groups=n_features  # Channel-wise upscaling
+                )
             )
-        )
         
         # 3D Patch Embedding and Unembedding Layers
         self.patch_embed = nn.Sequential(
@@ -141,7 +145,7 @@ class ViT3D(nn.Module):
             'in_channels': self.in_channels,
             'out_channels': self.out_channels,
             'shape': self.shape,
-            'scale': self.downscaling_factor,
+            'scale_factor': self.scale_factor,
             'patch_size': self.patch_size,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
@@ -149,11 +153,11 @@ class ViT3D(nn.Module):
         }
 
     def forward(self, x):
-        x = self.encode(x)
-        x = self.decode(x)
+        x = self.encoder(x)
+        x = self.decoder(x)
         return x
     
-    def encode(self, x):
+    def encoder(self, x):
 
         # Input block
         x = self.input_block(x)
@@ -173,7 +177,7 @@ class ViT3D(nn.Module):
         # Return encoded features
         return x
     
-    def decode(self, x):
+    def decoder(self, x):
 
         # Transformer Decoding
         for transformer in self.transformer_decoders:

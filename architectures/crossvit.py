@@ -18,7 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=(128, 128, 128), scale=4, patch_size=(8, 8, 8),
+        shape=(128, 128, 128), scale=1, patch_size=(8, 8, 8),
         n_features=128, n_heads=4, n_layers=8,
         n_layers_context=8, n_layers_mixing=8,
     ):
@@ -77,7 +77,7 @@ class CrossViT3d(nn.Module):
         # Create main autoencoder
         self.autoencoder = ViT3D(
             in_channels, out_channels,
-            shape=shape, scale=scale, patch_size=patch_size,
+            shape=shape, scale_factor=scale, patch_size=patch_size,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers,
         )
 
@@ -87,7 +87,7 @@ class CrossViT3d(nn.Module):
             self.context_autoencoders.append(
                 ViT3D(
                     n_channels, n_channels,
-                    shape=shape, scale=scale, patch_size=patch_size,
+                    shape=shape, scale_factor=scale, patch_size=patch_size,
                     n_features=n_features, n_heads=n_heads, n_layers=n_layers_context,
                 )
             )
@@ -130,8 +130,8 @@ class CrossViT3d(nn.Module):
         """
 
         # Encode input
-        x = self.autoencoder.encode(x)
-        context = [ae.encode(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        x = self.autoencoder.encoder(x)
+        context = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
 
         # Add positional and context embeddings
         x = x + self.pos_embedding 
@@ -147,7 +147,7 @@ class CrossViT3d(nn.Module):
             x = transformer(x)
         
         # Decode
-        x = self.autoencoder.decode(x)
+        x = self.autoencoder.decoder(x)
         
         # Return
         return x
