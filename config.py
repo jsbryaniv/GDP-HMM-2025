@@ -11,7 +11,6 @@ with open('config.json', 'r') as f:
 
 # Extract variables
 MACHINE = config['MACHINE']
-PATH_LOG = config['PATH_LOG']
 PATH_DATA = config['PATH_DATA']
 PATH_OUTPUT = config['PATH_OUTPUT']
 PATH_METADATA = config['PATH_METADATA']
