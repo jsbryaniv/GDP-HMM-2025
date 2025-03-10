@@ -18,7 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=128, patch_size=None, patch_stride=None,
+        shape=128, patch_size=16, patch_stride=None,
         n_features=64, n_heads=4, n_layers=8,
         n_layers_context=8, n_layers_mixing=8,
     ):
@@ -31,15 +31,12 @@ class CrossViT3d(nn.Module):
         if not isinstance(shape, tuple):
             # Convert shape to tuple
             shape = (shape, shape, shape)
-        if patch_size is None:
-            # Set default patch size (1/4 of shape)
-            patch_size = (shape[0] // 4, shape[1] // 4, shape[2] // 4)
-        elif not isinstance(patch_size, tuple):
+        if not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
         if patch_stride is None:
-            # Set default patch stride (1/4 of patch size)
-            patch_stride = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
+            # Set default patch stride (1/2 of patch size)
+            patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
         elif not isinstance(patch_stride, tuple):
             # Convert patch stride to tuple
             patch_stride = (patch_stride, patch_stride, patch_stride)
@@ -71,7 +68,7 @@ class CrossViT3d(nn.Module):
         )
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
         n_context = len(n_cross_channels_list)
-        self.path_stride = patch_stride
+        self.patch_stride = patch_stride
         self.shape_patchgrid = shape_patchgrid
         self.n_patches = n_patches
         self.n_context = n_context

@@ -8,14 +8,10 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Import custom classes
+# Import local
+from config import *
 from dataset import GDPDataset
 from model import DosePredictionModel
-
-# Get config
-with open('config.json', 'r') as f:
-    config = json.load(f)
-path_output = config['PATH_OUTPUT']
 
 
 # Define dose predictor
@@ -29,7 +25,7 @@ def package_results(model):
     device = next(model.parameters()).device
 
     # Initialize results folder
-    path_results = os.path.join(path_output, 'val_results')  # Define path
+    path_results = os.path.join(PATH_OUTPUT, 'val_results')  # Define path
     if not os.path.exists(path_results):                     # Create path if it does not exist
         os.makedirs(path_results)
     for file in os.listdir(path_results):                    # Remove files in path
@@ -102,7 +98,7 @@ if __name__ == '__main__':
 
     # Get model and metadata
     savename = 'model_All_Unet_shape=128'
-    savepath = os.path.join(path_output, f'{savename}.pth')
+    savepath = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model = DosePredictionModel.from_checkpoint(savepath)
     model.to(device)
 

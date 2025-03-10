@@ -10,16 +10,13 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# Import custom libaries
+# Import local
+from config import *
 from test import test_model
 from utils import get_dvh, load_checkpoint
 from losses import competition_loss
 from plotting import plot_losses, copy_axis
 
-# Get config 
-with open('config.json', 'r') as f:
-    config = json.load(f)
-ROOT_DIR = config['PATH_OUTPUT']
 
 # Set up training function
 def plot_model_results(
@@ -251,7 +248,7 @@ if __name__ == '__main__':
         for savename in all_jobs:
 
             # Load model and dataset
-            checkpoint_path = os.path.join(ROOT_DIR, f'{savename}.pth')
+            checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
             model, datasets, metadata = load_checkpoint(checkpoint_path)
 
             # Plot losses

@@ -8,6 +8,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+# Import local
+from config import *
+
 
 # Set up training function
 def train_model(

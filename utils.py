@@ -12,10 +12,8 @@ import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import Subset
 
-# Get config 
-with open('config.json', 'r') as f:
-    config = json.load(f)
-ROOT_DIR = config['PATH_OUTPUT']
+# Import local
+from config import *
 
 
 ### CUSTOM FUNCTIONS ###

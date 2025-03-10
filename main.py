@@ -6,15 +6,11 @@ import json
 import time
 import torch
 
-# Import custom classes
+# Import local
+from config import *
 from test import test_model
 from train import train_model
 from utils import get_savename, save_checkpoint, load_checkpoint, initialize_datasets, initialize_model
-
-# Get config
-with open('config.json', 'r') as f:
-    config = json.load(f)
-path_output = config['PATH_OUTPUT']
 
 
 # Define main function
@@ -33,7 +29,7 @@ def main(
         
     # Get save info
     savename = get_savename(dataID, modelID, **model_kwargs)
-    checkpoint_path = os.path.join(path_output, f'{savename}.pth')
+    checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     print(f"-- savename={savename}")
     
     # If continuing training, load previous files
@@ -112,7 +108,7 @@ if __name__ == '__main__':
     # Set job IDs
     all_jobs = []
     for dataID in ['All']:
-        for modelID in ['CrossAttnAE', 'ViT', 'Unet', 'CrossVit']:
+        for modelID in ['CrossVit', 'CrossAttnAE', 'ViT', 'Unet',]:
 
             # Add job
             all_jobs.append({
@@ -126,12 +122,12 @@ if __name__ == '__main__':
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
     
-    # # DEBUGGING one file
-    # ID = 3
-    # job_args = all_jobs[ID]
-    # job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
-    # for ITER in [0, 1]:
-    #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+    # DEBUGGING one file
+    ID = 0
+    job_args = all_jobs[ID]
+    job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    for ITER in [0, 1]:
+        model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
 
     # # DEBUGGING all files
     # for ID in range(len(all_jobs)):

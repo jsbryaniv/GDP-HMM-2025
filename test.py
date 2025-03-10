@@ -10,16 +10,9 @@ import pandas as pd
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# Import custom libaries
-from losses import competition_loss
-from dataset import GDPDataset
-from utils import resize_image_3d, reverse_resize_3d
+# Import local
+from config import *
 
-# Get config 
-with open('config.json', 'r') as f:
-    config = json.load(f)
-ROOT_DIR = config['PATH_OUTPUT']
-PATH_METADATA = config['PATH_METADATA']
 
 # Set up testing function
 @torch.no_grad()
@@ -114,7 +107,7 @@ if __name__ == '__main__':
 
     # Load model and dataset
     savename = 'model_All_Unet'
-    checkpoint_path = os.path.join(ROOT_DIR, f'{savename}.pth')
+    checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model, datasets, metadata = load_checkpoint(checkpoint_path)
     model.to(device)
 

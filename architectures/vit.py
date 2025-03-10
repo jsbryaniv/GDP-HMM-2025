@@ -16,8 +16,8 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), patch_size=None, patch_stride=None,
-        n_features=64, n_heads=4, n_layers=8,
+        shape=(128, 128, 128), patch_size=16, patch_stride=None,
+        n_features=64, n_features_top=8, n_heads=4, n_layers=8,
     ):
         super(ViT3D, self).__init__()
 
@@ -28,15 +28,12 @@ class ViT3D(nn.Module):
         if not isinstance(shape, tuple):
             # Convert shape to tuple
             shape = (shape, shape, shape)
-        if patch_size is None:
-            # Set default patch size (1/4 of shape)
-            patch_size = (shape[0] // 4, shape[1] // 4, shape[2] // 4)
-        elif not isinstance(patch_size, tuple):
+        if not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
         if patch_stride is None:
-            # Set default patch stride (1/4 of patch size)
-            patch_stride = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
+            # Set default patch stride (1/2 of patch size)
+            patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
         elif not isinstance(patch_stride, tuple):
             # Convert patch stride to tuple
             patch_stride = (patch_stride, patch_stride, patch_stride)
@@ -54,6 +51,7 @@ class ViT3D(nn.Module):
         self.shape = shape
         self.patch_size = patch_size
         self.n_features = n_features
+        self.n_features_top = n_features_top
         self.n_heads = n_heads
         self.n_layers = n_layers
 
@@ -71,38 +69,36 @@ class ViT3D(nn.Module):
         # Create input and output blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            nn.Conv3d(in_channels, n_features_top, kernel_size=1),
         )
         self.output_block = nn.Sequential(
-            # Mix channels
-            nn.Conv3d(n_features, n_features, kernel_size=1),
             # Smooth output
             nn.Conv3d(
-                n_features, n_features, 
-                kernel_size=2*max(patch_size)//2+1, padding=max(patch_size)//2,
-                groups=n_features//n_heads,
+                n_features_top, n_features_top, 
+                kernel_size=3, padding=1,
+                groups=n_features_top,
             ),
             # Project to output channels
-            nn.Conv3d(n_features, out_channels, kernel_size=1),
+            nn.Conv3d(n_features_top, out_channels, kernel_size=1),
         )
         
         # 3D Patch Embedding and Unembedding Layers
         self.patch_embed = nn.Sequential(
             nn.Conv3d(
-                n_features, 
+                n_features_top, 
                 n_features,
                 kernel_size=patch_size, 
                 stride=patch_stride,
-                groups=n_features  # Channel-wise patching
+                groups=n_features_top  # Channel-wise patching
             )
         )
         self.patch_unembed = nn.Sequential(
             nn.ConvTranspose3d(
                 n_features, 
-                n_features, 
+                n_features_top, 
                 kernel_size=patch_size, 
                 stride=patch_stride,
-                groups=n_features  # Channel-wise unpatching
+                groups=n_features_top  # Channel-wise unpatching
             )
         )
         
@@ -110,11 +106,6 @@ class ViT3D(nn.Module):
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
 
         # Transformer Encoders
-        # self.transformer_encoders = nn.ModuleList()
-        # for _ in range(n_layers//2):
-        #     self.transformer_encoders.append(
-        #         TransformerBlock(n_features, n_heads)
-        #     )
         self.transformer_encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 n_features, n_heads, 
@@ -125,11 +116,6 @@ class ViT3D(nn.Module):
         )
 
         # Transformer Decoders
-        # self.transformer_decoders = nn.ModuleList()
-        # for _ in range(n_layers//2):
-        #     self.transformer_decoders.append(
-        #         TransformerBlock(n_features, n_heads)
-        #     )
         self.transformer_decoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 n_features, n_heads, 
@@ -146,6 +132,7 @@ class ViT3D(nn.Module):
             'shape': self.shape,
             'patch_size': self.patch_size,
             'n_features': self.n_features,
+            'n_features_top': self.n_features_top,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
         }
@@ -197,6 +184,7 @@ class ViT3D(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
 
     # Create a model
