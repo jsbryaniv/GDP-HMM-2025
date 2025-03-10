@@ -17,7 +17,7 @@ class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
         shape=(128, 128, 128), patch_size=16, patch_stride=None,
-        n_features=64, n_features_top=8, n_heads=4, n_layers=8,
+        n_features=64, n_features_top=8, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
 
@@ -187,15 +187,16 @@ if __name__ == '__main__':
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
 
+    # Create data
+    shape = (64, 64, 64)
+    x = torch.randn(1, 36, *shape)
+
     # Create a model
     model = ViT3D(
         36, 1, 
-        shape=(128, 128, 128), 
+        shape=shape, 
     )
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
-
-    # Create data
-    x = torch.randn(1, 36, 128, 128, 128)
 
     # Forward pass
     y = model(x)

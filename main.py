@@ -129,13 +129,13 @@ if __name__ == '__main__':
     # for ITER in [0, 1]:
     #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
 
-    # # DEBUGGING all files
-    # for ID in range(len(all_jobs)):
-    #     for ITER in [0, 1]:
-    #         job_args = all_jobs[ID]
-    #         job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
-    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-    #         print('\n'*5)
+    # DEBUGGING all files
+    for ID in range(len(all_jobs)):
+        for ITER in [0, 1]:
+            job_args = all_jobs[ID]
+            job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+            print('\n'*5)
 
     # Run main function
     job_args = all_jobs[ID]
