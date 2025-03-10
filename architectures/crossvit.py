@@ -7,7 +7,6 @@ if __name__ == "__main__":
 # Import libraries
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 # Import custom libraries
 from architectures.vit import ViT3D
@@ -19,8 +18,9 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=(128, 128, 128), scale=2, patch_size=(4, 4, 4),
-        n_features=64, n_heads=4, n_layers=4, n_layers_context=6, n_mixing_blocks=4,
+        shape=(128, 128, 128), scale=4, patch_size=(8, 8, 8),
+        n_features=128, n_heads=4, n_layers=8,
+        n_layers_context=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
 
@@ -46,24 +46,27 @@ class CrossViT3d(nn.Module):
         self.n_heads = n_heads
         self.n_layers = n_layers
         self.n_layers_context = n_layers_context
+        self.n_layers_mixing = n_layers_mixing
 
         # Get constants
-        n_context = len(n_cross_channels_list)
+        patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
         shape_downscaled = (
             shape[0] // scale,
             shape[1] // scale,
             shape[2] // scale,
         )
         shape_patchgrid = (
-            shape_downscaled[0] // patch_size[0],
-            shape_downscaled[1] // patch_size[1],
-            shape_downscaled[2] // patch_size[2],
+            (shape_downscaled[0] - patch_size[0]) // patch_stride[0] + 1,
+            (shape_downscaled[1] - patch_size[1]) // patch_stride[1] + 1,
+            (shape_downscaled[2] - patch_size[2]) // patch_stride[2] + 1,
         )
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
-        self.n_context = n_context
-        self.n_patches = n_patches
+        n_context = len(n_cross_channels_list)
+        self.path_stride = patch_stride
         self.shape_downscaled = shape_downscaled
         self.shape_patchgrid = shape_patchgrid
+        self.n_patches = n_patches
+        self.n_context = n_context
         
         # Positional and Context Encoding
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, n_patches, n_features))
@@ -92,7 +95,7 @@ class CrossViT3d(nn.Module):
         # Create mixing blocks
         self.self_mixing_blocks = nn.ModuleList()   # Self attention
         self.cross_mixing_blocks = nn.ModuleList()  # Cross attention
-        for i in range(n_mixing_blocks):
+        for i in range(n_layers_mixing):
             self.self_mixing_blocks.append(
                 TransformerBlock(
                     n_features, n_heads=n_heads,
@@ -103,6 +106,22 @@ class CrossViT3d(nn.Module):
                     n_features, n_heads=n_heads,
                 )
             )
+    
+    def get_config(self):
+        """Get configuration."""
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'n_cross_channels_list': self.n_cross_channels_list,
+            'shape': self.shape,
+            'scale': self.scale,
+            'patch_size': self.patch_size,
+            'n_features': self.n_features,
+            'n_heads': self.n_heads,
+            'n_layers': self.n_layers,
+            'n_layers_context': self.n_layers_context,
+            'n_layers_mixing': self.n_layers_mixing,
+        }
 
     def forward(self, x, y_list):
         """
@@ -132,6 +151,18 @@ class CrossViT3d(nn.Module):
         
         # Return
         return x
+    
+    def autoencode_context(self, y_list):
+        """Autoencode context."""
+
+        # Encode y_list
+        y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+
+        # Decode y_list
+        y_list = [ae.decoder(fs) for ae, fs in zip(self.context_autoencoders, y_list)]
+
+        # Return the output
+        return y_list
 
 
 # Test the model
@@ -142,7 +173,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (64, 64, 64)
     n_channels = 4
     n_channels_context = [1, 4, 30]
 

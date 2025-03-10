@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 # Import custom classes
 from dataset import GDPDataset
-from utils import load_model_and_datasets, resize_image_3d, reverse_resize_3d
+from model import DosePredictionModel
 
 # Get config
 with open('config.json', 'r') as f:
@@ -19,15 +19,14 @@ path_output = config['PATH_OUTPUT']
 
 
 # Define dose predictor
-def package_results(model, model_type=None, shape=None):
+@torch.no_grad()
+def package_results(model):
 
     # Set model to evaluation mode
     model.eval()
     
     # Get constants
     device = next(model.parameters()).device
-    if isinstance(shape, int):
-        shape = (shape, shape, shape)
 
     # Initialize results folder
     path_results = os.path.join(path_output, 'val_results')  # Define path
@@ -42,17 +41,10 @@ def package_results(model, model_type=None, shape=None):
 
     # Loop over dataset
     print('Getting validation results...')
-    for i, (ct, beam, ptvs, oars, body) in enumerate(dataset):
+    for i, (scan, beam, ptvs, oars, body, dose) in enumerate(dataset):
         print(f'--{i}/{len(dataset)}')
 
         # Format data
-        scan0 = scan.clone()  # Copy scan for visualization
-        if shape is not None:
-            scan, transform_params = resize_image_3d(scan, shape)
-            beam, _ = resize_image_3d(beam, shape)
-            ptvs, _ = resize_image_3d(ptvs, shape)
-            oars, _ = resize_image_3d(oars, shape)
-            body, _ = resize_image_3d(body, shape)
         scan = scan.unsqueeze(0).to(device)
         beam = beam.unsqueeze(0).to(device)
         ptvs = ptvs.unsqueeze(0).to(device)
@@ -60,32 +52,24 @@ def package_results(model, model_type=None, shape=None):
         body = body.unsqueeze(0).to(device)
 
         # Get prediction
-        if model_type is None:
-            # All in one
-            x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
-            pred = model(x)
-        elif model_type == 'crossae':
-            # Cross attention
-            x = torch.cat([beam, ptvs], dim=1).clone()
-            y_list = [
-                scan, 
-                torch.cat([beam, ptvs], dim=1), 
-                torch.cat([oars, body], dim=1),
-            ]
-            pred = model(x, y_list)
-        
-        # Reverse formatting
-        pred = pred.squeeze(0)
-        if shape is not None:
-            pred = reverse_resize_3d(pred, transform_params)
-        pred = pred.detach().cpu().numpy()
+        pred = model(scan, beam, ptvs, oars, body)
+
+        # Unformat prediction and data
+        pred = pred.squeeze(0).cpu().numpy()
+        scan = scan.squeeze(0).cpu().numpy()
+        beam = beam.squeeze(0).cpu().numpy()
+        ptvs = ptvs.squeeze(0).cpu().numpy()
+        oars = oars.squeeze(0).cpu().numpy()
+        body = body.squeeze(0).cpu().numpy()
 
         # Plot
         fig, ax = plt.subplots(1, 2)
         plt.ion()
         plt.show()
-        ax[0].imshow(scan0[0, shape[0]//2, :, :])
-        ax[1].imshow(pred[0, shape[0]//2, :, :])
+        fig.suptitle(f'Prediction for {filenames[i]}')
+        z_slice = scan.shape[2] // 2
+        ax[0].imshow(scan[0, z_slice], cmap='gray')
+        ax[1].imshow(pred[0, z_slice], cmap='hot')
         plt.tight_layout()
         plt.pause(0.1)
         plt.savefig('_image.png')
@@ -117,13 +101,13 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Get model and metadata
-    savename = 'model_All_Unet'
-    model, _, metadata = load_model_and_datasets(savename)
-    shape = metadata['data_metadata']['shape']
+    savename = 'model_All_Unet_shape=128'
+    savepath = os.path.join(path_output, f'{savename}.pth')
+    model = DosePredictionModel.from_checkpoint(savepath)
     model.to(device)
 
     # Get validation results
-    path_results = package_results(model, shape=shape)
+    path_results = package_results(model)
 
     # Done
     print('Done!')

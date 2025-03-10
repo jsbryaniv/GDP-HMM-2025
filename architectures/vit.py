@@ -16,8 +16,8 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), scale=2, patch_size=(8, 8, 8),
-        n_features=64, n_heads=8, n_layers=8,
+        shape=(128, 128, 128), scale=4, patch_size=(8, 8, 8),
+        n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
 
@@ -63,8 +63,6 @@ class ViT3D(nn.Module):
 
         # Create input and output blocks
         self.input_block = nn.Sequential(
-            # # Normalize
-            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
         )

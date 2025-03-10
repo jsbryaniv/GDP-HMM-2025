@@ -217,45 +217,6 @@ def initialize_model(modelID, in_channels, **kwargs):
     model = DosePredictionModel(modelID, in_channels, **kwargs)
     return model
 
-# Load trained model and dataset
-def load_model_and_datasets(savename):
-
-    # Load metadata
-    with open(os.path.join(ROOT_DIR, f'{savename}.json'), 'r') as f:
-        metadata = json.load(f)
-
-    # Extract metadata
-    dataID = metadata['dataID']
-    modelID = metadata['modelID']
-    data_kwargs = metadata['data_kwargs']
-    model_kwargs = metadata['model_kwargs']
-    train_kwargs = metadata['train_kwargs']
-    indices_train = metadata['indices_train']
-    indices_val = metadata['indices_val']
-    indices_test = metadata['indices_test']
-    training_statistics = metadata['training_statistics']
-    
-    # Load dataset
-    dataset, data_metadata = initialize_dataset(dataID, **data_kwargs)
-    in_channels = data_metadata['in_channels']
-    out_channels = data_metadata['out_channels']
-    # Split into train, validation, and test sets
-    dataset_train = Subset(dataset, indices_train)
-    dataset_val = Subset(dataset, indices_val)
-    dataset_test = Subset(dataset, indices_test)
-    # Package into tuple
-    datasets = (dataset_train, dataset_val, dataset_test)
-
-    # Load model
-    model = initialize_model(modelID, in_channels, out_channels, **model_kwargs)
-    # Load weights from file
-    model_state_dict = torch.load(os.path.join(ROOT_DIR, f'{savename}.pth'), weights_only=True)
-    model.load_state_dict(model_state_dict)
-
-    # Return outputs
-    return model, datasets, metadata
-
-
 # Save checkpoint
 def save_checkpoint(checkpoint_path, model, datasets, metadata):
     torch.save(

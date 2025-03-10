@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 # Import custom libraries
 from losses import competition_loss, dvh_loss
-from utils import resize_image_3d, reverse_resize_3d
+from utils import resize_image_3d, reverse_resize_3d, block_mask_3d
 
 
 # Create dose prediction model
@@ -55,6 +55,17 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = CrossAttnAEModel(**kwargs)
+        elif architecture.lower() == "crossvit":
+            # CrossViT3d
+            from architectures.crossvit import CrossViT3d
+            kwargs = {
+                'in_channels': 4,
+                'out_channels': 1,
+                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
+                'shape': shape,
+                **kwargs,
+            }
+            self.model = CrossViT3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         
@@ -100,7 +111,7 @@ class DosePredictionModel(nn.Module):
             # Concatenate inputs
             x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
             inputs = (x,)
-        elif self.architecture.lower() in ["crossattnae"]:
+        elif self.architecture.lower() in ["crossattnae", "crossvit"]:
             # Separate contexts
             x = torch.cat([beam, ptvs], dim=1).clone()
             y_list = [
@@ -171,10 +182,28 @@ class DosePredictionModel(nn.Module):
 
         # Compute reconstruction loss
         if self.architecture in ['crossae']:
+            """Compute reconstruction loss for cross-attention-unet."""
             # Get context
             y_list = inputs[1]
             # Get reconstructions
             recons = model.autoencode_context(y_list)
+            # Compute likelihood loss
+            likelihood_recon = (
+                F.mse_loss(y_list[0], recons[0])
+                + F.mse_loss(y_list[1], recons[1])
+                + F.binary_cross_entropy_with_logits(recons[2], y_list[2])  # Use BCE for binary masks
+            )
+            # Combine losses
+            likelihood += likelihood_recon
+
+        elif self.architecture in ['crossvit']:
+            """Compute reconstruction loss for cross-attention-vit."""
+            # Get context
+            y_list = inputs[1]
+            # Corrupt context
+            y_list_corrupt = [block_mask_3d(y, p=0.5) for y in y_list]
+            # Get reconstructions
+            recons = model.autoencode_context(y_list_corrupt)
             # Compute likelihood loss
             likelihood_recon = (
                 F.mse_loss(y_list[0], recons[0])
@@ -222,7 +251,7 @@ class DosePredictionModel(nn.Module):
 if __name__ == "__main__":
     
     # Initialize model
-    model = DosePredictionModel(architecture="unet", in_channels=5, out_channels=1)
+    model = DosePredictionModel(architecture="crossvit", n_channels=5)
     
     # Initialize inputs
     scan = torch.randn(1, 1, 32, 32, 32)

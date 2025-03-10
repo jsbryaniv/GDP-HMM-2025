@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 
 # Import custom libaries
 from test import test_model
-from utils import get_dvh, load_model_and_datasets
+from utils import get_dvh, load_checkpoint
 from losses import competition_loss
 from plotting import plot_losses, copy_axis
 
@@ -251,7 +251,8 @@ if __name__ == '__main__':
         for savename in all_jobs:
 
             # Load model and dataset
-            model, datasets, metadata = load_model_and_datasets(savename)
+            checkpoint_path = os.path.join(ROOT_DIR, f'{savename}.pth')
+            model, datasets, metadata = load_checkpoint(checkpoint_path)
 
             # Plot losses
             losses_train = metadata['training_statistics']['losses_train']

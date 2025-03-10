@@ -7,7 +7,6 @@ if __name__ == "__main__":
 # Import libraries
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 # Import custom libraries
 from architectures.unet import Unet3D

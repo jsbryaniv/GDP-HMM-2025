@@ -106,15 +106,16 @@ def test_model(model, dataset_test, debug=False):
 if __name__ == '__main__':
 
     # Import custom libraries
-    from utils import load_model_and_datasets
+    from utils import load_checkpoint
 
     # Get device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = 'cpu'
 
-    # Load model and datasets
+    # Load model and dataset
     savename = 'model_All_Unet'
-    model, datasets, metadata = load_model_and_datasets(savename)
+    checkpoint_path = os.path.join(ROOT_DIR, f'{savename}.pth')
+    model, datasets, metadata = load_checkpoint(checkpoint_path)
     model.to(device)
 
     # Test model
