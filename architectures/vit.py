@@ -16,22 +16,37 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), patch_size=(16, 16, 16),
-        n_features=128, n_heads=4, n_layers=16,
+        shape=(128, 128, 128), patch_size=None, patch_stride=None,
+        n_features=64, n_heads=4, n_layers=8,
     ):
         super(ViT3D, self).__init__()
 
         # Check inputs
         if n_layers % 2 != 0:
+            # Number of layers must be even
             raise ValueError('Number of layers must be even!')
         if not isinstance(shape, tuple):
+            # Convert shape to tuple
             shape = (shape, shape, shape)
-        if not isinstance(patch_size, tuple):
+        if patch_size is None:
+            # Set default patch size (1/4 of shape)
+            patch_size = (shape[0] // 4, shape[1] // 4, shape[2] // 4)
+        elif not isinstance(patch_size, tuple):
+            # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
+        if patch_stride is None:
+            # Set default patch stride (1/4 of patch size)
+            patch_stride = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
+        elif not isinstance(patch_stride, tuple):
+            # Convert patch stride to tuple
+            patch_stride = (patch_stride, patch_stride, patch_stride)
         for i in range(3):
+            # Check if shape is divisible by patch size
             if shape[i] % patch_size[i] != 0:
                 raise ValueError('Shape must be divisible by patch size!')
-        
+            # Check if patch size is divisible by patch stride
+            if patch_size[i] % patch_stride[i] != 0:
+                raise ValueError('Patch size must be divisible by patch stride!')
         
         # Set attributes
         self.in_channels = in_channels
@@ -43,7 +58,6 @@ class ViT3D(nn.Module):
         self.n_layers = n_layers
 
         # Calculate constants
-        patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
         shape_patchgrid = (
             (shape[0] - patch_size[0]) // patch_stride[0] + 1,
             (shape[1] - patch_size[1]) // patch_stride[1] + 1,
