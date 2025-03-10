@@ -122,12 +122,12 @@ if __name__ == '__main__':
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
     
-    # DEBUGGING one file
-    ID = 0
-    job_args = all_jobs[ID]
-    job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
-    for ITER in [0, 1]:
-        model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+    # # DEBUGGING one file
+    # ID = 0
+    # job_args = all_jobs[ID]
+    # job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    # for ITER in [0, 1]:
+    #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
 
     # # DEBUGGING all files
     # for ID in range(len(all_jobs)):
