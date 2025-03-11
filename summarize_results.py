@@ -232,13 +232,13 @@ if __name__ == '__main__':
         # Get all jobs
         if dataID == 'Lung':
             all_jobs = [
-                'model_Lung_CrossAttnAE',
+                'model_Lung_CrossAttnUnet',
                 'model_Lung_Unet',
                 'model_Lung_ViT',
             ]
         elif dataID == 'HaN':
             all_jobs = [
-                'model_HaN_CrossAttnAE',
+                'model_HaN_CrossAttnUnet',
                 'model_HaN_Unet',
                 'model_HaN_ViT',
             ]

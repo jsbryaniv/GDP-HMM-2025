@@ -185,13 +185,18 @@ if __name__ == '__main__':
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
 
+    # Set constants
+    in_channels = 36
+    out_channels = 1
+    shape = (256, 256, 256)
+
     # Create data
-    shape = (64, 64, 64)
-    x = torch.randn(1, 36, *shape)
+    x = torch.randn(1, in_channels, *shape)
 
     # Create a model
     model = ViT3D(
-        36, 1, 
+        in_channels=in_channels,
+        out_channels=out_channels,
         shape=shape, 
     )
 
@@ -202,11 +207,8 @@ if __name__ == '__main__':
         print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Forward pass
-    y = model(x)
-
-    # Backward pass
-    loss = y.sum()
-    loss.backward()
+    with torch.no_grad():
+        y = model(x)
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)

@@ -139,24 +139,34 @@ if __name__ == '__main__':
 
     # Set constants
     shape = (64, 64, 64)
-    n_channels = 4
+    in_channels = 4
+    out_channels = 1
     n_channels_context = [1, 4, 30]
+
+    # Create data
+    x = torch.randn(1, in_channels, *shape)
+    context_list = [torch.randn(1, n, *shape) for n in n_channels_context]
 
     # Create a model
     model = CrossViT3d(
-        n_channels, 1, n_channels_context,
+        in_channels, 
+        out_channels, 
+        n_channels_context,
         shape=shape
     )
 
-    # Print model structure
+    # Print model parameter info
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
     print('Number of parameters in blocks:')
     for name, block in model.named_children():
         print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
-    # Create data
-    x = torch.randn(1, n_channels, *shape)
-    context_list = [torch.randn(1, n, *shape) for n in n_channels_context]
+    # Forward pass
+    with torch.no_grad():
+        y = model(x, context_list)
+
+
+    #### Estimate memory usage ####
 
     # Measure memory before execution
     process = psutil.Process(os.getpid())

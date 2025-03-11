@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvformerBlock3d
+from architectures.blocks import ConvformerEncoder3d
 
 
 # Define full convolutional transformer model
@@ -18,7 +18,7 @@ class ConvformerModel(nn.Module):
     """Full Convolutional Transformer model"""
     def __init__(self,
         in_channels, out_channels,
-        n_features=8, n_layers=4, n_heads=2, kernel_size=3
+        n_features=32, n_layers=16, n_heads=4, kernel_size=5, expansion=1,
     ):
         super(ConvformerModel, self).__init__()
 
@@ -29,37 +29,46 @@ class ConvformerModel(nn.Module):
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.kernel_size = kernel_size
+        self.expansion = expansion
 
         # Define input block
         self.input_block = nn.Sequential(
-            # # Normalize
-            # nn.GroupNorm(in_channels, in_channels),
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=3, padding=1),
         )
 
-        # Define layers
-        self.layers = nn.ModuleList()
-        for _ in range(n_layers):
-            self.layers.append(
-                nn.Sequential(
-                    ConvformerBlock3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
-                )
-            )
+        # Define convformer encoder
+        self.convformer = ConvformerEncoder3d(
+            n_features=n_features,
+            n_layers=n_layers,
+            kernel_size=kernel_size,
+            n_heads=n_heads,
+            expansion=expansion,
+        )
 
         # Define output block
         self.output_block = nn.Sequential(
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
 
+    def get_config(self):
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'n_features': self.n_features,
+            'n_layers': self.n_layers,
+            'n_heads': self.n_heads,
+            'kernel_size': self.kernel_size,
+            'expansion': self.expansion,
+        }
+
     def forward(self, x):
         
         # Input block
         x = self.input_block(x)
 
-        # Transformer layers
-        for i, layer in enumerate(self.layers):
-            x = layer(x)
+        # Convformer layers
+        x = self.convformer(x)
 
         # Output block
         x = self.output_block(x)
@@ -72,20 +81,32 @@ class ConvformerModel(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
 
-    # Create a model
-    model = ConvformerModel(36, 1)
+    # Set constants
+    in_channels = 36
+    out_channels = 1
+    shape = (64, 64, 64)
 
     # Create data
-    x = torch.randn(1, 36, 128, 128, 128)
+    x = torch.randn(1, in_channels, *shape)
+
+    # Create a model
+    model = ConvformerModel(
+        in_channels, 
+        out_channels,
+    )
+
+    # Print model structure
+    print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
+    print('Number of parameters in blocks:')
+    for name, block in model.named_children():
+        print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Forward pass
-    y = model(x)
-
-    # Backward pass
-    loss = y.sum()
-    loss.backward()
+    with torch.no_grad():
+        y = model(x)
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)

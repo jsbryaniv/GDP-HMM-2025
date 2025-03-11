@@ -17,7 +17,7 @@ from architectures.blocks import ConvBlock
 class Unet3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        n_features=16, n_groups=4, n_blocks=4, n_layers_per_block=4, 
+        n_features=4, n_groups=1, n_blocks=5, n_layers_per_block=4, 
     ):
         super(Unet3D, self).__init__()
         
@@ -60,9 +60,8 @@ class Unet3D(nn.Module):
         n_out = n_features_per_depth[-1]
         self.bottleneck = ConvBlock(n_in, n_out, groups=n_groups)
 
-        # Define upsample and merge blocks
+        # Define upsample blocks
         self.up_blocks = nn.ModuleList()
-        self.merge_blocks = nn.ModuleList()
         for i in range(n_blocks):
             depth = self.n_blocks - 1 - i
             n_in = n_features_per_depth[depth+1]
@@ -73,11 +72,6 @@ class Unet3D(nn.Module):
                     ConvBlock(n_in, n_out, groups=n_groups, upsample=True),
                     # Additional convolutional layers
                     *[ConvBlock(n_out, n_out, groups=n_groups) for _ in range(n_layers_per_block - 1)]
-                )
-            )
-            self.merge_blocks.append(
-                nn.Sequential(
-                    ConvBlock(2*n_out, n_out, kernel_size=1),
                 )
             )
 
@@ -135,8 +129,7 @@ class Unet3D(nn.Module):
             x = block(x)
             # Merge with skip
             x_skip = feats.pop()
-            x = torch.cat([x, x_skip], dim=1)
-            x = self.merge_blocks[i](x)
+            x = x + x_skip
 
         # Output block
         x = self.output_block(x)
@@ -150,19 +143,31 @@ if __name__ == '__main__':
 
     # Import custom libraries
     from utils import estimate_memory_usage
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
 
-    # Create a model
-    model = Unet3D(36, 1)
+    # Set constants
+    in_channels = 36
+    out_channels = 1
+    shape = (256, 256, 256)
 
     # Create data
-    x = torch.randn(1, 36, 128, 128, 128)
+    x = torch.randn(1, in_channels, *shape)
+
+    # Create a model
+    model = Unet3D(
+        in_channels=in_channels, 
+        out_channels=out_channels,
+    )
+
+    # Print model parameter info
+    print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
+    print('Number of parameters in blocks:')
+    for name, block in model.named_children():
+        print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Forward pass
-    y = model(x)
-
-    # Backward pass
-    loss = y.sum()
-    loss.backward()
+    with torch.no_grad():
+        y = model(x)
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)

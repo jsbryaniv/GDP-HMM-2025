@@ -6,6 +6,31 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 
+### NORMALIZATION BLOCKS ###
+
+# Volume normalization
+class VoxelNorm3d(nn.Module):
+    """
+    Normalize each voxel independently across channels.
+    """
+    def __init__(self, num_channels, eps=1e-5):
+        super(VoxelNorm3d, self).__init__()
+        self.norm = nn.LayerNorm(num_channels, eps=eps)
+
+    def forward(self, x):
+
+        # Reshape to (B, D, H, W, C) so LayerNorm normalizes over C
+        x = x.permute(0, 2, 3, 4, 1)
+
+        # Apply normalization
+        x = self.norm(x)
+
+        # Restore original shape (B, C, D, H, W)
+        x = x.permute(0, 4, 1, 2, 3)
+
+        # Return output
+        return x
+
 ### CONVOLUTIONAL BLOCK ###
 
 # Convolutional block
@@ -170,8 +195,9 @@ class CrossTransformerBlock(nn.Module):
         n_features_inner = int(n_features * expansion)
         self.n_features_inner = n_features_inner
 
-        # Set up multi-head self-attention
+        # Set up multi-head attention
         self.self_attn = nn.MultiheadAttention(n_features, n_heads, batch_first=True)
+        self.cross_attn = nn.MultiheadAttention(n_features, n_heads, batch_first=True)
 
         # Set up feedforward layer
         self.mlp = nn.Sequential(
@@ -184,17 +210,23 @@ class CrossTransformerBlock(nn.Module):
         self.norm1 = nn.LayerNorm(n_features)
         self.norm2 = nn.LayerNorm(n_features)
         self.norm3 = nn.LayerNorm(n_features)
+        self.norm4 = nn.LayerNorm(n_features)
 
     def forward(self, x, y):
-
+        
         # Apply self-attention
         x_normed = self.norm1(x)
-        y_normed = self.norm2(y)  # Normalize context separately
-        attn_output, _ = self.self_attn(x_normed, y_normed, y_normed)
+        attn_output, _ = self.self_attn(x_normed, x_normed, x_normed)
+        x = x + attn_output
+
+        # Apply cross-attention
+        x_normed = self.norm2(x)
+        y_normed = self.norm3(y)  # Normalize context separately
+        attn_output, _ = self.cross_attn(x_normed, y_normed, y_normed)
         x = x + attn_output
 
         # Feedforward layer
-        x = x + self.mlp(self.norm3(x))
+        x = x + self.mlp(self.norm4(x))
 
         return x
 
@@ -282,38 +314,11 @@ class ConvAttn3d(nn.Module):
         # Return output
         return out
 
-# Test the ConvAttn3d
-if __name__ == "__main__":
-
-    import time
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    class MyModel(nn.Module):
-        def __init__(self, n_layers=100, n_features=64):
-            super(MyModel, self).__init__()
-            self.layers = nn.ModuleList([
-                ConvAttn3d(n_features, kernel_size=5) for _ in range(n_layers)
-            ])
-        def forward(self, x):
-            for layer in self.layers:
-                x = layer(x, x, x)
-            return x
-        
-    model = MyModel().to(device)
-    x = torch.randn(1, 64, 32, 32, 32)
-    x = x.to(device)
-
-    t = time.time()
-    y = model(x)
-    dt = time.time() - t
-    print('Time:', dt)
-    print('Output shape:', y.shape)
-    
 
 # Make confolutional multi-head attention block
 class MultiheadConvAttn3d(nn.Module):
     """Applies multi-head self-attention within a local receptive field defined by a kernel"""
-    def __init__(self, n_features, kernel_size=3, n_heads=4):
+    def __init__(self, n_features, kernel_size=3, n_heads=1):
         super(MultiheadConvAttn3d, self).__init__()
 
         # Set attributes
@@ -378,8 +383,8 @@ class ConvformerBlock3d(nn.Module):
         )
 
         # Set up normalization layers
-        self.norm1 = nn.InstanceNorm3d(n_features)
-        self.norm2 = nn.InstanceNorm3d(n_features)
+        self.norm1 = VoxelNorm3d(n_features)
+        self.norm2 = VoxelNorm3d(n_features)
 
     def forward(self, x):
 
@@ -410,6 +415,7 @@ class ConvformerCrossBlock3d(nn.Module):
         self.n_features_inner = n_features_inner
 
         # Multi-head cross-attention
+        self.self_attn = MultiheadConvAttn3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
         self.cross_attn = MultiheadConvAttn3d(n_features, kernel_size=kernel_size, n_heads=n_heads)
 
         # Feedforward layer
@@ -420,9 +426,10 @@ class ConvformerCrossBlock3d(nn.Module):
         )
 
         # Normalization layers
-        self.norm1 = nn.InstanceNorm3d(n_features)
-        self.norm2 = nn.InstanceNorm3d(n_features)
-        self.norm3 = nn.InstanceNorm3d(n_features)
+        self.norm1 = VoxelNorm3d(n_features)
+        self.norm2 = VoxelNorm3d(n_features)
+        self.norm3 = VoxelNorm3d(n_features)
+        self.norm4 = VoxelNorm3d(n_features)
 
     def forward(self, x, y):
         """
@@ -430,17 +437,85 @@ class ConvformerCrossBlock3d(nn.Module):
         y is the context tensor
         """
 
-        # Apply cross-attention
+        # Apply self-attention
         x_normed = self.norm1(x)
-        y_normed = self.norm2(y)  # Normalize context separately
+        attn_output = self.self_attn(x_normed, x_normed, x_normed)
+        x = x + attn_output
+
+        # Apply cross-attention
+        x_normed = self.norm2(x)
+        y_normed = self.norm3(y)  # Normalize context separately
         attn_output = self.cross_attn(x_normed, y_normed, y_normed)
         x = x + attn_output
 
         # Feedforward layer
-        x = x + self.mlp(self.norm3(x))
+        x = x + self.mlp(self.norm4(x))
 
         return x
 
+
+# Define convformer encoder
+class ConvformerEncoder3d(nn.Module):
+    """Stack of ConvformerBlock3d layers acting as an encoder."""
+    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1):
+        super(ConvformerEncoder3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.n_layers = n_layers
+        self.kernel_size = kernel_size
+        self.n_heads = n_heads
+        self.expansion = expansion
+
+        # Create a list of Convformer layers
+        self.layers = nn.ModuleList([
+            ConvformerBlock3d(
+                n_features=n_features,
+                kernel_size=kernel_size,
+                n_heads=n_heads,
+                expansion=expansion,
+            ) 
+            for _ in range(n_layers)
+        ])
+
+    def forward(self, x):
+        # Pass through each Convformer layer
+        for layer in self.layers:
+            x = layer(x)
+        # Return output
+        return x
+
+
+# Define convformer decoder
+class ConvformerDecoder3d(nn.Module):
+    """Stack of ConvformerCrossBlock3d layers acting as a decoder."""
+    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1):
+        super(ConvformerDecoder3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.n_layers = n_layers
+        self.kernel_size = kernel_size
+        self.n_heads = n_heads
+        self.expansion = expansion
+
+        # Create a list of Convformer cross-attention layers
+        self.layers = nn.ModuleList([
+            ConvformerCrossBlock3d(
+                n_features=n_features,
+                kernel_size=kernel_size,
+                n_heads=n_heads,
+                expansion=expansion,
+            ) 
+            for _ in range(n_layers)
+        ])
+
+    def forward(self, x, y):
+        # Pass through each cross-attention layer
+        for layer in self.layers:
+            x = layer(x, y)
+        # Return output
+        return x
 
 ### VOLUMETRIC TRANSFORMER BLOCKS ###
 
@@ -549,9 +624,9 @@ class VolCrossTransformer3d(nn.Module):
         )
 
         # Set up normalization layers
-        self.norm1 = nn.InstanceNorm3d(n_features)
-        self.norm2 = nn.InstanceNorm3d(n_features)
-        self.norm_context = nn.ModuleList([nn.InstanceNorm3d(n_features) for _ in range(n_context)])
+        self.norm1 = VoxelNorm3d(n_features)
+        self.norm2 = VoxelNorm3d(n_features)
+        self.norm_context = nn.ModuleList([VoxelNorm3d(n_features) for _ in range(n_context)])
 
     def forward(self, x, y_list):
 

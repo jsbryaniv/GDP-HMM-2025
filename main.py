@@ -43,11 +43,11 @@ def main(
     else:
         # Initialize datasets and model
         print("Initializing datasets and model.")
-        datasets = initialize_datasets(dataID)                                       # Initialize datasets
-        dataset_val, dataset_test, dataset_train = datasets                          # Unpack datasets
-        n_channels = dataset_train.dataset.n_channels                                # Get number of channels
+        datasets = initialize_datasets(dataID)                         # Initialize datasets
+        dataset_val, dataset_test, dataset_train = datasets            # Unpack datasets
+        n_channels = dataset_train.dataset.n_channels                  # Get number of channels
         model = initialize_model(modelID, n_channels, **model_kwargs)  # Initialize model
-        metadata = {                                                                 # Initialize metadata
+        metadata = {                                                   # Initialize metadata
             'dataID': dataID,
             'modelID': modelID,
             'model_kwargs': model_kwargs,
@@ -105,16 +105,35 @@ def main(
 # Run main function
 if __name__ == '__main__':
 
+    # Set up all models
+    modelIDs = [
+        'CrossVit', 
+        'CrossAttnUnet', 
+        'Convformer',
+        'ViT', 
+        'Unet',
+    ]
+
     # Set job IDs
     all_jobs = []
     for dataID in ['All']:
-        for modelID in ['CrossVit', 'CrossAttnAE', 'ViT', 'Unet',]:
+        for modelID in ['CrossVit', 'CrossAttnUnet', 'ViT', 'Unet',]:
+
+            # Get model info
+            if modelID in ['CrossVit', 'ViT']:
+                shape = 64
+            elif modelID in ['CrossAttnUnet']:
+                shape = 128
+            elif modelID in ['Unet']:
+                shape = 256
 
             # Add job
             all_jobs.append({
                 'dataID': dataID, 
                 'modelID': modelID,
-                'model_kwargs': {'shape': 128},
+                'model_kwargs': {
+                    'shape': shape
+                },
             })
     
     # Get training IDs from system arguments
@@ -125,7 +144,7 @@ if __name__ == '__main__':
     # # DEBUGGING one file
     # ID = 0
     # job_args = all_jobs[ID]
-    # job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    # job_args['model_kwargs']['shape'] = job_args['model_kwargs']['shape']//2  # Set shape smaller for debugging
     # for ITER in [0, 1]:
     #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
 
@@ -133,7 +152,7 @@ if __name__ == '__main__':
     # for ID in range(len(all_jobs)):
     #     for ITER in [0, 1]:
     #         job_args = all_jobs[ID]
-    #         job_args['model_kwargs']['shape'] = 64  # Set shape to 64 for debugging
+    #         job_args['model_kwargs']['shape'] = job_args['model_kwargs']['shape']//2  # Set shape smaller for debugging
     #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
     #         print('\n'*5)
 

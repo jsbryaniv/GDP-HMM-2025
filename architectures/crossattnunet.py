@@ -10,19 +10,19 @@ import torch.nn as nn
 
 # Import custom libraries
 from architectures.unet import Unet3D
-from architectures.blocks import ConvBlock, VolCrossTransformer3d
+from architectures.blocks import ConvformerDecoder3d
 
 
-# Define cross attention autoencoder model
-class CrossAttnAEModel(nn.Module):
-    """Cross attention autoencoder model."""
+# Define cross attention unet model
+class CrossAttnUnetModel(nn.Module):
+    """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=8, n_blocks=4, 
-        n_layers_per_block=4, n_layers_per_block_context=2,
-        n_heads=4, n_attn_repeats=2,
+        n_features=8, n_blocks=5, 
+        n_layers_per_block=4, n_layers_per_block_context=4,
+        n_attn_repeats=2, attn_kernel_size=5,
     ):
-        super(CrossAttnAEModel, self).__init__()
+        super(CrossAttnUnetModel, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
@@ -33,7 +33,7 @@ class CrossAttnAEModel(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.n_layers_per_block_context = n_layers_per_block_context
         self.n_attn_repeats = n_attn_repeats
-        self.n_heads = n_heads
+        self.attn_kernel_size = attn_kernel_size
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -61,36 +61,24 @@ class CrossAttnAEModel(nn.Module):
                     n_layers_per_block=n_layers_per_block_context,
                 )
             )
+
+        # Create cross attention blocks
+        self.cross_attn_blocks = nn.ModuleList()
+        for depth in range(n_blocks+1):
+            self.cross_attn_blocks.append(
+                ConvformerDecoder3d(
+                    n_features_per_depth[depth], 
+                    kernel_size=attn_kernel_size,
+                    n_heads=depth+1,
+                    n_layers=n_attn_repeats,
+                )
+            )
         
         # Create context feature dropout layers
         self.context_dropout = nn.ModuleList()
         for depth in range(n_blocks+1):
             p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at last layer; slightly over half at first
             self.context_dropout.append(nn.Dropout(p=p))
-
-        
-        ### LATENT MIXING BLOCKS ###
-
-        # Create self convformer blocks
-        self.self_mixing_blocks = nn.ModuleList()
-        for depth in range(n_blocks+1):
-            n_in = n_features_per_depth[depth]
-            n_out = n_features_per_depth[depth]
-            self.self_mixing_blocks.append(
-                nn.Sequential(
-                    *[ConvBlock(n_in, n_out, groups=n_heads) for _ in range(n_layers_per_block)]
-                )
-            )
-
-        # Create cross convformer blocks
-        self.cross_mixing_blocks = nn.ModuleList()
-        for depth in range(n_blocks+1):
-            self.cross_mixing_blocks.append(
-                VolCrossTransformer3d(
-                    n_features_per_depth[depth], n_context,
-                    n_heads=n_heads
-                )
-            )
     
     def get_config(self):
         """Get configuration."""
@@ -103,7 +91,7 @@ class CrossAttnAEModel(nn.Module):
             'n_layers_per_block': self.n_layers_per_block,
             'n_layers_per_block_context': self.n_layers_per_block_context,
             'n_attn_repeats': self.n_attn_repeats,
-            'n_heads': self.n_heads,
+            'attn_kernel_size': self.attn_kernel_size,
         }
 
     def forward(self, x, y_list):
@@ -112,35 +100,30 @@ class CrossAttnAEModel(nn.Module):
         y is a list of context tensors.
         """
 
-        # Encode y_list
-        f_con_blk = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
-        f_blk_con = [[f for f in row] for row in zip(*f_con_blk)]  # Transpose list of lists
-
         # Encode x
         feats = self.autoencoder.encoder(x)
         x = feats.pop()
 
+        # Encode y_list and sum features at each depth
+        f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+        f_context = [sum([f for f in row]) for row in zip(*f_context)]
+
         # Apply context
-        fcon = f_blk_con[-1]
         depth = self.n_blocks
-        for _ in range((depth+1)*self.n_attn_repeats):
-            x = self.cross_mixing_blocks[depth](x, fcon)
-            x = self.self_mixing_blocks[depth](x)
+        fcon = f_context[-1]
+        x = self.cross_attn_blocks[depth](x, fcon)
 
         # Upsample blocks
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.up_blocks[i](x)  # TODO: Switch from i index to depth index
+            x = self.autoencoder.up_blocks[i](x)
             # Merge with skip
             x_skip = feats[depth]
-            x = torch.cat([x, x_skip], dim=1)
-            x = self.autoencoder.merge_blocks[i](x)  # TODO: Switch from i index to depth index
-            # Apply context
-            fcon = f_blk_con[depth]
-            for _ in range((depth+1)*self.n_attn_repeats):
-                x = self.cross_mixing_blocks[depth](x, fcon)
-                x = self.self_mixing_blocks[depth](x)
+            x = x + x_skip
+            # Apply cross attention
+            fcon = f_context[depth]
+            x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
         x = self.autoencoder.output_block(x)
@@ -171,14 +154,34 @@ if __name__ == '__main__':
 
     # Import custom libraries
     import psutil
-    from utils import estimate_memory_usage
 
-    # Create a model
-    model = CrossAttnAEModel(3, 1, (1, 1, 2, 8))
+    # Set constants
+    shape = (128, 128, 128)
+    in_channels = 3
+    out_channels = 1
+    n_cross_channels_list = [1, 1, 2, 8]
 
     # Create data
-    x = torch.randn(1, 3, 128, 128, 128)
-    context_list = [torch.randn(1, c, 128, 128, 128) for c in (1, 1, 2, 8)]
+    x = torch.randn(1, in_channels, *shape)
+    context_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
+
+    # Create a model
+    model = CrossAttnUnetModel(
+        in_channels, out_channels, n_cross_channels_list,
+    )
+
+    # Print model parameter info
+    print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
+    print('Number of parameters in blocks:')
+    for name, block in model.named_children():
+        print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
+
+    # Forward pass
+    with torch.no_grad():
+        y = model(x, context_list)
+
+
+    #### Estimate memory usage ####
 
     # Measure memory before execution
     process = psutil.Process(os.getpid())
@@ -193,7 +196,6 @@ if __name__ == '__main__':
 
     # Measure memory after execution
     mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-    print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
     print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
 
     # Done
