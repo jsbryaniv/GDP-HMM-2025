@@ -68,6 +68,7 @@ All_OAR_DICT = {key: i for i, key in enumerate(All_OAR_LIST)}
 class GDPDataset(Dataset):
     def __init__(self, treatment, validation_set=False):
         super(GDPDataset, self).__init__()
+        # Max shape of dataset in each dimension: (138, 148, 229)
 
         # Get treatment
         if treatment is None:
@@ -218,7 +219,7 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='All', 
+        treatment='HaN', 
         validation_set=True,
     )
 
@@ -227,6 +228,7 @@ if __name__ == "__main__":
     for i in range(len(dataset)):
         # Get data
         scan, beam, ptvs, oars, body, dose = dataset[i]
+        # Print
         print(i, scan.shape)
         # Plot data
         fig, ax = plt.subplots(1, 1)
@@ -238,6 +240,7 @@ if __name__ == "__main__":
         plt.pause(0.1)
         plt.savefig('_image.png')
         plt.close()
+
 
     # Done
     print("Done")

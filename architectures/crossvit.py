@@ -18,35 +18,11 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=128, patch_size=16, patch_stride=None,
-        n_features=64, n_heads=4, n_layers=8,
-        n_layers_context=8, n_layers_mixing=8,
+        shape=64, patch_size=8, patch_stride=None,
+        n_features=128, n_heads=4, 
+        n_layers=8, n_layers_context=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
-
-        # Check inputs
-        if n_layers % 2 != 0:
-            # Number of layers must be even
-            raise ValueError('Number of layers must be even!')
-        if not isinstance(shape, tuple):
-            # Convert shape to tuple
-            shape = (shape, shape, shape)
-        if not isinstance(patch_size, tuple):
-            # Convert patch size to tuple
-            patch_size = (patch_size, patch_size, patch_size)
-        if patch_stride is None:
-            # Set default patch stride (1/2 of patch size)
-            patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
-        elif not isinstance(patch_stride, tuple):
-            # Convert patch stride to tuple
-            patch_stride = (patch_stride, patch_stride, patch_stride)
-        for i in range(3):
-            # Check if shape is divisible by patch size
-            if shape[i] % patch_size[i] != 0:
-                raise ValueError('Shape must be divisible by patch size!')
-            # Check if patch size is divisible by patch stride
-            if patch_size[i] % patch_stride[i] != 0:
-                raise ValueError('Patch size must be divisible by patch stride!')
             
         # Set attributes
         self.in_channels = in_channels
@@ -54,30 +30,12 @@ class CrossViT3d(nn.Module):
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
         self.patch_size = patch_size
+        self.patch_stride = patch_stride
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
         self.n_layers_context = n_layers_context
         self.n_layers_mixing = n_layers_mixing
-
-        # Get constants
-        shape_patchgrid = (
-            (shape[0] - patch_size[0]) // patch_stride[0] + 1,
-            (shape[1] - patch_size[1]) // patch_stride[1] + 1,
-            (shape[2] - patch_size[2]) // patch_stride[2] + 1,
-        )
-        n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
-        n_context = len(n_cross_channels_list)
-        self.patch_stride = patch_stride
-        self.shape_patchgrid = shape_patchgrid
-        self.n_patches = n_patches
-        self.n_context = n_context
-        
-        # Positional and Context Encoding
-        self.pos_embedding = nn.Parameter(.1*torch.randn(1, n_patches, n_features))
-        self.context_embeddings = nn.ParameterList([
-            nn.Parameter(.1*torch.randn(1, 1, n_features)) for _ in range(n_context)
-        ])
 
         # Create main autoencoder
         self.autoencoder = ViT3D(
@@ -100,12 +58,21 @@ class CrossViT3d(nn.Module):
         # Create mixing block
         self.mixing_block = nn.TransformerDecoder(
             nn.TransformerDecoderLayer(
-                d_model=n_features, nhead=n_heads,
+                d_model=n_features, 
+                nhead=n_heads,
                 dim_feedforward=n_features,
                 batch_first=True,
             ),
             num_layers=n_layers_mixing,
         )
+
+        # Create positional and context embeddings
+        n_patches = self.autoencoder.n_patches
+        n_context = len(n_cross_channels_list)
+        self.pos_embedding = nn.Parameter(torch.randn(1, n_patches, n_features))
+        self.context_embeddings = nn.ParameterList([
+            nn.Parameter(torch.randn(1, n_patches, n_features)) for _ in range(n_context)
+        ])
     
     def get_config(self):
         """Get configuration."""
@@ -115,6 +82,7 @@ class CrossViT3d(nn.Module):
             'n_cross_channels_list': self.n_cross_channels_list,
             'shape': self.shape,
             'patch_size': self.patch_size,
+            'patch_stride': self.patch_stride,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
@@ -179,7 +147,12 @@ if __name__ == '__main__':
         n_channels, 1, n_channels_context,
         shape=shape
     )
-    print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
+
+    # Print model structure
+    print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
+    print('Number of parameters in blocks:')
+    for name, block in model.named_children():
+        print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Create data
     x = torch.randn(1, n_channels, *shape)

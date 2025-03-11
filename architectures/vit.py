@@ -16,8 +16,8 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(128, 128, 128), patch_size=16, patch_stride=None,
-        n_features=64, n_features_top=8, n_heads=4, n_layers=16,
+        shape=(64, 64, 64), patch_size=8, patch_stride=None,
+        n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViT3D, self).__init__()
 
@@ -51,7 +51,6 @@ class ViT3D(nn.Module):
         self.shape = shape
         self.patch_size = patch_size
         self.n_features = n_features
-        self.n_features_top = n_features_top
         self.n_heads = n_heads
         self.n_layers = n_layers
 
@@ -65,40 +64,43 @@ class ViT3D(nn.Module):
         self.path_stride = patch_stride
         self.shape_patchgrid = shape_patchgrid
         self.n_patches = n_patches
+        # Check it n_patches is too large
+        if n_patches > 10000:
+            raise ValueError('Number of patches is too large! Descrease size or increase patch size and stride.')
 
         # Create input and output blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features_top, kernel_size=1),
+            nn.Conv3d(in_channels, n_features, kernel_size=1),
         )
         self.output_block = nn.Sequential(
             # Smooth output
             nn.Conv3d(
-                n_features_top, n_features_top, 
+                n_features, n_features, 
                 kernel_size=3, padding=1,
-                groups=n_features_top,
+                groups=n_features,
             ),
             # Project to output channels
-            nn.Conv3d(n_features_top, out_channels, kernel_size=1),
+            nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
         # 3D Patch Embedding and Unembedding Layers
         self.patch_embed = nn.Sequential(
             nn.Conv3d(
-                n_features_top, 
+                n_features, 
                 n_features,
                 kernel_size=patch_size, 
                 stride=patch_stride,
-                groups=n_features_top  # Channel-wise patching
+                groups=n_features  # Channel-wise patching
             )
         )
         self.patch_unembed = nn.Sequential(
             nn.ConvTranspose3d(
                 n_features, 
-                n_features_top, 
+                n_features, 
                 kernel_size=patch_size, 
                 stride=patch_stride,
-                groups=n_features_top  # Channel-wise unpatching
+                groups=n_features  # Channel-wise unpatching
             )
         )
         
@@ -155,8 +157,6 @@ class ViT3D(nn.Module):
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
 
         # Transformer Encoding
-        # for transformer in self.transformer_encoders:
-        #     x = transformer(x)
         x = self.transformer_encoder(x)
 
         # Return encoded features
@@ -165,8 +165,6 @@ class ViT3D(nn.Module):
     def decoder(self, x):
 
         # Transformer Decoding
-        # for transformer in self.transformer_decoders:
-        #     x = transformer(x)
         x = self.transformer_decoder(x)
 
         # Patch unembedding
@@ -196,7 +194,12 @@ if __name__ == '__main__':
         36, 1, 
         shape=shape, 
     )
+
+    # Print model structure
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
+    print('Number of parameters in blocks:')
+    for name, block in model.named_children():
+        print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Forward pass
     y = model(x)
