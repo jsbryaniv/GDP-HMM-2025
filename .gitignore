@@ -189,6 +189,7 @@ figs/
 # Ignore logs
 logs/
 !logs/.gitkeep
+!logs/slurm/.gitkeep
 
 # Ignore outfiles
 outfiles/*

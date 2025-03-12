@@ -17,7 +17,7 @@ class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
         shape=(64, 64, 64), patch_size=None, patch_buffer=None,
-        n_features=128, n_heads=4, n_layers=8,
+        n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3D, self).__init__()
 

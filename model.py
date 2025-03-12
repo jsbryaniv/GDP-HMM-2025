@@ -94,7 +94,7 @@ class DosePredictionModel(nn.Module):
         """
 
         # Load checkpoint
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
         
         # Initialize model
         model = cls(**checkpoint['model_config'])

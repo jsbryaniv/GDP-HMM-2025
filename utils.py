@@ -240,7 +240,7 @@ def load_checkpoint(checkpoint_path):
     model = DosePredictionModel.from_checkpoint(checkpoint_path)
     
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path)
+    checkpoint = torch.load(checkpoint_path, weights_only=False)
 
     # Load datasets from checkpoint
     from dataset import GDPDataset

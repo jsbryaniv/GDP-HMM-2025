@@ -18,7 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=64, n_features=128, n_heads=4, 
+        shape=128, n_features=128, n_heads=4, 
         n_layers=8, n_layers_context=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()

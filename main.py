@@ -126,15 +126,14 @@ if __name__ == '__main__':
             model_kwargs = {}
 
             # Get model info
-            if modelID in ['CrossViT', 'ViT']:
-                model_kwargs['shape'] = 64
-            elif modelID in ['CrossAttnUnet']:
+            if modelID in ['CrossAttnUnet', 'CrossViT', 'ViT']:
                 model_kwargs['shape'] = 128
             elif modelID in ['Unet']:
                 model_kwargs['shape'] = 256
             elif modelID in ['CrossAttnUnet256']:
                 modelID = 'CrossAttnUnet'
                 model_kwargs['shape'] = 256
+                model_kwargs['n_blocks'] = 6
 
             # Add job
             all_jobs.append({
