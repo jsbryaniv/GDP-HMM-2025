@@ -143,24 +143,16 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    
-    # # DEBUGGING one file
-    # ID = 0
-    # job_args = copy.deepcopy(all_jobs[ID])
-    # job_args['model_kwargs']['shape'] = job_args['model_kwargs']['shape']//2  # Set shape smaller for debugging
-    # for ITER in [0, 1]:
-    #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-
-    # DEBUGGING all files
-    for ID in range(len(all_jobs)):
-        for ITER in [0, 1]:
-            job_args = copy.deepcopy(all_jobs[ID])
-            shape = job_args['model_kwargs'].get('shape', None)
-            if shape is not None:
-                # Make shape smaller for debugging
-                job_args['model_kwargs']['shape'] = shape // 2
-            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-            print('\n'*5)
+    # # DEBUGGING all files
+    # for ID in range(len(all_jobs)):
+    #     for ITER in [0, 1]:
+    #         job_args = copy.deepcopy(all_jobs[ID])
+    #         shape = job_args['model_kwargs'].get('shape', None)
+    #         if shape is not None:
+    #             # Make shape smaller for debugging
+    #             job_args['model_kwargs']['shape'] = shape // 2
+    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+    #         print('\n'*5)
 
     # Run main function
     job_args = all_jobs[ID]
