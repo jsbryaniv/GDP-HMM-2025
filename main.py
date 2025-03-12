@@ -111,9 +111,10 @@ if __name__ == '__main__':
     # Set up all models
     modelID_list = [
         'CrossAttnUnet',
-        'CrossVit',  
+        'CrossViT',  
         'ViT', 
         'Unet',
+        'CrossAttnUnet256',
     ]
 
     # Set job IDs
@@ -125,11 +126,14 @@ if __name__ == '__main__':
             model_kwargs = {}
 
             # Get model info
-            if modelID in ['CrossVit', 'ViT']:
+            if modelID in ['CrossViT', 'ViT']:
                 model_kwargs['shape'] = 64
             elif modelID in ['CrossAttnUnet']:
                 model_kwargs['shape'] = 128
             elif modelID in ['Unet']:
+                model_kwargs['shape'] = 256
+            elif modelID in ['CrossAttnUnet256']:
+                modelID = 'CrossAttnUnet'
                 model_kwargs['shape'] = 256
 
             # Add job

@@ -23,18 +23,6 @@ def plot_model_results(
     model, dataset_test, metadata, n_show=5,
 ): 
 
-    # Extract metadata
-    dataID = metadata['dataID']
-    modelID = metadata['modelID']
-    data_kwargs = metadata['data_kwargs']
-    model_kwargs = metadata['model_kwargs']
-    train_kwargs = metadata['train_kwargs']
-    indices_train = metadata['indices_train']
-    indices_val = metadata['indices_val']
-    indices_test = metadata['indices_test']
-    training_statistics = metadata['training_statistics']
-    loss_test = metadata['loss_test']
-
     # Set up model
     model.eval()
 
@@ -67,49 +55,31 @@ def plot_model_results(
         body = body.to(device)
         dose = dose.to(device)
 
-        # Check loss type
+        # Forward pass
         with torch.no_grad():
+            pred = model(scan, beam, ptvs, oars, body)
 
-            # Get prediction
-            if ('loss_type' not in train_kwargs) or (train_kwargs['loss_type'].lower() == 'mse'):
-                x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
-                pred = model(x)
-            elif train_kwargs['loss_type'].lower() == 'crossae':
-                x = torch.cat([beam, ptvs], dim=1).clone()
-                y_list = [
-                    scan, 
-                    torch.cat([beam, ptvs], dim=1), 
-                    torch.cat([oars, body], dim=1),
-                ]
-                pred = model(x, y_list)
+        # Ignore voxels outside body
+        pred = body*pred
 
-            # Ignore voxels outside body
-            pred = body*pred
+        # Get plot data
+        slice_index = scan.shape[-3] // 2
+        plot_labels = ['Scan', 'Dose (Ground Truth)', 'Dose (Prediction)']
+        plot_col = [
+            scan[0, 0, slice_index].cpu().detach().numpy(),      # Scan
+            dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
+            pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
+        ]
 
-            # Rescale dose and prediction
-            dose_div_factor = dataset_test.dataset.dose_div_factor
-            dose = dose * dose_div_factor
-            pred = pred * dose_div_factor
+        # Get loss
+        body_index = body.cpu().detach().numpy().astype(bool)
+        loss_info = '; '.join([
+            f'MAE={F.l1_loss(pred[body_index], dose[body_index]).item():.4f}',
+            f'GDP_MAE={competition_loss(pred, dose, body):.4f}',
+        ])
 
-            # Get plot data
-            slice_index = scan.shape[-3] // 2
-            plot_labels = ['Scan', 'Dose (Ground Truth)', 'Dose (Prediction)']
-            plot_col = [
-                scan[0, 0, slice_index].cpu().detach().numpy(),      # Scan
-                dose[0, 0, slice_index].cpu().detach().numpy(),      # Dose Ground Truth
-                pred[0, 0, slice_index].cpu().detach().numpy(),      # Dose Prediction
-            ]
-
-            # Get loss
-            body_index = body.cpu().detach().numpy().astype(bool)
-            loss_info = '; '.join([
-                # f'MSE={F.mse_loss(pred[body_index], dose[body_index]).item():.4f}',
-                f'MAE={F.l1_loss(pred[body_index], dose[body_index]).item():.4f}',
-                f'GDP_MAE={competition_loss(pred, dose, body):.4f}',
-            ])
-
-            # Append to lists
-            plot_loss.append(loss_info)
+        # Append to lists
+        plot_loss.append(loss_info)
 
         # Get DVHs
         dvh_gt_val, dvh_gt_bin = get_dvh(dose, torch.cat([ptvs, oars], dim=1))
@@ -163,12 +133,11 @@ def plot_model_results(
             ax[i, n_cols-1].plot(dvh_pred_bin, dvh_pred_val[s])
     
     # Finalize plot
-    fig.suptitle(f'{dataID} - {modelID} - Test Loss: {loss_test:.4f}')
     plt.tight_layout()
     plt.pause(1)
     
     # Return figure
-    return fig, ax, loss_test
+    return fig, ax
 
 # Summarize multiple jobs
 def plot_results_summary(fig_ax_list):
@@ -226,52 +195,46 @@ def plot_results_summary(fig_ax_list):
 # Main script
 if __name__ == '__main__':
 
-    # Loop over datasets
-    for dataID in ['Lung', 'HaN']:
+    # Set constants
+    dataID = 'All'
+    all_jobs = [
+        'model_All_CrossAttnUnet_shape=128',
+        'model_All_CrossVit_shape=64',
+        'model_All_Unet_shape=256',
+        'model_All_ViT_shape=64',
+    ]
 
-        # Get all jobs
-        if dataID == 'Lung':
-            all_jobs = [
-                'model_Lung_CrossAttnUnet',
-                'model_Lung_Unet',
-                'model_Lung_ViT',
-            ]
-        elif dataID == 'HaN':
-            all_jobs = [
-                'model_HaN_CrossAttnUnet',
-                'model_HaN_Unet',
-                'model_HaN_ViT',
-            ]
+    # Plot each job separately
+    data_list = []
+    for savename in all_jobs:
 
-        # Plot each job separately
-        data_list = []
-        for savename in all_jobs:
+        # Load checkpoint
+        checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
+        model, datasets, metadata = load_checkpoint(checkpoint_path)
+        loss_test = metadata['train_stats']['loss_test']
+        losses_train = metadata['train_stats']['losses_train']
+        losses_val = metadata['train_stats']['losses_val']
 
-            # Load model and dataset
-            checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
-            model, datasets, metadata = load_checkpoint(checkpoint_path)
+        # Plot losses
+        fig, ax = plot_losses(losses_train, losses_val)
+        fig.suptitle(f'{savename} - Test Loss: {loss_test:.4f}')
+        fig.savefig(f'figs/{savename}_losses.png')
+        plt.close()  # Close figure
 
-            # Plot losses
-            losses_train = metadata['training_statistics']['losses_train']
-            losses_val = metadata['training_statistics']['losses_val']
-            fig, ax = plot_losses(losses_train, losses_val)
-            fig.savefig(f'figs/{savename}_losses.png')
-            plt.close()  # Close figure
+        # Test model
+        dataset_test = datasets[2]
+        fig, ax = plot_model_results(model, dataset_test, metadata)
+        fig.savefig(f'figs/{savename}_test.png')
+        data_list.append((fig, ax, loss_test))
 
-            # Test model
-            dataset_test = datasets[2]
-            fig, ax, loss_test = plot_model_results(model, dataset_test, metadata)
-            fig.savefig(f'figs/{savename}_test.png')
-            data_list.append((fig, ax, loss_test))
+    # Plot summary
+    fig, ax = plot_results_summary(data_list)
+    fig.savefig(f'figs/summary_{dataID}.png')
 
-        # Plot summary
-        fig, ax = plot_results_summary(data_list)
-        fig.savefig(f'figs/summary_{dataID}.png')
-
-        # Close figures
+    # Close figures
+    plt.close(fig)
+    for fig, ax, _ in data_list:
         plt.close(fig)
-        for fig, ax, _ in data_list:
-            plt.close(fig)
     
     # Done
     print('Done.')

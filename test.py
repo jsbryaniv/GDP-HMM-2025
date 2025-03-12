@@ -16,9 +16,11 @@ from config import *
 
 # Set up testing function
 @torch.no_grad()
-def test_model(model, dataset_test, debug=False):
+def test_model(model, dataset_test, jobname=None, debug=False):
 
     # Set up constants
+    if jobname is None:
+        jobname = ''
     device = next(model.parameters()).device
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -89,7 +91,7 @@ def test_model(model, dataset_test, debug=False):
     loss_test /= n_test
 
     # Print loss
-    print(f'-- Average loss on test dataset: {loss_test}') 
+    print(f'-- Average loss on test dataset: {loss_test:.4f} {jobname}') 
     
     # Return total loss
     return loss_test

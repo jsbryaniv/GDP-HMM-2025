@@ -19,6 +19,8 @@ def train_model(
     jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
+    if jobname is None:
+         jobname = ''
     device = next(model.parameters()).device
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     n_epochs = n_epochs + epoch_start  # Start counting epochs from epoch_start
@@ -55,10 +57,7 @@ def train_model(
 
         # Status update
         t_epoch = time.time()
-        if jobname is not None:
-            print(f'████ {jobname} | Epoch {epoch}/{n_epochs} ████')
-        else:
-            print(f'████ Epoch {epoch}/{n_epochs} ████')
+        print(f'████ Epoch {epoch}/{n_epochs} {jobname} ████')
 
         ### Training ###
         print('--Training')
@@ -77,7 +76,7 @@ def train_model(
 
             # Status update
             if batch_idx % print_every == 0:
-                print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)}')
+                print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)} {jobname}')
 
             # Send to device
             scan = scan.to(device)
@@ -157,7 +156,7 @@ def train_model(
             model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
         # Status update
-        print(f'-- Epoch {epoch}/{n_epochs} Summary:')
+        print(f'-- Epoch {epoch}/{n_epochs} Summary {jobname}')
         print(f'---- Train Loss: {loss_train_avg:.4f}')
         print(f'---- Val Loss: {loss_val_avg:.4f}')
         print(f'---- Time: {time.time()-t_epoch:.2f} s / epoch')

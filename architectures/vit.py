@@ -16,33 +16,45 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(64, 64, 64), patch_size=8, patch_stride=None,
+        shape=(64, 64, 64), patch_size=None, patch_stride=None,
         n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViT3D, self).__init__()
 
-        # Check inputs
+        ### Check inputs ###
+        # Check input channels
         if n_layers % 2 != 0:
             # Number of layers must be even
             raise ValueError('Number of layers must be even!')
+        # Check number of heads
+        if n_features % n_heads != 0:
+            # n_features must be divisible by n_heads
+            raise ValueError('Number of features must be divisible by number of heads!')
+        # Check shape
         if not isinstance(shape, tuple):
             # Convert shape to tuple
             shape = (shape, shape, shape)
-        if not isinstance(patch_size, tuple):
+        # Check patch size
+        if patch_size is None:
+            # Set default patch size (1/8 of shape)
+            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
+        elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
+        # Check patch stride
         if patch_stride is None:
-            # Set default patch stride (1/2 of patch size)
-            patch_stride = (patch_size[0] // 2, patch_size[1] // 2, patch_size[2] // 2)
+            # Set default patch stride (1/4 of patch size)
+            patch_stride = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
         elif not isinstance(patch_stride, tuple):
             # Convert patch stride to tuple
             patch_stride = (patch_stride, patch_stride, patch_stride)
+        # Check shape, patch size, and patch stride compatibility
         for i in range(3):
-            # Check if shape is divisible by patch size
             if shape[i] % patch_size[i] != 0:
+                # Check if shape is divisible by patch size
                 raise ValueError('Shape must be divisible by patch size!')
-            # Check if patch size is divisible by patch stride
             if patch_size[i] % patch_stride[i] != 0:
+                # Check if patch size is divisible by patch stride
                 raise ValueError('Patch size must be divisible by patch stride!')
         
         # Set attributes
@@ -92,6 +104,11 @@ class ViT3D(nn.Module):
                 kernel_size=patch_size, 
                 stride=patch_stride,
                 groups=n_features  # Channel-wise patching
+            ),
+            nn.Conv3d(
+                n_features, 
+                n_features, 
+                kernel_size=1,  # Channel-wise mixing
             )
         )
         self.patch_unembed = nn.Sequential(
@@ -101,6 +118,11 @@ class ViT3D(nn.Module):
                 kernel_size=patch_size, 
                 stride=patch_stride,
                 groups=n_features  # Channel-wise unpatching
+            ),
+            nn.Conv3d(
+                n_features, 
+                n_features, 
+                kernel_size=1,  # Channel-wise mixing
             )
         )
         
