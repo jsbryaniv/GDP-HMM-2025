@@ -110,32 +110,17 @@ if __name__ == '__main__':
 
     # Set up all models
     modelID_list = [
-        'CrossAttnUnet',
-        'CrossViT',  
-        'ViT', 
-        'Unet',
-        'CrossAttnUnet256',
+        ('CrossAttnUnet',   {'shape': 128}),
+        ('CrossViT',        {'shape': 128}),
+        ('ViT',             {'shape': 128}),
+        ('Unet',            {'shape': 256}),
+        ('ViT',             {'shape': 256}),
     ]
 
     # Set job IDs
     all_jobs = []
     for dataID in ['All']:
-        for modelID in modelID_list:
-
-            # Initialize model_kwargs
-            model_kwargs = {}
-
-            # Get model info
-            if modelID in ['CrossAttnUnet', 'CrossViT', 'ViT']:
-                model_kwargs['shape'] = 128
-            elif modelID in ['Unet']:
-                model_kwargs['shape'] = 256
-            elif modelID in ['CrossAttnUnet256']:
-                modelID = 'CrossAttnUnet'
-                model_kwargs['shape'] = 256
-                model_kwargs['n_blocks'] = 6
-
-            # Add job
+        for (modelID, model_kwargs) in modelID_list:
             all_jobs.append({
                 'dataID': dataID, 
                 'modelID': modelID,
