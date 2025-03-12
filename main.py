@@ -115,7 +115,7 @@ if __name__ == '__main__':
         ('CrossViT',        {'shape': 128}),
         ('ViT',             {'shape': 128}),
         ('Unet',            {'shape': 256}),
-        ('Unet',            {'shape': 128, 'n_features': 256}),
+        ('Unet',            {'shape': 128}),
     ]
 
     # Set job IDs
