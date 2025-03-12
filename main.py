@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import time
+import copy
 import torch
 
 # Import local
@@ -38,8 +39,8 @@ def main(
         for _ in range(10):
             print("WARNING: Be aware job is running with from_checkpoint=True.")  # Print warning message
         print("Loading checkpoint.")
-        model, datasets, metadata = load_checkpoint(checkpoint_path)  # Load model, datasets, and metadata
-        dataset_val, dataset_test, dataset_train = datasets    # Unpack datasets
+        model, datasets, metadata = load_checkpoint(checkpoint_path)   # Load model, datasets, and metadata
+        dataset_val, dataset_test, dataset_train = datasets            # Unpack datasets
     else:
         # Initialize datasets and model
         print("Initializing datasets and model.")
@@ -62,6 +63,8 @@ def main(
 
     # Move model to device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if debug:
+        device = torch.device('cpu')
     model.to(device)
 
 
@@ -106,10 +109,9 @@ def main(
 if __name__ == '__main__':
 
     # Set up all models
-    modelIDs = [
-        'CrossVit', 
-        'CrossAttnUnet', 
-        'Convformer',
+    modelID_list = [
+        'CrossAttnUnet',
+        'CrossVit',  
         'ViT', 
         'Unet',
     ]
@@ -117,23 +119,24 @@ if __name__ == '__main__':
     # Set job IDs
     all_jobs = []
     for dataID in ['All']:
-        for modelID in ['CrossVit', 'CrossAttnUnet', 'ViT', 'Unet',]:
+        for modelID in modelID_list:
+
+            # Initialize model_kwargs
+            model_kwargs = {}
 
             # Get model info
             if modelID in ['CrossVit', 'ViT']:
-                shape = 64
+                model_kwargs['shape'] = 64
             elif modelID in ['CrossAttnUnet']:
-                shape = 128
+                model_kwargs['shape'] = 128
             elif modelID in ['Unet']:
-                shape = 256
+                model_kwargs['shape'] = 256
 
             # Add job
             all_jobs.append({
                 'dataID': dataID, 
                 'modelID': modelID,
-                'model_kwargs': {
-                    'shape': shape
-                },
+                'model_kwargs': model_kwargs,
             })
     
     # Get training IDs from system arguments
@@ -143,7 +146,7 @@ if __name__ == '__main__':
     
     # # DEBUGGING one file
     # ID = 0
-    # job_args = all_jobs[ID]
+    # job_args = copy.deepcopy(all_jobs[ID])
     # job_args['model_kwargs']['shape'] = job_args['model_kwargs']['shape']//2  # Set shape smaller for debugging
     # for ITER in [0, 1]:
     #     model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
@@ -151,8 +154,11 @@ if __name__ == '__main__':
     # # DEBUGGING all files
     # for ID in range(len(all_jobs)):
     #     for ITER in [0, 1]:
-    #         job_args = all_jobs[ID]
-    #         job_args['model_kwargs']['shape'] = job_args['model_kwargs']['shape']//2  # Set shape smaller for debugging
+    #         job_args = copy.deepcopy(all_jobs[ID])
+    #         shape = job_args['model_kwargs'].get('shape', None)
+    #         if shape is not None:
+    #             # Make shape smaller for debugging
+    #             job_args['model_kwargs']['shape'] = shape // 2
     #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
     #         print('\n'*5)
 

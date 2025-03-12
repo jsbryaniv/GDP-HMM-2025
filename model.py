@@ -73,7 +73,6 @@ class DosePredictionModel(nn.Module):
             kwargs = {
                 'in_channels': n_channels,
                 'out_channels': 1,
-                'shape': shape,
                 **kwargs,
             }
             self.model = ConvformerModel(**kwargs)

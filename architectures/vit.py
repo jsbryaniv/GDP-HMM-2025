@@ -134,7 +134,6 @@ class ViT3D(nn.Module):
             'shape': self.shape,
             'patch_size': self.patch_size,
             'n_features': self.n_features,
-            'n_features_top': self.n_features_top,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
         }
