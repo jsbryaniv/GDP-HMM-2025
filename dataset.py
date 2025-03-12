@@ -219,17 +219,22 @@ if __name__ == "__main__":
 
     # Create dataset
     dataset = GDPDataset(
-        treatment='HaN', 
+        treatment='All', 
         validation_set=True,
     )
+
+    # Initialize max shape
+    max_shape = (0, 0, 0)
 
     # Loop over dataset
     print('Looping over dataset')
     for i in range(len(dataset)):
         # Get data
         scan, beam, ptvs, oars, body, dose = dataset[i]
+        shape = scan.shape[1:]
+        max_shape = tuple([max(s, m) for s, m in zip(shape, max_shape)])
         # Print
-        print(i, scan.shape)
+        print(i, scan.shape, max_shape)
         # Plot data
         fig, ax = plt.subplots(1, 1)
         plt.ion()
@@ -241,6 +246,8 @@ if __name__ == "__main__":
         plt.savefig('_image.png')
         plt.close()
 
+    # Print max shape
+    print('Max shape:', max_shape)
 
     # Done
     print("Done")

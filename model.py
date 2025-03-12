@@ -110,19 +110,19 @@ class DosePredictionModel(nn.Module):
         # Reshape inputs
         transform_params=None  # Initialize to None
         if self.shape is not None:
-            ### Pad to 256x256x256 ###
-            # Get pad info
-            shape_target = (256, 256, 256)
-            shape_origin = scan.shape[2:]
-            padding = [shape_target[i] - shape_origin[i] for i in range(3)]
-            padding = [(p//2, p-p//2) for p in padding]
-            padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
-            # Pad
-            scan = F.pad(scan, padding, value=scan.min())
-            beam = F.pad(beam, padding)
-            ptvs = F.pad(ptvs, padding)
-            oars = F.pad(oars, padding)
-            body = F.pad(body, padding)
+            # ### Pad to 256x256x256 ###
+            # # Get pad info
+            # shape_target = (256, 256, 256)
+            # shape_origin = scan.shape[2:]
+            # padding = [shape_target[i] - shape_origin[i] for i in range(3)]
+            # padding = [(p//2, p-p//2) for p in padding]
+            # padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
+            # # Pad
+            # scan = F.pad(scan, padding, value=scan.min())
+            # beam = F.pad(beam, padding)
+            # ptvs = F.pad(ptvs, padding)
+            # oars = F.pad(oars, padding)
+            # body = F.pad(body, padding)
             ### Resize to shape ###
             scan, resize_params = resize_image_3d(scan, self.shape, fill_value=scan.min())
             beam, _ = resize_image_3d(beam, self.shape)
@@ -131,8 +131,8 @@ class DosePredictionModel(nn.Module):
             body, _ = resize_image_3d(body, self.shape)
             ### Update transform params ###
             transform_params = {
-                'original_shape': shape_origin,
-                'padding': padding,
+                # 'original_shape': shape_origin,
+                # 'padding': padding,
                 'resize': resize_params,
             }
 
@@ -159,18 +159,18 @@ class DosePredictionModel(nn.Module):
         # Reshape prediction
         if self.shape is not None:
             ### Extract transform params ###
-            original_shape = transform_params['original_shape']
-            padding = transform_params['padding']
+            # original_shape = transform_params['original_shape']
+            # padding = transform_params['padding']
             resize_params = transform_params['resize']
             ### Resize to padded shape ###
             x = reverse_resize_3d(x, resize_params)
             ### Unpad to original shape ###
-            x = x[
-                :, :, 
-                padding[4]:256-padding[5],
-                padding[2]:256-padding[3],
-                padding[0]:256-padding[1],
-            ]
+            # x = x[
+            #     :, :, 
+            #     padding[4]:256-padding[5],
+            #     padding[2]:256-padding[3],
+            #     padding[0]:256-padding[1],
+            # ]
 
         # Return prediction
         return x
