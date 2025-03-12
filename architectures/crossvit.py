@@ -53,15 +53,23 @@ class CrossViT3d(nn.Module):
             )
 
         # Create mixing block
-        self.mixing_block = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(
-                d_model=n_features, 
-                nhead=n_heads,
-                dim_feedforward=n_features,
-                batch_first=True,
-            ),
-            num_layers=n_layers_mixing,
-        )
+        self.mixing_blocks = nn.ModuleList()
+        for _ in range(n_layers_mixing):
+            self.mixing_blocks.append(
+                CrossTransformerBlock(
+                    n_features=n_features,
+                    n_heads=n_heads,
+                )
+            )
+        # self.mixing_block = nn.TransformerDecoder(
+        #     nn.TransformerDecoderLayer(
+        #         d_model=n_features, 
+        #         nhead=n_heads,
+        #         dim_feedforward=n_features,
+        #         batch_first=True,
+        #     ),
+        #     num_layers=n_layers_mixing,
+        # )
 
         # Create positional and context embeddings
         n_patches = self.autoencoder.n_patches
@@ -104,7 +112,9 @@ class CrossViT3d(nn.Module):
         context = torch.cat(context, dim=1)
 
         # Mixing block
-        x = self.mixing_block(x, context)
+        for block in self.mixing_blocks:
+            x = block(x, context)
+        # x = self.mixing_block(x, context)
 
         # Decode
         x = self.autoencoder.decoder(x)

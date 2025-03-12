@@ -90,9 +90,10 @@ def main(
     print("Saving results.")
 
     # Merge training statistics
-    metadata['train_stats']['loss_test'] = loss_test
-    metadata['train_stats']['losses_val'] += train_stats_new['losses_val']
-    metadata['train_stats']['losses_train'] += train_stats_new['losses_train']
+    train_stats_new['loss_test'] = loss_test
+    train_stats_new['losses_val'] = metadata['train_stats']['losses_val'] + train_stats_new['losses_val']
+    train_stats_new['losses_train'] = metadata['train_stats']['losses_train'] + train_stats_new['losses_train']
+    metadata['train_stats'] = train_stats_new
 
     # Save checkpoint
     save_checkpoint(checkpoint_path, model, datasets, metadata)
@@ -114,7 +115,7 @@ if __name__ == '__main__':
         ('CrossViT',        {'shape': 128}),
         ('ViT',             {'shape': 128}),
         ('Unet',            {'shape': 256}),
-        ('ViT',             {'shape': 256}),
+        ('Unet',            {'shape': 128, 'n_features': 256}),
     ]
 
     # Set job IDs

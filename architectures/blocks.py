@@ -31,6 +31,113 @@ class VoxelNorm3d(nn.Module):
         # Return output
         return x
 
+
+
+### PATCH SHAPING BLOCKS ###
+
+# Define sparse Patch Expand class
+class PatchExpandSparse3d(nn.Module):
+    """Patch Expansion module."""
+    def __init__(self, n_features, scale, buffer=0):
+        super(PatchExpandSparse3d, self).__init__()
+
+        # Asset scale is power of 2 and buffer is either 0 or scale/2
+        assert scale & (scale - 1) == 0, "Scale must be power of 2."
+        assert buffer in [0, scale//2], "Buffer must be 0 or scale/2."
+        
+        # Set attributes
+        self.n_features = n_features
+        self.scale = scale
+        self.buffer = buffer
+
+        # Calculate constants
+        n = int(scale.bit_length() - 1)
+        scaled_buffer = buffer // n
+        kernel_size = 2 * (1 + scaled_buffer)
+        stride = 2
+        padding = scaled_buffer
+
+        
+        # Create layers
+        self.layers = nn.ModuleList()
+        for i in range(n):
+            self.layers.append(
+                nn.Sequential(
+                    nn.Conv3d(n_features, n_features,kernel_size=1),
+                    nn.ConvTranspose3d(
+                        n_features, n_features,
+                        kernel_size=kernel_size, 
+                        stride=stride, 
+                        padding=padding,
+                        groups=n_features,
+                    ),
+                )
+            )
+        
+    def forward(self, x):
+        """
+        Forward pass.
+        """
+        
+        # Loop over layers
+        for layer in self.layers:
+            x = layer(x)
+        
+        # Return tensor
+        return x
+    
+# Define sparse Patch Contract class
+class PatchContractSparse3d(nn.Module):
+    """Patch Contraction module."""
+    def __init__(self, n_features, scale, buffer=0):
+        super(PatchContractSparse3d, self).__init__()
+
+        # Asset scale is power of 2 and buffer is either 0 or scale/2
+        assert scale & (scale - 1) == 0, "Scale must be power of 2."
+        assert buffer in [0, scale//2], "Buffer must be 0 or scale/2."
+        
+        # Set attributes
+        self.n_features = n_features
+        self.scale = scale
+        self.buffer = buffer
+
+        # Calculate constants
+        n = int(scale.bit_length() - 1)
+        scaled_buffer = buffer // n
+        kernel_size = 2 * (1 + scaled_buffer)
+        stride = 2
+        padding = scaled_buffer
+
+        
+        # Create layers
+        self.layers = nn.ModuleList()
+        for i in range(n):
+            self.layers.append(
+                nn.Sequential(
+                    nn.Conv3d(
+                        n_features, n_features,
+                        kernel_size=kernel_size, 
+                        stride=stride, 
+                        padding=padding,
+                        groups=n_features,
+                    ),
+                    nn.Conv3d(n_features, n_features, kernel_size=1),
+                )
+            )
+        
+    def forward(self, x):
+        """
+        Forward pass.
+        """
+        
+        # Loop over layers
+        for layer in self.layers:
+            x = layer(x)
+        
+        # Return tensor
+        return x
+    
+
 ### CONVOLUTIONAL BLOCK ###
 
 # Convolutional block
@@ -183,7 +290,7 @@ class TransformerBlock(nn.Module):
 
 # Define cross attention transformer block
 class CrossTransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads=4, expansion=1):
+    def __init__(self, n_features, n_heads=4, expansion=1, dropout=0.1):
         super(CrossTransformerBlock, self).__init__()
 
         # Set up attributes
@@ -203,6 +310,7 @@ class CrossTransformerBlock(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(n_features, n_features_inner),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(n_features_inner, n_features),
         )
 

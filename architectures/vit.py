@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 # Import custom libraries
-from architectures.blocks import TransformerBlock
+from architectures.blocks import TransformerBlock, PatchExpandSparse3d, PatchContractSparse3d
 
 
 # Create class
@@ -103,59 +103,79 @@ class ViT3D(nn.Module):
         )
         
         # 3D Patch Embedding and Unembedding Layers
-        self.patch_embed = nn.Sequential(
-            nn.Conv3d(
-                n_features, 
-                n_features,
-                kernel_size=patch_size_effective,
-                padding=patch_buffer, 
-                stride=patch_size,
-                groups=n_features  # Channel-wise patching
-            ),
-            nn.Conv3d(
-                n_features, 
-                n_features, 
-                kernel_size=1,  # Channel-wise mixing
-            ),
+        self.patch_embed = PatchContractSparse3d(
+            n_features=n_features,
+            scale=patch_size[0],
+            buffer=patch_size[0]//2,
         )
-        self.patch_unembed = nn.Sequential(
-            nn.Conv3d(
-                n_features, 
-                n_features, 
-                kernel_size=1,  # Channel-wise mixing
-            ),
-            nn.ConvTranspose3d(
-                n_features, 
-                n_features, 
-                kernel_size=patch_size_effective,
-                padding=patch_buffer, 
-                stride=patch_size,
-                groups=n_features  # Channel-wise unpatching
-            ),
+        self.patch_unembed = PatchExpandSparse3d(
+            n_features=n_features, 
+            scale=patch_size[0],
+            buffer=patch_size[0]//2,
         )
+        # self.patch_embed = nn.Sequential(
+        #     nn.Conv3d(
+        #         n_features, 
+        #         n_features,
+        #         kernel_size=patch_size_effective,
+        #         padding=patch_buffer, 
+        #         stride=patch_size,
+        #         groups=n_features  # Channel-wise patching
+        #     ),
+        #     nn.Conv3d(
+        #         n_features, 
+        #         n_features, 
+        #         kernel_size=1,  # Channel-wise mixing
+        #     ),
+        # )
+        # self.patch_unembed = nn.Sequential(
+        #     nn.Conv3d(
+        #         n_features, 
+        #         n_features, 
+        #         kernel_size=1,  # Channel-wise mixing
+        #     ),
+        #     nn.ConvTranspose3d(
+        #         n_features, 
+        #         n_features, 
+        #         kernel_size=patch_size_effective,
+        #         padding=patch_buffer, 
+        #         stride=patch_size,
+        #         groups=n_features  # Channel-wise unpatching
+        #     ),
+        # )
         
         # Positional Encoding
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
 
         # Transformer Encoders
-        self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                n_features, n_heads, 
-                dim_feedforward=n_features,
-                batch_first=True
-            ),
-            num_layers=n_layers//2
-        )
+        self.transformer_encoder = nn.ModuleList()
+        for _ in range(n_layers//2):
+            self.transformer_encoder.append(
+                TransformerBlock(n_features=n_features, n_heads=n_heads)
+            )
+        # self.transformer_encoder = nn.TransformerEncoder(
+        #     nn.TransformerEncoderLayer(
+        #         n_features, n_heads, 
+        #         dim_feedforward=n_features,
+        #         batch_first=True
+        #     ),
+        #     num_layers=n_layers//2
+        # )
 
         # Transformer Decoders
-        self.transformer_decoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                n_features, n_heads, 
-                dim_feedforward=n_features,
-                batch_first=True
-            ),
-            num_layers=n_layers//2
-        )
+        self.transformer_decoder = nn.ModuleList()
+        for _ in range(n_layers//2):
+            self.transformer_decoder.append(
+                TransformerBlock(n_features=n_features, n_heads=n_heads)
+            )
+        # self.transformer_decoder = nn.TransformerEncoder(
+        #     nn.TransformerEncoderLayer(
+        #         n_features, n_heads, 
+        #         dim_feedforward=n_features,
+        #         batch_first=True
+        #     ),
+        #     num_layers=n_layers//2
+        # )
 
     def get_config(self):
         return {
@@ -187,7 +207,9 @@ class ViT3D(nn.Module):
         x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
 
         # Transformer Encoding
-        x = self.transformer_encoder(x)
+        for layer in self.transformer_encoder:
+            x = layer(x)
+        # x = self.transformer_encoder(x)
 
         # Return encoded features
         return x
@@ -195,7 +217,9 @@ class ViT3D(nn.Module):
     def decoder(self, x):
 
         # Transformer Decoding
-        x = self.transformer_decoder(x)
+        for layer in self.transformer_decoder:
+            x = layer(x)
+        # x = self.transformer_decoder(x)
 
         # Patch unembedding
         x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
