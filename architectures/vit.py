@@ -16,7 +16,7 @@ from architectures.blocks import TransformerBlock
 class ViT3D(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(64, 64, 64), patch_size=None, patch_stride=None,
+        shape=(64, 64, 64), patch_size=None, patch_buffer=None,
         n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViT3D, self).__init__()
@@ -36,44 +36,50 @@ class ViT3D(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # Set default patch size (1/8 of shape)
-            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
+            # Set default patch size (1/16 of shape)
+            patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
-        # Check patch stride
-        if patch_stride is None:
-            # Set default patch stride (1/4 of patch size)
-            patch_stride = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
-        elif not isinstance(patch_stride, tuple):
-            # Convert patch stride to tuple
-            patch_stride = (patch_stride, patch_stride, patch_stride)
-        # Check shape, patch size, and patch stride compatibility
+        # Check patch buffer
+        if patch_buffer is None:
+            # Set default patch buffer (1/4 of patch size)
+            patch_buffer = (patch_size[0] // 4, patch_size[1] // 4, patch_size[2] // 4)
+        elif not isinstance(patch_buffer, tuple):
+            # Convert patch buffer to tuple
+            patch_buffer = (patch_buffer, patch_buffer, patch_buffer)
+        # Check shape, patch size, and patch buffer compatibility
         for i in range(3):
             if shape[i] % patch_size[i] != 0:
                 # Check if shape is divisible by patch size
                 raise ValueError('Shape must be divisible by patch size!')
-            if patch_size[i] % patch_stride[i] != 0:
-                # Check if patch size is divisible by patch stride
-                raise ValueError('Patch size must be divisible by patch stride!')
+            if patch_size[i] % patch_buffer[i] != 0:
+                # Check if patch size is divisible by patch buffer
+                raise ValueError('Patch size must be divisible by patch buffer!')
         
         # Set attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.shape = shape
         self.patch_size = patch_size
+        self.patch_buffer = patch_buffer
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
 
         # Calculate constants
+        patch_size_effective = (
+            patch_size[0] + 2*patch_buffer[0],
+            patch_size[1] + 2*patch_buffer[1],
+            patch_size[2] + 2*patch_buffer[2],
+        )
         shape_patchgrid = (
-            (shape[0] - patch_size[0]) // patch_stride[0] + 1,
-            (shape[1] - patch_size[1]) // patch_stride[1] + 1,
-            (shape[2] - patch_size[2]) // patch_stride[2] + 1,
+            shape[0] // patch_size[0],
+            shape[1] // patch_size[1],
+            shape[2] // patch_size[2],
         )
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
-        self.path_stride = patch_stride
+        self.patch_size_effective = patch_size_effective
         self.shape_patchgrid = shape_patchgrid
         self.n_patches = n_patches
         # Check it n_patches is too large
@@ -101,29 +107,31 @@ class ViT3D(nn.Module):
             nn.Conv3d(
                 n_features, 
                 n_features,
-                kernel_size=patch_size, 
-                stride=patch_stride,
+                kernel_size=patch_size_effective,
+                padding=patch_buffer, 
+                stride=patch_size,
                 groups=n_features  # Channel-wise patching
             ),
             nn.Conv3d(
                 n_features, 
                 n_features, 
                 kernel_size=1,  # Channel-wise mixing
-            )
+            ),
         )
         self.patch_unembed = nn.Sequential(
-            nn.ConvTranspose3d(
-                n_features, 
-                n_features, 
-                kernel_size=patch_size, 
-                stride=patch_stride,
-                groups=n_features  # Channel-wise unpatching
-            ),
             nn.Conv3d(
                 n_features, 
                 n_features, 
                 kernel_size=1,  # Channel-wise mixing
-            )
+            ),
+            nn.ConvTranspose3d(
+                n_features, 
+                n_features, 
+                kernel_size=patch_size_effective,
+                padding=patch_buffer, 
+                stride=patch_size,
+                groups=n_features  # Channel-wise unpatching
+            ),
         )
         
         # Positional Encoding
@@ -155,6 +163,7 @@ class ViT3D(nn.Module):
             'out_channels': self.out_channels,
             'shape': self.shape,
             'patch_size': self.patch_size,
+            'patch_buffer': self.patch_buffer,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
@@ -209,7 +218,7 @@ if __name__ == '__main__':
     # Set constants
     in_channels = 36
     out_channels = 1
-    shape = (256, 256, 256)
+    shape = (128, 128, 128)
 
     # Create data
     x = torch.randn(1, in_channels, *shape)

@@ -18,8 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=64, patch_size=8, patch_stride=None,
-        n_features=128, n_heads=4, 
+        shape=64, n_features=128, n_heads=4, 
         n_layers=8, n_layers_context=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
@@ -29,8 +28,6 @@ class CrossViT3d(nn.Module):
         self.out_channels = out_channels
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
-        self.patch_size = patch_size
-        self.patch_stride = patch_stride
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -40,8 +37,8 @@ class CrossViT3d(nn.Module):
         # Create main autoencoder
         self.autoencoder = ViT3D(
             in_channels, out_channels,
-            shape=shape, patch_size=patch_size,
-            n_features=n_features, n_heads=n_heads, n_layers=n_layers,
+            shape=shape, n_features=n_features, 
+            n_heads=n_heads, n_layers=n_layers,
         )
 
         # Create context autoencoders
@@ -50,8 +47,8 @@ class CrossViT3d(nn.Module):
             self.context_autoencoders.append(
                 ViT3D(
                     n_channels, n_channels,
-                    shape=shape, patch_size=patch_size,
-                    n_features=n_features, n_heads=n_heads, n_layers=n_layers_context,
+                    shape=shape, n_features=n_features, 
+                    n_heads=n_heads, n_layers=n_layers_context,
                 )
             )
 
@@ -81,8 +78,6 @@ class CrossViT3d(nn.Module):
             'out_channels': self.out_channels,
             'n_cross_channels_list': self.n_cross_channels_list,
             'shape': self.shape,
-            'patch_size': self.patch_size,
-            'patch_stride': self.patch_stride,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
@@ -138,7 +133,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (64, 64, 64)
+    shape = (128, 128, 128)
     in_channels = 4
     out_channels = 1
     n_channels_context = [1, 4, 30]
