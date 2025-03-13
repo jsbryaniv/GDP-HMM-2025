@@ -14,7 +14,7 @@ from architectures.blocks import ConvBlock
 
 
 # Define simple 3D Unet model
-class Unet3D(nn.Module):
+class Unet3D(nn.Module):  # TODO: rename to Unet3d
     def __init__(self, 
         in_channels, out_channels, 
         n_features=4, n_groups=1, n_blocks=5, n_layers_per_block=4, 
