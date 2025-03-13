@@ -120,6 +120,7 @@ if __name__ == '__main__':
         ('MOECrossViT',        {'shape': 128}),
         ('MOEViT',             {'shape': 128}),
         ('MOEUnet',            {'shape': 128}),
+        ('MOEUnet',            {'shape': 256}),
     ]
 
     # Set job IDs
