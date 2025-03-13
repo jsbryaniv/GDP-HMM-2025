@@ -198,10 +198,11 @@ if __name__ == '__main__':
     # Set constants
     dataID = 'All'
     all_jobs = [
-        'model_All_CrossAttnUnet_shape=128',
-        'model_All_CrossVit_shape=64',
-        'model_All_Unet_shape=256',
-        'model_All_ViT_shape=64',
+        "model_All_CrossAttnUnet_shape=128",
+        "model_All_Unet_shape=256",
+        "model_All_Unet_shape=128",
+        "model_All_ViT_shape=128",
+        "model_All_CrossViT_shape=128",
     ]
 
     # Plot each job separately
