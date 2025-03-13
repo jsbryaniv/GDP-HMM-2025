@@ -61,23 +61,10 @@ class CrossViT3d(nn.Module):
                     n_heads=n_heads,
                 )
             )
-        # self.mixing_block = nn.TransformerDecoder(
-        #     nn.TransformerDecoderLayer(
-        #         d_model=n_features, 
-        #         nhead=n_heads,
-        #         dim_feedforward=n_features,
-        #         batch_first=True,
-        #     ),
-        #     num_layers=n_layers_mixing,
-        # )
 
         # Create positional and context embeddings
         n_patches = self.autoencoder.n_patches
-        n_context = len(n_cross_channels_list)
         self.pos_embedding = nn.Parameter(torch.randn(1, n_patches, n_features))
-        self.context_embeddings = nn.ParameterList([
-            nn.Parameter(torch.randn(1, n_patches, n_features)) for _ in range(n_context)
-        ])
     
     def get_config(self):
         """Get configuration."""
@@ -101,20 +88,15 @@ class CrossViT3d(nn.Module):
 
         # Encode input
         x = self.autoencoder.encoder(x)
-        context = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        context = sum(ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list))
 
         # Add positional and context embeddings
         x = x + self.pos_embedding 
-        context = [y + self.pos_embedding for y in context] 
-        context = [y + self.context_embeddings[i] for i, y in enumerate(context)]
-        
-        # Cat context tensors
-        context = torch.cat(context, dim=1)
+        context = context + self.pos_embedding
 
         # Mixing block
         for block in self.mixing_blocks:
             x = block(x, context)
-        # x = self.mixing_block(x, context)
 
         # Decode
         x = self.autoencoder.decoder(x)

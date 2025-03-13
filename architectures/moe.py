@@ -148,34 +148,20 @@ if __name__ == '__main__':
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
     from architectures.unet import Unet3D
-    from architectures.vit import ViT3D
-    from architectures.crossattnunet import CrossAttnUnetModel
-    from architectures.crossvit import CrossViT3d
-
-    # # Set constants
-    # in_channels = 36
-    # out_channels = 1
-    # shape = (64, 64, 64)
-
-    # # Create data
-    # x = torch.randn(1, in_channels, *shape)
 
     # Set constants
     shape = (64, 64, 64)
-    in_channels = 3
+    in_channels = 36
     out_channels = 1
-    n_cross_channels_list = [1, 1, 2, 8]
 
     # Create data
     x = torch.randn(1, in_channels, *shape)
-    context_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
     model = MOEWrapper3d(
-        model=CrossAttnUnetModel,
+        model=Unet3D,
         in_channels=in_channels, 
         out_channels=out_channels,
-        n_cross_channels_list=n_cross_channels_list,
     )
 
     # Print model parameter info
@@ -186,7 +172,7 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, context_list)
+        y = model(x)
 
     # Done
     print('Done!')
