@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 # Import local
 from config import *
 from test import test_model
-from utils import get_dvh, load_checkpoint
+from utils import get_dvh, get_savename, load_checkpoint
 from losses import competition_loss
 from plotting import plot_losses, copy_axis
 
@@ -197,13 +197,19 @@ if __name__ == '__main__':
 
     # Set constants
     dataID = 'All'
-    all_jobs = [
-        "model_All_CrossAttnUnet_shape=128",
-        "model_All_Unet_shape=256",
-        "model_All_Unet_shape=128",
-        "model_All_ViT_shape=128",
-        "model_All_CrossViT_shape=128",
+    modelID_list = [
+        ('CrossAttnUnet',   {'shape': 128}),
+        ('CrossViT',        {'shape': 128}),
+        ('ViT',             {'shape': 128}),
+        ('Unet',            {'shape': 256}),
+        ('Unet',            {'shape': 128}),
+        # ('MOECrossAttnUnet',   {'shape': 128}),
+        # ('MOECrossViT',        {'shape': 128}),
+        ('MOEViT',             {'shape': 128}),
+        ('MOEUnet',            {'shape': 128}),
+        # ('MOEUnet',            {'shape': 256}),
     ]
+    all_jobs = [get_savename(dataID, modelID, **model_kwargs) for modelID, model_kwargs in modelID_list]
 
     # Plot each job separately
     data_list = []

@@ -7,6 +7,7 @@ if __name__ == "__main__":
 # Import libraries
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3D
@@ -21,6 +22,7 @@ class CrossAttnUnetModel(nn.Module):
         n_features=8, n_blocks=5, 
         n_layers_per_block=4, n_layers_per_block_context=4,
         n_attn_repeats=2, attn_kernel_size=5,
+        use_checkpoint=False,
     ):
         super(CrossAttnUnetModel, self).__init__()
         
@@ -34,6 +36,7 @@ class CrossAttnUnetModel(nn.Module):
         self.n_layers_per_block_context = n_layers_per_block_context
         self.n_attn_repeats = n_attn_repeats
         self.attn_kernel_size = attn_kernel_size
+        self.use_checkpoint = use_checkpoint
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -92,6 +95,7 @@ class CrossAttnUnetModel(nn.Module):
             'n_layers_per_block_context': self.n_layers_per_block_context,
             'n_attn_repeats': self.n_attn_repeats,
             'attn_kernel_size': self.attn_kernel_size,
+            'use_checkpoint': self.use_checkpoint,
         }
 
     def forward(self, x, y_list):
@@ -105,7 +109,16 @@ class CrossAttnUnetModel(nn.Module):
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
-        f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+        if self.use_checkpoint:
+            device = next(self.parameters()).device
+            dummy = torch.tensor(0.0, device=device, requires_grad=True)
+            f_context = [
+                # checkpoint(ae.encoder, y.float()+dummy)
+                checkpoint(lambda *args: ae.encoder(*args[1:]), dummy, y.float())
+                for ae, y in zip(self.context_autoencoders, y_list)
+            ]
+        else:
+            f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
         f_context = [sum([f for f in row]) for row in zip(*f_context)]
 
         # Apply context
