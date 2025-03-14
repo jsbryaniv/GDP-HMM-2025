@@ -111,18 +111,18 @@ if __name__ == '__main__':
 
     # Set up all models
     modelID_list = [
-        ('CrossAttnUnet',   {'shape': 128}),                        # 0
-        ('CrossViT',        {'shape': 128}),                        # 1
-        ('ViT',             {'shape': 128}),                        # 2
-        ('Unet',            {'shape': 256}),                        # 3
-        ('Unet',            {'shape': 128}),                        # 4
-        ('MOECrossAttnUnet',   {'shape': 128}),                     # 5
-        ('MOECrossViT',        {'shape': 128}),                     # 6
-        ('MOEViT',             {'shape': 128}),                     # 7
-        ('MOEUnet',            {'shape': 128}),                     # 8
-        ('MOEUnet',            {'shape': 256}),                     # 9
-        ('CrossAttnUnet',   {'shape': 128, 'n_features': 16}),        # 11
-        ('CrossAttnUnet',   {'shape': 256, 'n_features': 4, 'use_checkpoint': True}),  # 10
+        ('CrossAttnUnet',   {'shape': 128}),                                           # 0
+        ('CrossViT',        {'shape': 128}),                                           # 1
+        ('ViT',             {'shape': 128}),                                           # 2
+        ('Unet',            {'shape': 256}),                                           # 3
+        ('Unet',            {'shape': 128}),                                           # 4
+        ('MOECrossAttnUnet',   {'shape': 128}),                                        # 5
+        ('MOECrossViT',        {'shape': 128}),                                        # 6
+        ('MOEViT',             {'shape': 128}),                                        # 7
+        ('MOEUnet',            {'shape': 128}),                                        # 8
+        ('MOEUnet',            {'shape': 256}),                                        # 9
+        ('CrossAttnUnet',   {'shape': 128, 'n_features': 16}),                         # 10
+        ('CrossAttnUnet',   {'shape': 256, 'n_features': 4, 'use_checkpoint': True}),  # 11
     ]
 
     # Set job IDs

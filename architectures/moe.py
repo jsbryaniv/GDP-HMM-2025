@@ -58,7 +58,7 @@ class MOEGating3d(nn.Module):
             x = layer(x)
 
         # Average across spatial dimensions
-        x = x.mean(dim=(2, 3, 4))
+        x = x.mean(dim=(2, 3, 4)) #TODO Normalize each voxel by channels before taking mean
 
         # Get expert weights
         weights = F.softmax(self.linear(x), dim=1)

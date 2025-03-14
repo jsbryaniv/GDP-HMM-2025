@@ -105,7 +105,12 @@ class CrossAttnUnetModel(nn.Module):
         """
 
         # Encode x
-        feats = self.autoencoder.encoder(x)
+        if self.use_checkpoint:
+            device = next(self.parameters()).device
+            dummy = torch.tensor(0.0, device=device, requires_grad=True)
+            feats = checkpoint(lambda *args: self.autoencoder.encoder(*args[1:]), dummy, x)
+        else:
+            feats = self.autoencoder.encoder(x)
         x = feats.pop()
 
         # Encode y_list and sum features at each depth

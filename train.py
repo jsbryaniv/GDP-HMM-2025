@@ -42,7 +42,7 @@ def train_model(
 
     # Set up model and optimizer
     model.train()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)  # TODO: Define optimizer outside of function
 
     # Set up training statistics
     losses_train = []
