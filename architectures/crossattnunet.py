@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.unet import Unet3D
+from architectures.unet import Unet3d
 from architectures.blocks import ConvformerDecoder3d
 
 
@@ -48,7 +48,7 @@ class CrossAttnUnetModel(nn.Module):
         ### AUTOENCODERS ###
 
         # Create main autoencoder
-        self.autoencoder = Unet3D(
+        self.autoencoder = Unet3d(
             in_channels, out_channels, 
             n_features=n_features, n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block
@@ -58,7 +58,7 @@ class CrossAttnUnetModel(nn.Module):
         self.context_autoencoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
             self.context_autoencoders.append(
-                Unet3D(
+                Unet3d(
                     n_channels, n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block_context,
@@ -98,10 +98,10 @@ class CrossAttnUnetModel(nn.Module):
             'use_checkpoint': self.use_checkpoint,
         }
 
-    def forward(self, x, y_list):
+    def forward(self, x, *y_list):
         """
         x is the input tensor
-        y is a list of context tensors.
+        y_list is a list of context tensors
         """
 
         # Encode x
@@ -149,7 +149,7 @@ class CrossAttnUnetModel(nn.Module):
         # Return the output
         return x
     
-    def autoencode_context(self, y_list):
+    def autoencode_context(self, *y_list):
         """Autoencode context."""
 
         # Encode y_list
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, context_list)
+        y = model(x, *context_list)
 
 
     #### Estimate memory usage ####

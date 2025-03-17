@@ -80,7 +80,7 @@ class CrossViT3d(nn.Module):
             'n_layers_mixing': self.n_layers_mixing,
         }
 
-    def forward(self, x, y_list):
+    def forward(self, x, *y_list):
         """
         x is the input tensor
         y_list is a list of context tensors.
@@ -104,7 +104,7 @@ class CrossViT3d(nn.Module):
         # Return
         return x
     
-    def autoencode_context(self, y_list):
+    def autoencode_context(self, *y_list):
         """Autoencode context."""
 
         # Encode y_list
@@ -150,7 +150,7 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, context_list)
+        y = model(x, *context_list)
 
 
     #### Estimate memory usage ####

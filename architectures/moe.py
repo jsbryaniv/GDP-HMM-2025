@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.blocks import ConvBlock
+from architectures.blocks import ConvBlock, VoxelNorm3d
 
 
 # Define MOE Gating
@@ -38,6 +38,9 @@ class MOEGating3d(nn.Module):
                     *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block-1)],
                 )
             )
+
+        # Set up norm
+        self.norm = VoxelNorm3d(n_features)
         
         # Set up linear layer
         self.linear = nn.Linear(n_features, n_experts)
@@ -57,8 +60,11 @@ class MOEGating3d(nn.Module):
         for layer in self.layers:
             x = layer(x)
 
+        # Normalize
+        x = self.norm(x)
+
         # Average across spatial dimensions
-        x = x.mean(dim=(2, 3, 4)) #TODO Normalize each voxel by channels before taking mean
+        x = x.mean(dim=(2, 3, 4))
 
         # Get expert weights
         weights = F.softmax(self.linear(x), dim=1)
@@ -113,10 +119,12 @@ class MOEWrapper3d(nn.Module):
         Call the gating mechanism. Used as a workaround for PyTorch's checkpointing,
         which requires a dummy variable with a gradient in order to track grads.
         """
+        inputs = (x + dummy for x in inputs)
         return self.gating(*inputs)
 
     def call_expert(self, dummy, expert, *inputs):
         """Same as call_gating but for the expert."""
+        inputs = (x + dummy for x in inputs)
         return expert(*inputs)
 
     def forward(self, *inputs):
@@ -126,7 +134,7 @@ class MOEWrapper3d(nn.Module):
         dummy = torch.zeros(1, requires_grad=True).to(device)
 
         # Get expert weights
-        weights = checkpoint(self.call_gating, dummy, inputs[0]) # TODO: generalize to allow multiple inputs
+        weights = checkpoint(self.call_gating, dummy, *inputs)
 
         # Get expert outputs
         x = torch.stack(
@@ -147,7 +155,7 @@ if __name__ == '__main__':
     # Import custom libraries
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
-    from architectures.unet import Unet3D
+    from architectures.unet import Unet3d
 
     # Set constants
     shape = (64, 64, 64)
@@ -159,7 +167,7 @@ if __name__ == '__main__':
 
     # Create a model
     model = MOEWrapper3d(
-        model=Unet3D,
+        model=Unet3d,
         in_channels=in_channels, 
         out_channels=out_channels,
     )

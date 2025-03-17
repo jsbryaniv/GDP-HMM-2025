@@ -4,7 +4,6 @@ import os
 import copy
 import time
 import torch
-import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
@@ -14,8 +13,9 @@ from config import *
 
 # Set up training function
 def train_model(
-    model, dataset_train, dataset_val,
-    learning_rate=0.001, max_grad=1, n_epochs=5, epoch_start=0, loss_val_best=float('inf'),
+    model, datasets, optimizer=None,
+    learning_rate=0.001, max_grad=1, n_epochs=5, epoch_start=0, 
+    loss_val_best=float('inf'), model_state_dict_best=None,
     jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
@@ -34,20 +34,22 @@ def train_model(
             print("WARNING: Be aware job is running with debug=True.")
 
     # Set up data loaders
+    dataset_train, dataset_val = datasets
     loader_val = DataLoader(dataset_val, batch_size=1, shuffle=False)
     loader_train = DataLoader(
         dataset_train, batch_size=1, shuffle=True,
         # pin_memory=True, n_workers=4, prefetch_factor=2,
     )
 
-    # Set up model and optimizer
-    model.train()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)  # TODO: Define optimizer outside of function
+    # Set up optimizer
+    if optimizer is None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Set up training statistics
     losses_train = []
     losses_val = []
-    model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
+    if model_state_dict_best is None:
+        model_state_dict_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
     # Training loop
     for epoch in range(epoch_start, n_epochs):
@@ -61,6 +63,9 @@ def train_model(
 
         ### Training ###
         print('--Training')
+
+        # Set model to training mode
+        model.train()
 
         # Initialize average loss
         loss_train_avg = 0
@@ -116,6 +121,9 @@ def train_model(
         ### Validation ###
         print('--Validation')
 
+        # Set model to evaluation mode
+        model.eval()
+
         # Initialize average loss
         loss_val_avg = 0
 
@@ -153,7 +161,7 @@ def train_model(
         losses_val.append(loss_val_avg)
         if loss_val_avg < loss_val_best:
             loss_val_best = loss_val_avg
-            model_state_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
+            model_state_dict_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
         # Status update
         print(f'-- Epoch {epoch}/{n_epochs} Summary {jobname}')
@@ -164,9 +172,6 @@ def train_model(
     
     ### Training complete ###
     print(f'Training complete. Best validation loss: {loss_val_best:.4f}')
-
-    # Load best model
-    model.load_state_dict(model_state_best)
     
     # Finalize training statistics
     training_statistics = {
@@ -174,10 +179,11 @@ def train_model(
         'losses_train': losses_train,
         'losses_val': losses_val,
         'loss_val_best': loss_val_best,
+        'model_state_dict_best': model_state_dict_best,
     }
 
     # Return model and training statistics
-    return model, training_statistics
+    return model, optimizer, training_statistics
     
 
 

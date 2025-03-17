@@ -216,7 +216,7 @@ def initialize_model(modelID, in_channels, **kwargs):
     return model
 
 # Save checkpoint
-def save_checkpoint(checkpoint_path, model, datasets, metadata):
+def save_checkpoint(checkpoint_path, model, datasets, optimizer, metadata):
     torch.save(
         {
             'model_config': model.get_config(),
@@ -227,20 +227,25 @@ def save_checkpoint(checkpoint_path, model, datasets, metadata):
                 'val': datasets[1].indices,
                 'test': datasets[2].indices,
             },
+            'optimizer_state_dict': optimizer.state_dict(),
             'metadata': metadata,
         }, 
         checkpoint_path
     )
 
 # Load checkpoint
-def load_checkpoint(checkpoint_path):
-
-    # Load model from checkpoint
-    from model import DosePredictionModel
-    model = DosePredictionModel.from_checkpoint(checkpoint_path)
+def load_checkpoint(checkpoint_path, load_best=False):
     
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, weights_only=False)
+
+    # Load model from checkpoint
+    from model import DosePredictionModel
+    if load_best:
+        model_state_dict = checkpoint['train_stats']['model_state_dict_best']
+        model = DosePredictionModel.from_checkpoint(checkpoint_path, state_dict=model_state_dict)
+    else:
+        model = DosePredictionModel.from_checkpoint(checkpoint_path)
 
     # Load datasets from checkpoint
     from dataset import GDPDataset
@@ -252,11 +257,18 @@ def load_checkpoint(checkpoint_path):
     dataset_test = Subset(dataset, data_indices['test'])
     datasets = (dataset_train, dataset_val, dataset_test)
 
+    # Load optimizer
+    optimizer = torch.optim.Adam(model.parameters())
+    try:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    except:
+        print("Warning: Could not load optimizer state dictionary from checkpoint.")
+
     # Load metadata
     metadata = checkpoint['metadata']
 
     # Return outputs
-    return model, datasets, metadata
+    return model, datasets, optimizer, metadata
 
 
 ### MEASURE CPU MEMORY ###

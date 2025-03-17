@@ -16,7 +16,7 @@ from config import *
 
 # Set up testing function
 @torch.no_grad()
-def test_model(model, dataset_test, jobname=None, debug=False):
+def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
 
     # Set up constants
     if jobname is None:
@@ -44,10 +44,6 @@ def test_model(model, dataset_test, jobname=None, debug=False):
         if debug and batch_idx > 10:
             print('DEBUG MODE: Breaking early.')
             break
-        
-        # Status update
-        if batch_idx % 100 == 0:
-            print(f'-- Batch {batch_idx}/{len(loader_test)}')
         
         # Configure inputs
         scan = scan.to(device)
@@ -85,6 +81,10 @@ def test_model(model, dataset_test, jobname=None, debug=False):
         # Update loss
         n_test += 1
         loss_test += error
+        
+        # Status update
+        if batch_idx % print_every == 0:
+            print(f'-- Batch {batch_idx}/{len(loader_test)} error={error:.4f}')
 
 
     # Normalize loss
@@ -108,13 +108,17 @@ if __name__ == '__main__':
     device = 'cpu'
 
     # Load model and dataset
-    savename = 'model_All_Unet'
+    savename = 'model_All_CrossAttnUnet_shape=128'
     checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model, datasets, metadata = load_checkpoint(checkpoint_path)
     model.to(device)
 
     # Test model
-    loss_test = test_model(model, datasets[-1])
+    loss_test = test_model(model, datasets[-1], print_every=1)
     
     # Done
     print('Done.')
+
+
+
+

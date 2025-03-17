@@ -29,23 +29,23 @@ class DosePredictionModel(nn.Module):
         # Initialize model
         if architecture.lower() == "unet":
             # Unet3D
-            from architectures.unet import Unet3D
+            from architectures.unet import Unet3d
             kwargs = {
                 'in_channels': n_channels,
                 'out_channels': 1,
                 **kwargs,
             }
-            self.model = Unet3D(**kwargs)
+            self.model = Unet3d(**kwargs)
         elif architecture.lower() == "moeunet":
             # MOEUnet3D
-            from architectures.unet import Unet3D
+            from architectures.unet import Unet3d
             from architectures.moe import MOEWrapper3d
             kwargs = {
                 'in_channels': n_channels,
                 'out_channels': 1,
                 **kwargs,
             }
-            self.model = MOEWrapper3d(Unet3D, **kwargs)
+            self.model = MOEWrapper3d(Unet3d, **kwargs)
         elif architecture.lower() == "vit":
             # ViT3D
             from architectures.vit import ViT3D
@@ -123,7 +123,7 @@ class DosePredictionModel(nn.Module):
         }
     
     @classmethod
-    def from_checkpoint(cls, checkpoint_path):
+    def from_checkpoint(cls, checkpoint_path, model_state_dict=None):
         """
         Load model from checkpoint.
         """
@@ -135,7 +135,10 @@ class DosePredictionModel(nn.Module):
         model = cls(**checkpoint['model_config'])
         
         # Load model state
-        model.load_state_dict(checkpoint['model_state_dict'])
+        if model_state_dict is not None:
+            model.load_state_dict(model_state_dict)
+        else:
+            model.load_state_dict(checkpoint['model_state_dict'])
         
         # Return model
         return model
@@ -145,46 +148,29 @@ class DosePredictionModel(nn.Module):
         # Reshape inputs
         transform_params=None  # Initialize to None
         if self.shape is not None:
-            # ### Pad to 256x256x256 ###
-            # # Get pad info
-            # shape_target = (256, 256, 256)
-            # shape_origin = scan.shape[2:]
-            # padding = [shape_target[i] - shape_origin[i] for i in range(3)]
-            # padding = [(p//2, p-p//2) for p in padding]
-            # padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
-            # # Pad
-            # scan = F.pad(scan, padding, value=scan.min())
-            # beam = F.pad(beam, padding)
-            # ptvs = F.pad(ptvs, padding)
-            # oars = F.pad(oars, padding)
-            # body = F.pad(body, padding)
-            ### Resize to shape ###
             scan, resize_params = resize_image_3d(scan, self.shape, fill_value=scan.min())
             beam, _ = resize_image_3d(beam, self.shape)
             ptvs, _ = resize_image_3d(ptvs, self.shape)
             oars, _ = resize_image_3d(oars, self.shape)
             body, _ = resize_image_3d(body, self.shape)
-            ### Update transform params ###
             transform_params = {
-                # 'original_shape': shape_origin,
-                # 'padding': padding,
                 'resize': resize_params,
             }
 
         # Check architecture
         if self.architecture.lower() in ["unet", "vit", "moeunet", "moevit"]:
             # Concatenate inputs
-            x = torch.cat([scan, beam, ptvs, oars, body], dim=1)
-            inputs = (x,)
+            inputs = (
+                torch.cat([scan, beam, ptvs, oars, body], dim=1),
+            )
         elif self.architecture.lower() in ["crossattnunet", "crossvit", "moecrossattnunet", "moecrossvit"]:
             # Separate contexts
-            x = torch.cat([beam, ptvs], dim=1).clone()
-            y_list = [
-                scan, 
-                torch.cat([beam, ptvs], dim=1), 
-                torch.cat([oars, body], dim=1).float(),
-            ]
-            inputs = (x, y_list)
+            inputs = (
+                torch.cat([beam, ptvs], dim=1).clone(),  # Main input
+                scan,                                    # Context 1  
+                torch.cat([beam, ptvs], dim=1),          # Context 2
+                torch.cat([oars, body], dim=1).float(),  # Context 3
+            )
 
         # Return inputs
         return inputs, transform_params
@@ -193,19 +179,8 @@ class DosePredictionModel(nn.Module):
         
         # Reshape prediction
         if self.shape is not None:
-            ### Extract transform params ###
-            # original_shape = transform_params['original_shape']
-            # padding = transform_params['padding']
             resize_params = transform_params['resize']
-            ### Resize to padded shape ###
             x = reverse_resize_3d(x, resize_params)
-            ### Unpad to original shape ###
-            # x = x[
-            #     :, :, 
-            #     padding[4]:256-padding[5],
-            #     padding[2]:256-padding[3],
-            #     padding[0]:256-padding[1],
-            # ]
 
         # Return prediction
         return x

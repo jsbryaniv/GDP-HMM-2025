@@ -14,12 +14,12 @@ from architectures.blocks import ConvBlock
 
 
 # Define simple 3D Unet model
-class Unet3D(nn.Module):  # TODO: rename to Unet3d
+class Unet3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
         n_features=4, n_groups=1, n_blocks=5, n_layers_per_block=4, 
     ):
-        super(Unet3D, self).__init__()
+        super(Unet3d, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     x = torch.randn(1, in_channels, *shape)
 
     # Create a model
-    model = Unet3D(
+    model = Unet3d(
         in_channels=in_channels, 
         out_channels=out_channels,
     )

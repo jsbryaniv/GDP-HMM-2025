@@ -113,36 +113,6 @@ class ViT3D(nn.Module):
             scale=patch_size[0],
             buffer=patch_size[0]//2,
         )
-        # self.patch_embed = nn.Sequential(
-        #     nn.Conv3d(
-        #         n_features, 
-        #         n_features,
-        #         kernel_size=patch_size_effective,
-        #         padding=patch_buffer, 
-        #         stride=patch_size,
-        #         groups=n_features  # Channel-wise patching
-        #     ),
-        #     nn.Conv3d(
-        #         n_features, 
-        #         n_features, 
-        #         kernel_size=1,  # Channel-wise mixing
-        #     ),
-        # )
-        # self.patch_unembed = nn.Sequential(
-        #     nn.Conv3d(
-        #         n_features, 
-        #         n_features, 
-        #         kernel_size=1,  # Channel-wise mixing
-        #     ),
-        #     nn.ConvTranspose3d(
-        #         n_features, 
-        #         n_features, 
-        #         kernel_size=patch_size_effective,
-        #         padding=patch_buffer, 
-        #         stride=patch_size,
-        #         groups=n_features  # Channel-wise unpatching
-        #     ),
-        # )
         
         # Positional Encoding
         self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
@@ -153,14 +123,6 @@ class ViT3D(nn.Module):
             self.transformer_encoder.append(
                 TransformerBlock(n_features=n_features, n_heads=n_heads)
             )
-        # self.transformer_encoder = nn.TransformerEncoder(
-        #     nn.TransformerEncoderLayer(
-        #         n_features, n_heads, 
-        #         dim_feedforward=n_features,
-        #         batch_first=True
-        #     ),
-        #     num_layers=n_layers//2
-        # )
 
         # Transformer Decoders
         self.transformer_decoder = nn.ModuleList()
@@ -168,14 +130,6 @@ class ViT3D(nn.Module):
             self.transformer_decoder.append(
                 TransformerBlock(n_features=n_features, n_heads=n_heads)
             )
-        # self.transformer_decoder = nn.TransformerEncoder(
-        #     nn.TransformerEncoderLayer(
-        #         n_features, n_heads, 
-        #         dim_feedforward=n_features,
-        #         batch_first=True
-        #     ),
-        #     num_layers=n_layers//2
-        # )
 
     def get_config(self):
         return {

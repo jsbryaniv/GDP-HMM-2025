@@ -11,7 +11,7 @@ import torch
 from config import *
 from test import test_model
 from train import train_model
-from utils import get_savename, save_checkpoint, load_checkpoint, initialize_datasets, initialize_model
+from utils import get_savename, save_checkpoint, load_checkpoint, initialize_model, initialize_datasets
 
 
 # Define main function
@@ -39,8 +39,8 @@ def main(
         for _ in range(10):
             print("WARNING: Be aware job is running with from_checkpoint=True.")  # Print warning message
         print("Loading checkpoint.")
-        model, datasets, metadata = load_checkpoint(checkpoint_path)   # Load model, datasets, and metadata
-        dataset_val, dataset_test, dataset_train = datasets            # Unpack datasets
+        model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path)  # Load model, datasets, and metadata
+        dataset_val, dataset_test, dataset_train = datasets                      # Unpack datasets
     else:
         # Initialize datasets and model
         print("Initializing datasets and model.")
@@ -48,6 +48,7 @@ def main(
         dataset_val, dataset_test, dataset_train = datasets            # Unpack datasets
         n_channels = dataset_train.dataset.n_channels                  # Get number of channels
         model = initialize_model(modelID, n_channels, **model_kwargs)  # Initialize model
+        optimizer = None                                               # Initialize optimizer
         metadata = {                                                   # Initialize metadata
             'dataID': dataID,
             'modelID': modelID,
@@ -57,6 +58,7 @@ def main(
                 'losses_val': [],
                 'losses_train': [],
                 'loss_val_best': float('inf'),
+                'model_state_dict_best': None,
                 'loss_test': None,
             },
         }
@@ -72,17 +74,22 @@ def main(
     print("Starting training.")
 
     # Train model
-    model, train_stats_new = train_model(
-        model, dataset_train, dataset_val,
+    model, optimizer, train_stats_new = train_model(
+        model, 
+        datasets=(dataset_train, dataset_val), 
+        optimizer=optimizer,
         jobname=savename, debug=debug,
         epoch_start=metadata['train_stats']['epoch'],
         loss_val_best=metadata['train_stats']['loss_val_best'],
+        model_state_dict_best=metadata['train_stats']['model_state_dict_best'],
     )
 
     ### TESTING ###
     print("Testing model.")
 
     # Test model
+    model_best = copy.deepcopy(model)
+    model_best.load_state_dict(metadata['train_stats']['model_state_dict_best'])
     loss_test = test_model(model, dataset_test, debug=debug)
 
 
@@ -96,7 +103,13 @@ def main(
     metadata['train_stats'] = train_stats_new
 
     # Save checkpoint
-    save_checkpoint(checkpoint_path, model, datasets, metadata)
+    save_checkpoint(
+        checkpoint_path,
+        model=model, 
+        datasets=datasets, 
+        optimizer=optimizer, 
+        metadata=metadata
+    )
 
 
     ### DONE ###
@@ -109,7 +122,8 @@ def main(
 # Run main function
 if __name__ == '__main__':
 
-    # Set up all models
+    # Set up all jobs
+    dataIDs_list = ['All']
     modelID_list = [
         ('CrossAttnUnet',   {'shape': 128}),                                           # 0
         ('CrossViT',        {'shape': 128}),                                           # 1
@@ -124,10 +138,8 @@ if __name__ == '__main__':
         ('CrossAttnUnet',   {'shape': 128, 'n_features': 16}),                         # 10
         ('CrossAttnUnet',   {'shape': 256, 'n_features': 4, 'use_checkpoint': True}),  # 11
     ]
-
-    # Set job IDs
     all_jobs = []
-    for dataID in ['All']:
+    for dataID in dataIDs_list:
         for (modelID, model_kwargs) in modelID_list:
             all_jobs.append({
                 'dataID': dataID, 

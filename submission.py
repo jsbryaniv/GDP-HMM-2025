@@ -97,7 +97,7 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Get model and metadata
-    savename = 'model_All_Unet_shape=128'
+    savename = 'model_All_CrossAttnUnet_shape=128'
     savepath = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model = DosePredictionModel.from_checkpoint(savepath)
     model.to(device)
