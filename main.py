@@ -129,6 +129,10 @@ if __name__ == '__main__':
     modelID_list = [
         ('diffunet',   {'shape': 128}),
         ('sdm',        {'shape': 128}),
+        ('diffunet',   {'shape': 128, 'scale': 2}),
+        ('sdm',        {'shape': 128, 'scale': 2}),
+        ('diffunet',   {'shape': 256}),
+        ('sdm',        {'shape': 256}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
