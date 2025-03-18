@@ -111,6 +111,24 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = MOEWrapper3d(CrossViT3d, **kwargs)
+        elif architecture.lower() == "diffunet":
+            # DiffUnet3d
+            from architectures.diffunet import DiffUnet3d
+            kwargs = {
+                'in_channels': 1,
+                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
+                **kwargs,
+            }
+            self.model = DiffUnet3d(**kwargs)
+        elif architecture.lower() == "sdm":
+            # ScalarDiffusionModel3d
+            from architectures.sdm import ScalarDiffusionModel3d
+            kwargs = {
+                'in_channels': 1,
+                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
+                **kwargs,
+            }
+            self.model = ScalarDiffusionModel3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         
@@ -148,12 +166,29 @@ class DosePredictionModel(nn.Module):
         # Reshape inputs
         transform_params=None  # Initialize to None
         if self.shape is not None:
+            # ### Pad to 256x256x256 ###
+            # # Get pad info
+            # shape_target = (256, 256, 256)
+            # shape_origin = scan.shape[2:]
+            # padding = [shape_target[i] - shape_origin[i] for i in range(3)]
+            # padding = [(p//2, p-p//2) for p in padding]
+            # padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
+            # # Pad
+            # scan = F.pad(scan, padding, value=scan.min())
+            # beam = F.pad(beam, padding)
+            # ptvs = F.pad(ptvs, padding)
+            # oars = F.pad(oars, padding)
+            # body = F.pad(body, padding)
+            ### Resize to shape ###
             scan, resize_params = resize_image_3d(scan, self.shape, fill_value=scan.min())
             beam, _ = resize_image_3d(beam, self.shape)
             ptvs, _ = resize_image_3d(ptvs, self.shape)
             oars, _ = resize_image_3d(oars, self.shape)
             body, _ = resize_image_3d(body, self.shape)
+            ### Update transform params ###
             transform_params = {
+                # 'original_shape': shape_origin,
+                # 'padding': padding,
                 'resize': resize_params,
             }
 
@@ -171,6 +206,14 @@ class DosePredictionModel(nn.Module):
                 torch.cat([beam, ptvs], dim=1),          # Context 2
                 torch.cat([oars, body], dim=1).float(),  # Context 3
             )
+        elif self.architecture.lower() in ["diffunet", "sdm"]:
+            # Separate contexts
+            inputs = (
+                ptvs.sum(dim=1).unsqueeze(1),            # Main input
+                scan,                                    # Context 1  
+                torch.cat([beam, ptvs], dim=1),          # Context 2
+                torch.cat([oars, body], dim=1).float(),  # Context 3
+            )
 
         # Return inputs
         return inputs, transform_params
@@ -179,8 +222,19 @@ class DosePredictionModel(nn.Module):
         
         # Reshape prediction
         if self.shape is not None:
+            ### Extract transform params ###
+            # original_shape = transform_params['original_shape']
+            # padding = transform_params['padding']
             resize_params = transform_params['resize']
+            ### Resize to padded shape ###
             x = reverse_resize_3d(x, resize_params)
+            # ### Unpad to original shape ###
+            # x = x[
+            #     :, :, 
+            #     padding[4]:256-padding[5],
+            #     padding[2]:256-padding[3],
+            #     padding[0]:256-padding[1],
+            # ]
 
         # Return prediction
         return x

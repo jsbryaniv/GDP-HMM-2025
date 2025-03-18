@@ -57,9 +57,10 @@ def main(
                 'epoch': 0,
                 'losses_val': [],
                 'losses_train': [],
+                'loss_test': None,
+                'losses_test': None,
                 'loss_val_best': float('inf'),
                 'model_state_dict_best': None,
-                'loss_test': None,
             },
         }
 
@@ -90,7 +91,7 @@ def main(
     # Test model
     model_best = copy.deepcopy(model)
     model_best.load_state_dict(train_stats_new['model_state_dict_best'])
-    loss_test = test_model(model_best, dataset_test, debug=debug)
+    loss_test, losses_test = test_model(model_best, dataset_test, debug=debug)
 
 
     ### SAVE RESULTS ###
@@ -98,6 +99,7 @@ def main(
 
     # Merge training statistics
     train_stats_new['loss_test'] = loss_test
+    train_stats_new['losses_test'] = losses_test
     train_stats_new['losses_val'] = metadata['train_stats']['losses_val'] + train_stats_new['losses_val']
     train_stats_new['losses_train'] = metadata['train_stats']['losses_train'] + train_stats_new['losses_train']
     metadata['train_stats'] = train_stats_new
@@ -125,17 +127,8 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # ('CrossAttnUnet',   {'shape': 128}),                                           # 0
-        # ('CrossViT',        {'shape': 128}),                                           # 1
-        # ('ViT',             {'shape': 128}),                                           # 2
-        # ('Unet',            {'shape': 256}),                                           # 3
-        # ('Unet',            {'shape': 128}),                                           # 4
-        # ('MOECrossAttnUnet',   {'shape': 128}),                                        # 5
-        ('MOECrossViT',        {'shape': 128, 'use_checkpoint': True}),                # 6
-        ('MOEViT',             {'shape': 128, 'use_checkpoint': True}),                # 7
-        ('MOEUnet',            {'shape': 128, 'use_checkpoint': True}),                # 8
-        ('MOEUnet',            {'shape': 256, 'use_checkpoint': True}),                # 9
-        ('CrossAttnUnet',   {'shape': 128, 'n_features': 16}),                         # 10
+        ('diffunet',   {'shape': 128}),
+        ('sdm',        {'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -150,20 +143,20 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # DEBUGGING all files
-    for ID in range(len(all_jobs)):
-        for ITER in [0, 1]:
-            job_args = copy.deepcopy(all_jobs[ID])
-            shape = job_args['model_kwargs'].get('shape', None)
-            if shape is not None:
-                # Make shape smaller for debugging
-                job_args['model_kwargs']['shape'] = shape // 4
-            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-            print('\n'*5)
+    # # DEBUGGING all files
+    # for ID in range(len(all_jobs)):
+    #     for ITER in [0, 1]:
+    #         job_args = copy.deepcopy(all_jobs[ID])
+    #         shape = job_args['model_kwargs'].get('shape', None)
+    #         if shape is not None:
+    #             # Make shape smaller for debugging
+    #             job_args['model_kwargs']['shape'] = shape // 2
+    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+    #         print('\n'*5)
 
-    # # Run main function
-    # job_args = all_jobs[ID]
-    # model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
+    # Run main function
+    job_args = all_jobs[ID]
+    model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
 
     # Done
     print('Done!')

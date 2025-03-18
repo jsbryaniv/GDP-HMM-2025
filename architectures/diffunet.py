@@ -11,11 +11,12 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.blocks import ConvformerDecoder3d, VolumeContractSparse3d, VolumeExpandSparse3d, ConvVolEncoder3d
+from architectures.unet import Unet3d
+from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, VolumeContractSparse3d, VolumeExpandSparse3d
 
 
-# Define Scalar Diffusion Model
-class ScalarDiffusionModel3d(nn.Module):
+# Define Diffusion Model Unet
+class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
         n_features=16, n_blocks=3, 
@@ -23,7 +24,7 @@ class ScalarDiffusionModel3d(nn.Module):
         dt=1, kT_max=10, n_steps=8,
         scale=4,
     ):
-        super(ScalarDiffusionModel3d, self).__init__()
+        super(DiffUnet3d, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
@@ -37,8 +38,12 @@ class ScalarDiffusionModel3d(nn.Module):
         self.n_steps = n_steps
         self.scale = scale
 
-        # Create temperature schedule
+        # Get constants
+        n_context = len(n_cross_channels_list)
+        n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
         kT_schedule = torch.linspace(0, kT_max, n_steps).flip(0)
+        self.n_context = n_context
+        self.n_features_per_depth = n_features_per_depth
         self.kT_schedule = kT_schedule
 
         # Create input blocks
@@ -67,35 +72,33 @@ class ScalarDiffusionModel3d(nn.Module):
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )
 
-        # Define volume encoder
-        self.volume_encoder = ConvVolEncoder3d(
-            in_channels=n_features,
-            n_features=n_features,
-            n_blocks=n_blocks,
-            n_layers_per_block=n_layers_per_block,
+        # Create main autoencoder
+        self.autoencoder = Unet3d(
+            n_features, n_features, 
+            n_features=n_features, n_blocks=n_blocks,
+            n_layers_per_block=n_layers_per_block
         )
-
-        # Define context encoders
-        self.context_encoders = nn.ModuleList()
+        
+        # Create context autoencoders
+        self.context_autoencoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
-            self.context_encoders.append(
-                ConvVolEncoder3d(
-                    in_channels=n_features,
-                    n_features=n_features,
-                    n_blocks=n_blocks,
+            self.context_autoencoders.append(
+                Unet3d(
+                    n_features, n_features, 
+                    n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
                 )
             )
 
-        # Define mixing and linear blocks
-        self.mixing_blocks = nn.ModuleList()
-        self.linear_blocks = nn.ModuleList()
-        for _ in range(n_blocks+1):
-            self.mixing_blocks.append(
-                ConvformerDecoder3d(n_features=n_features, n_layers=n_mixing_blocks)
-            )
-            self.linear_blocks.append(
-                nn.Conv3d(n_features, n_features, kernel_size=1)
+        # Create cross attention blocks
+        self.cross_attn_blocks = nn.ModuleList()
+        for depth in range(n_blocks+1):
+            self.cross_attn_blocks.append(
+                ConvformerDecoder3d(
+                    n_features_per_depth[depth], 
+                    n_heads=depth+1,
+                    n_layers=n_mixing_blocks,
+                )
             )
 
     def get_config(self):
@@ -112,44 +115,35 @@ class ScalarDiffusionModel3d(nn.Module):
             'scale': self.scale,
         }
     
-    def energy(self, x, feats_context):
-        """Calculate energy of a volume."""
+    def force(self, x, f_context):
 
-        # Initialize energy
-        U_terms = []
+        # Encode x
+        feats = self.autoencoder.encoder(x)
+        x = feats.pop()
+
+        # Apply context
+        depth = self.n_blocks
+        fcon = f_context[-1]
+        x = self.cross_attn_blocks[depth](x, fcon)
+
+        # Upsample blocks
+        for i in range(self.n_blocks):
+            depth = self.n_blocks - 1 - i
+            # Upsample
+            x = self.autoencoder.up_blocks[i](x)
+            # Merge with skip
+            x_skip = feats[depth]
+            x = x + x_skip
+            # Apply cross attention
+            fcon = f_context[depth]
+            x = self.cross_attn_blocks[depth](x, fcon)
+
+        # Output block
+        x = self.autoencoder.output_block(x)
         
-        # Encode inputs
-        feats = self.volume_encoder(x)
+        # Return
+        return x
 
-        # Calculate energy
-        for i, (fx, fy) in enumerate(zip(feats, feats_context)):
-            fx = self.mixing_blocks[i](fx, fy)  # Mix features
-            fx = self.linear_blocks[i](fx)      # Linear layer
-            u = - (fx**2).mean(dim=(1,2,3,4))   # Calculate energy
-            U_terms.append(u)
-
-        # Sum energy terms
-        U = sum(U_terms)
-
-        # Return energy
-        return U
-    
-    @torch.enable_grad()
-    def force(self, x, feats_context):
-        """Calculate the force (-grad(U)) of a volume."""
-
-        # Track gradients
-        x = x.clone().requires_grad_(True)
-
-        # Calculate energy
-        U = checkpoint(self.energy, x, feats_context, use_reentrant=False)
-
-        # Calculate force
-        F = - torch.autograd.grad(U, x, grad_outputs=torch.ones_like(U), create_graph=True, retain_graph=True)[0]
-
-        # Return force
-        return F
-        
     def forward(self, x, *y_list):
         """
         x is the input tensor
@@ -161,7 +155,7 @@ class ScalarDiffusionModel3d(nn.Module):
         y_list = [block(y) for block, y in zip(self.context_input_blocks, y_list)]
         
         # Encode features
-        feats_context = [encoder(y) for encoder, y in zip(self.context_encoders, y_list)]
+        feats_context = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
         feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
         
         # Loop over temperature schedule
@@ -171,7 +165,8 @@ class ScalarDiffusionModel3d(nn.Module):
             x = x + kT * torch.randn_like(x, device=x.device)
             
             # Calculate force
-            F = self.force(x, feats_context)
+            # F = self.force(x, feats_context)
+            F = checkpoint(self.force, x.clone().requires_grad_(True), feats_context, use_reentrant=False)
 
             # Update position
             x = x + self.dt * F
@@ -204,7 +199,7 @@ if __name__ == '__main__':
     y_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
-    model = ScalarDiffusionModel3d(
+    model = DiffUnet3d(
         in_channels, n_cross_channels_list,
     )
 
@@ -222,6 +217,3 @@ if __name__ == '__main__':
 
     # Done
     print('Done!')
-
-
-

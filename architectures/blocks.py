@@ -146,10 +146,15 @@ class ConvBlock3d(nn.Module):
             raise ValueError('Cannot upsample and downsample at the same time.')
         if upsample or downsample:
             assert scale & (scale - 1) == 0, "Scale must be power of 2."
+            # Define constants
+            stride = scale
             padding = scale // 2
             kernel_size = scale + 2 * padding
-            stride = scale
-
+        else:
+            # Define constants
+            kernel_size = 3
+            padding = kernel_size // 2
+            stride = 1
 
         # Set attributes
         self.in_channels = in_channels
@@ -165,36 +170,33 @@ class ConvBlock3d(nn.Module):
         if upsample:
             # Residual layer
             self.residual = nn.ConvTranspose3d(
-                in_channels, out_channels, 
-                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
+                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
             # Convolutional layer
             self.conv = nn.ConvTranspose3d(  
-                in_channels, out_channels,
-                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
+                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
         elif downsample:
             # Residual layer
             self.residual = nn.Conv3d(
-                in_channels, out_channels, 
-                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
+                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
             # Convolutional layer
             self.conv = nn.Conv3d(
-                in_channels, out_channels, 
-                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
+                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
         else:
             # Residual layer
-            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(
-                    in_channels, out_channels, 
-                    kernel_size=1, stride=1, groups=groups,
+            if in_channels == out_channels:
+                self.residual = nn.Identity()
+            else:
+                self.residual = nn.Conv3d(
+                    in_channels, out_channels, kernel_size=1, stride=1, groups=groups
                 )
             # Convolutional layer
             self.conv = nn.Sequential(
                 nn.Conv3d(
-                    in_channels, out_channels, 
-                    kernel_size=kernel_size, padding=(kernel_size//2), groups=groups,
+                    in_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=groups,
                 ),
             )
 
@@ -223,6 +225,55 @@ class ConvBlock3d(nn.Module):
 
         # Return the output
         return x
+
+# Define Volume Encoder
+class ConvVolEncoder3d(nn.Module):
+    """SDM Volume Encoder module."""
+    def __init__(self, in_channels, n_features=4, n_blocks=3, n_layers_per_block=4):
+        super(ConvVolEncoder3d, self).__init__()
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.n_features = n_features
+        self.n_blocks = n_blocks
+        self.n_layers_per_block = n_layers_per_block
+
+        # Define input block
+        self.input_block = nn.Sequential(
+            # Merge input channels to n_features
+            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            # Additional convolutional layers
+            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+        )
+
+        # Define downsample blocks
+        self.down_blocks = nn.ModuleList()
+        for _ in range(n_blocks):
+            self.down_blocks.append(
+                nn.Sequential(
+                    # Downsample layer
+                    ConvBlock3d(n_features, n_features, downsample=True),
+                    # Additional convolutional layers
+                    *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1)]
+                )
+            )
+
+    def forward(self, x):
+        
+        # Initialize list of features
+        feats = []
+
+        # Input block
+        x = self.input_block(x)
+        feats.append(x.clone())
+
+        # Downsample blocks
+        for block in self.down_blocks:
+            x = block(x)
+            feats.append(x.clone())
+
+        # Return features
+        return feats
 
 
 ### TRANSFORMER BLOCKS ###

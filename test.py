@@ -35,8 +35,7 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
     metadata = pd.read_csv(os.path.join(PATH_METADATA, 'meta_data.csv'))
 
     # Initialize loss
-    n_test = 0
-    loss_test = 0
+    losses_test = []
 
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
@@ -79,8 +78,7 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
         error = np.sum(np.abs(diff)[isodose_5Gy_mask > 0]) / np.sum(isodose_ref_5Gy_mask)
 
         # Update loss
-        n_test += 1
-        loss_test += error
+        losses_test.append(error)
         
         # Status update
         if batch_idx % print_every == 0:
@@ -88,13 +86,13 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
 
 
     # Normalize loss
-    loss_test /= n_test
+    loss_test = np.mean(losses_test)
 
     # Print loss
     print(f'-- Average loss on test dataset: {loss_test:.4f} {jobname}') 
     
     # Return total loss
-    return loss_test
+    return loss_test, losses_test
 
 
 # Test model

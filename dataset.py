@@ -220,11 +220,13 @@ if __name__ == "__main__":
     # Create dataset
     dataset = GDPDataset(
         treatment='All', 
-        validation_set=True,
+        validation_set=False,
     )
 
     # Initialize max shape
     max_shape = (0, 0, 0)
+    # Index 733 shape = (141, 156, 259)
+    # Index 734 shape = (141, 156, 259)
 
     # Loop over dataset
     print('Looping over dataset')
