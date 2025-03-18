@@ -19,7 +19,7 @@ class CrossViT3d(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         shape=128, n_features=128, n_heads=4, 
-        n_layers=8, n_layers_context=8, n_layers_mixing=8,
+        n_layers=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
             
@@ -31,7 +31,6 @@ class CrossViT3d(nn.Module):
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
-        self.n_layers_context = n_layers_context
         self.n_layers_mixing = n_layers_mixing
 
         # Create main autoencoder
@@ -48,7 +47,7 @@ class CrossViT3d(nn.Module):
                 ViT3D(
                     n_channels, n_channels,
                     shape=shape, n_features=n_features, 
-                    n_heads=n_heads, n_layers=n_layers_context,
+                    n_heads=n_heads, n_layers=n_layers,
                 )
             )
 
@@ -76,7 +75,6 @@ class CrossViT3d(nn.Module):
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
-            'n_layers_context': self.n_layers_context,
             'n_layers_mixing': self.n_layers_mixing,
         }
 
@@ -121,18 +119,18 @@ class CrossViT3d(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import psutil
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (32, 32, 32)
     in_channels = 4
     out_channels = 1
     n_channels_context = [1, 4, 30]
 
     # Create data
     x = torch.randn(1, in_channels, *shape)
-    context_list = [torch.randn(1, n, *shape) for n in n_channels_context]
+    y_list = [torch.randn(1, n, *shape) for n in n_channels_context]
 
     # Create a model
     model = CrossViT3d(
@@ -142,7 +140,7 @@ if __name__ == '__main__':
         shape=shape
     )
 
-    # Print model parameter info
+    # Print model structure
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
     print('Number of parameters in blocks:')
     for name, block in model.named_children():
@@ -150,26 +148,10 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, *context_list)
+        y = model(x, *y_list)
 
-
-    #### Estimate memory usage ####
-
-    # Measure memory before execution
-    process = psutil.Process(os.getpid())
-    mem_before = process.memory_info().rss  # Total RAM usage before forward pass
-
-    # Forward pass
-    pred = model(x, context_list)
-    ae_list = [ae(y) for ae, y in zip(model.context_autoencoders, context_list)]
-
-    # Backward pass
-    loss = pred.sum() + sum([ae.sum() for ae in ae_list])
-    loss.backward()
-
-    # Measure memory after execution
-    mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-    print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
+    # Estimate memory usage
+    estimate_memory_usage(model, x, *y_list, print_stats=True)
 
     # Done
     print('Done!')

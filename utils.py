@@ -6,6 +6,7 @@ A utility function is a function that is useful in multiple contexts.
 
 # Import libraries
 import os
+import time
 import json
 import torch
 import numpy as np
@@ -259,10 +260,8 @@ def load_checkpoint(checkpoint_path, load_best=False):
 
     # Load optimizer
     optimizer = torch.optim.Adam(model.parameters())
-    try:
+    if 'optimizer_state_dict' in checkpoint:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    except:
-        print("Warning: Could not load optimizer state dictionary from checkpoint.")
 
     # Load metadata
     metadata = checkpoint['metadata']
@@ -274,7 +273,7 @@ def load_checkpoint(checkpoint_path, load_best=False):
 ### MEASURE CPU MEMORY ###
 
 # Define function to measure CPU memory
-def estimate_memory_usage(model, x, print_stats=True, device=None):
+def estimate_memory_usage(model, *inputs, print_stats=True):
     """
     Estimate total memory used by model parameters, gradients, activations, and optimizer states.
     
@@ -285,53 +284,25 @@ def estimate_memory_usage(model, x, print_stats=True, device=None):
     each run.
     """
 
+    # Print status
+    if print_stats:
+        print("Estimating Memory consumption...")
+        t_start = time.time()
+
     # Import libraries
     import psutil
-        
-    # Check which method to use
-    if device is None or device == 'cpu':
-        """
-        Calculate memory usage on CPU using psutil.
-        """
 
-        # Move to CPU
-        device = torch.device("cpu")  # Ensure execution on CPU
-        model = model.to(device)
-        x = x.to(device)
+    # Measure memory before execution
+    process = psutil.Process(os.getpid())
+    mem_before = process.memory_info().rss  # Total RAM usage before forward pass
 
-        # Measure memory before execution
-        process = psutil.Process(os.getpid())
-        mem_before = process.memory_info().rss  # Total RAM usage before forward pass
+    # Forward and backward pass
+    y = model(*inputs)
+    loss = y.sum()
+    loss.backward()
 
-        # Forward and backward pass
-        y = model(x)
-        loss = y.sum()
-        loss.backward()
-
-        # Measure memory after execution
-        mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-
-    else:
-        """
-        Calculate memory usage on GPU using PyTorch.
-        """
-
-        # Move to GPU
-        device = torch.device("cuda")  # Ensure execution on GPU
-        model = model.to(device)
-        x = x.to(device)
-
-        # Measure memory before execution
-        torch.cuda.reset_peak_memory_stats(device)
-        mem_before = torch.cuda.max_memory_allocated(device)
-
-        # Forward and backward pass
-        y = model(x)
-        loss = y.sum()
-        loss.backward()
-
-        # Measure memory after execution
-        mem_after = torch.cuda.max_memory_allocated(device)
+    # Measure memory after execution
+    mem_after = process.memory_info().rss  # Total RAM usage after backward pass
 
     # Compute memory usage for model parameters
     dtype = next(model.parameters()).dtype
@@ -347,8 +318,7 @@ def estimate_memory_usage(model, x, print_stats=True, device=None):
 
     # Print stats
     if print_stats:
-        print(f"Model has {n_params:,} parameters")
-        print(f"Estimated Memory Usage:")
+        print(f"Estimated Memory Usage ({time.time() - t_start:.3f} seconds to compute):")
         # Loop over memory components
         for key, value in {
             "Parameters": mem_params,

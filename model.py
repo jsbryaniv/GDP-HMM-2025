@@ -232,27 +232,6 @@ class DosePredictionModel(nn.Module):
             structures=torch.cat([(ptvs!=0), oars, body], dim=1)
         )
 
-        # # Compute reconstruction loss
-        # if self.architecture.lower() in ['crossattnunet', 'crossvit']:
-        #     """Compute reconstruction loss for cross-attention-unet."""
-        #     # Get context
-        #     y_list = inputs[1]
-        #     # Corrupt context
-        #     if self.architecture.lower() == 'crossvit':
-        #         y_list_corrupt = [block_mask_3d(y, p=0.5) for y in y_list]
-        #     else:
-        #         y_list_corrupt = y_list
-        #     # Get reconstructions
-        #     recons = self.model.autoencode_context(y_list_corrupt)
-        #     # Compute likelihood loss
-        #     likelihood_recon = (
-        #         F.mse_loss(y_list[0], recons[0])
-        #         + F.mse_loss(y_list[1], recons[1])
-        #         + F.binary_cross_entropy_with_logits(recons[2], y_list[2])  # Use BCE for binary masks
-        #     )
-        #     # Combine losses
-        #     likelihood += likelihood_recon
-
         # Compute total loss
         loss = (
             likelihood 

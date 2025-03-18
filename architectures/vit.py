@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 # Import custom libraries
-from architectures.blocks import TransformerBlock, PatchExpandSparse3d, PatchContractSparse3d
+from architectures.blocks import TransformerBlock, VolumeExpandSparse3d, VolumeContractSparse3d
 
 
 # Create class
@@ -53,7 +53,7 @@ class ViT3D(nn.Module):
             if shape[i] % patch_size[i] != 0:
                 # Check if shape is divisible by patch size
                 raise ValueError('Shape must be divisible by patch size!')
-            if patch_size[i] % patch_buffer[i] != 0:
+            if (patch_buffer[i] > 0) and (patch_size[i] % patch_buffer[i] != 0):
                 # Check if patch size is divisible by patch buffer
                 raise ValueError('Patch size must be divisible by patch buffer!')
         
@@ -96,19 +96,19 @@ class ViT3D(nn.Module):
             nn.Conv3d(
                 n_features, n_features, 
                 kernel_size=3, padding=1,
-                groups=n_features,
+                groups=n_features//2,
             ),
             # Project to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
         # 3D Patch Embedding and Unembedding Layers
-        self.patch_embed = PatchContractSparse3d(
+        self.patch_embed = VolumeContractSparse3d(
             n_features=n_features,
             scale=patch_size[0],
             buffer=patch_size[0]//2,
         )
-        self.patch_unembed = PatchExpandSparse3d(
+        self.patch_unembed = VolumeExpandSparse3d(
             n_features=n_features, 
             scale=patch_size[0],
             buffer=patch_size[0]//2,
@@ -190,13 +190,13 @@ class ViT3D(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
 
     # Set constants
+    shape = (64, 64, 64)
     in_channels = 36
     out_channels = 1
-    shape = (128, 128, 128)
 
     # Create data
     x = torch.randn(1, in_channels, *shape)
@@ -217,6 +217,8 @@ if __name__ == '__main__':
     # Forward pass
     with torch.no_grad():
         y = model(x)
+
+    # Estimate memory usage
 
     # Estimate memory usage
     estimate_memory_usage(model, x, print_stats=True)

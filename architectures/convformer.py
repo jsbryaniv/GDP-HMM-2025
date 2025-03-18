@@ -85,9 +85,9 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
+    shape = (64, 64, 64)
     in_channels = 36
     out_channels = 1
-    shape = (64, 64, 64)
 
     # Create data
     x = torch.randn(1, in_channels, *shape)

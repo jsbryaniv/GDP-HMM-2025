@@ -34,78 +34,24 @@ class VoxelNorm3d(nn.Module):
 
 ### PATCH SHAPING BLOCKS ###
 
-# Define sparse Patch Expand class
-class PatchExpandSparse3d(nn.Module):
-    """Patch Expansion module."""
-    def __init__(self, n_features, scale, buffer=0):
-        super(PatchExpandSparse3d, self).__init__()
-
-        # Asset scale is power of 2 and buffer is either 0 or scale/2
-        assert scale & (scale - 1) == 0, "Scale must be power of 2."
-        assert buffer in [0, scale//2], "Buffer must be 0 or scale/2."
-        
-        # Set attributes
-        self.n_features = n_features
-        self.scale = scale
-        self.buffer = buffer
-
-        # Calculate constants
-        n = int(scale.bit_length() - 1)
-        scaled_buffer = buffer // n
-        kernel_size = 2 * (1 + scaled_buffer)
-        stride = 2
-        padding = scaled_buffer
-
-        
-        # Create layers
-        self.layers = nn.ModuleList()
-        for i in range(n):
-            self.layers.append(
-                nn.Sequential(
-                    nn.Conv3d(n_features, n_features,kernel_size=1),
-                    nn.ConvTranspose3d(
-                        n_features, n_features,
-                        kernel_size=kernel_size, 
-                        stride=stride, 
-                        padding=padding,
-                        groups=n_features,
-                    ),
-                )
-            )
-        
-    def forward(self, x):
-        """
-        Forward pass.
-        """
-        
-        # Loop over layers
-        for layer in self.layers:
-            x = layer(x)
-        
-        # Return tensor
-        return x
-    
 # Define sparse Patch Contract class
-class PatchContractSparse3d(nn.Module):
+class VolumeContractSparse3d(nn.Module):
     """Patch Contraction module."""
-    def __init__(self, n_features, scale, buffer=0):
-        super(PatchContractSparse3d, self).__init__()
+    def __init__(self, n_features, scale):
+        super(VolumeContractSparse3d, self).__init__()
 
         # Asset scale is power of 2 and buffer is either 0 or scale/2
         assert scale & (scale - 1) == 0, "Scale must be power of 2."
-        assert buffer in [0, scale//2], "Buffer must be 0 or scale/2."
         
         # Set attributes
         self.n_features = n_features
         self.scale = scale
-        self.buffer = buffer
 
         # Calculate constants
         n = int(scale.bit_length() - 1)
-        scaled_buffer = buffer // n
-        kernel_size = 2 * (1 + scaled_buffer)
+        kernel_size = 4
         stride = 2
-        padding = scaled_buffer
+        padding = 1
 
         
         # Create layers
@@ -136,83 +82,119 @@ class PatchContractSparse3d(nn.Module):
         # Return tensor
         return x
     
+# Define sparse Patch Expand class
+class VolumeExpandSparse3d(nn.Module):
+    """Patch Expansion module."""
+    def __init__(self, n_features, scale):
+        super(VolumeExpandSparse3d, self).__init__()
 
-### CONVOLUTIONAL BLOCK ###
+        # Asset scale is power of 2 and buffer is either 0 or scale/2
+        assert scale & (scale - 1) == 0, "Scale must be power of 2."
+        
+        # Set attributes
+        self.n_features = n_features
+        self.scale = scale
+
+        # Calculate constants
+        n = int(scale.bit_length() - 1)
+        kernel_size = 4
+        stride = 2
+        padding = 1
+        
+        # Create layers
+        self.layers = nn.ModuleList()
+        for i in range(n):
+            self.layers.append(
+                nn.Sequential(
+                    nn.Conv3d(n_features, n_features, kernel_size=1),
+                    nn.ConvTranspose3d(
+                        n_features, n_features,
+                        kernel_size=kernel_size, 
+                        stride=stride, 
+                        padding=padding,
+                        groups=n_features,
+                    ),
+                )
+            )
+        
+    def forward(self, x):
+        """
+        Forward pass.
+        """
+        
+        # Loop over layers
+        for layer in self.layers:
+            x = layer(x)
+        
+        # Return tensor
+        return x
+    
+
+### CONVOLUTIONAL BLOCKS ###
 
 # Convolutional block
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=None, groups=1, upsample=False, downsample=False, beta=.1):
-        super(ConvBlock, self).__init__()
+class ConvBlock3d(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=None, groups=1, beta=.1, 
+        upsample=False, downsample=False, scale=2
+    ):
+        super(ConvBlock3d, self).__init__()
 
         # Check inputs
         if upsample and downsample:
             raise ValueError('Cannot upsample and downsample at the same time.')
-        if kernel_size is None:
-            if upsample or downsample:
-                kernel_size = 2
-            else:
-                kernel_size = 3
+        if upsample or downsample:
+            assert scale & (scale - 1) == 0, "Scale must be power of 2."
+            padding = scale // 2
+            kernel_size = scale + 2 * padding
+            stride = scale
+
 
         # Set attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
+        self.groups = groups
+        self.beta = beta
         self.upsample = upsample
         self.downsample = downsample
-        self.beta = beta
+        self.scale = scale
 
-        # Define residual layer
+        # Define convolutional and residual layers
         if upsample:
+            # Residual layer
             self.residual = nn.ConvTranspose3d(
                 in_channels, out_channels, 
-                kernel_size=2, stride=2, 
-                groups=groups,
+                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
+            )
+            # Convolutional layer
+            self.conv = nn.ConvTranspose3d(  
+                in_channels, out_channels,
+                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
         elif downsample:
+            # Residual layer
             self.residual = nn.Conv3d(
                 in_channels, out_channels, 
-                kernel_size=2, stride=2,
-                groups=groups
+                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
-        elif in_channels != out_channels:
-            self.residual = nn.Conv3d(
+            # Convolutional layer
+            self.conv = nn.Conv3d(
                 in_channels, out_channels, 
-                kernel_size=1, stride=1,
-                groups=groups,
+                kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
             )
         else:
-            self.residual = nn.Identity()
-
-        # Define convolutional layers
-        if upsample:
-            self.conv = nn.Sequential(
-                # Upsample
-                nn.ConvTranspose3d(  
-                    in_channels, out_channels,
-                    kernel_size=2, stride=2,
-                    groups=groups,
-                ),
-                # Smooth
-                nn.Conv3d( 
-                    out_channels, out_channels, 
-                    kernel_size=3, padding=1,
-                    groups=groups,
-                ),
-            )
-        elif downsample:
+            # Residual layer
+            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(
+                    in_channels, out_channels, 
+                    kernel_size=1, stride=1, groups=groups,
+                )
+            # Convolutional layer
             self.conv = nn.Sequential(
                 nn.Conv3d(
                     in_channels, out_channels, 
-                    kernel_size=2, stride=2,
-                    groups=groups,
-                ),
-            )
-        else:
-            self.conv = nn.Sequential(
-                nn.Conv3d(
-                    in_channels, out_channels, 
-                    kernel_size=kernel_size, padding=(kernel_size//2),
-                    groups=groups,
+                    kernel_size=kernel_size, padding=(kernel_size//2), groups=groups,
                 ),
             )
 
@@ -243,7 +225,7 @@ class ConvBlock(nn.Module):
         return x
 
 
-### TRANSFORMER BLOCK ###
+### TRANSFORMER BLOCKS ###
 
 # Define transformer block
 class TransformerBlock(nn.Module):
@@ -308,7 +290,7 @@ class CrossTransformerBlock(nn.Module):
         # Set up feedforward layer
         self.mlp = nn.Sequential(
             nn.Linear(n_features, n_features_inner),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Dropout(dropout),
             nn.Linear(n_features_inner, n_features),
         )
@@ -365,6 +347,7 @@ class ConvAttn3d(nn.Module):
         backward pass. We trade memory for compute time.
         """
         return checkpoint(self._forward, q, k, v, use_reentrant=False)
+        # return self._forward(q, k, v)  # TODO: Test if this results in major memory savings
     
     def _forward(self, q, k, v):
 
@@ -391,7 +374,7 @@ class ConvAttn3d(nn.Module):
             k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb_shift
 
             # Calculate attention weights
-            attn_weights[:, index] = (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
+            attn_weights[:, index] += (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
 
         # Softmax attention weights
         attn_weights = F.softmax(attn_weights, dim=1)
@@ -485,7 +468,7 @@ class ConvformerBlock3d(nn.Module):
         # Set up feedforward layer
         self.mlp = nn.Sequential(
             nn.Conv3d(n_features, n_features_inner, kernel_size=1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv3d(n_features_inner, n_features, kernel_size=1),
         )
 
@@ -509,7 +492,7 @@ class ConvformerBlock3d(nn.Module):
 
 # Define convolutional cross-attention transformer block
 class ConvformerCrossBlock3d(nn.Module):
-    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=2):
+    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1):
         super(ConvformerCrossBlock3d, self).__init__()
 
         # Set up attributes
@@ -528,7 +511,7 @@ class ConvformerCrossBlock3d(nn.Module):
         # Feedforward layer
         self.mlp = nn.Sequential(
             nn.Conv3d(n_features, n_features_inner, kernel_size=1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv3d(n_features_inner, n_features, kernel_size=1),
         )
 

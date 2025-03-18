@@ -7,7 +7,6 @@ if __name__ == "__main__":
 # Import libraries
 import torch
 import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d
@@ -19,10 +18,8 @@ class CrossAttnUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=8, n_blocks=5, 
-        n_layers_per_block=4, n_layers_per_block_context=4,
+        n_features=8, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=2, attn_kernel_size=5,
-        use_checkpoint=False,
     ):
         super(CrossAttnUnetModel, self).__init__()
         
@@ -33,10 +30,8 @@ class CrossAttnUnetModel(nn.Module):
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
-        self.n_layers_per_block_context = n_layers_per_block_context
         self.n_attn_repeats = n_attn_repeats
         self.attn_kernel_size = attn_kernel_size
-        self.use_checkpoint = use_checkpoint
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -61,7 +56,7 @@ class CrossAttnUnetModel(nn.Module):
                 Unet3d(
                     n_channels, n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
-                    n_layers_per_block=n_layers_per_block_context,
+                    n_layers_per_block=n_layers_per_block,
                 )
             )
 
@@ -92,10 +87,8 @@ class CrossAttnUnetModel(nn.Module):
             'n_features': self.n_features,
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
-            'n_layers_per_block_context': self.n_layers_per_block_context,
             'n_attn_repeats': self.n_attn_repeats,
             'attn_kernel_size': self.attn_kernel_size,
-            'use_checkpoint': self.use_checkpoint,
         }
 
     def forward(self, x, *y_list):
@@ -105,25 +98,11 @@ class CrossAttnUnetModel(nn.Module):
         """
 
         # Encode x
-        if self.use_checkpoint:
-            device = next(self.parameters()).device
-            dummy = torch.tensor(0.0, device=device, requires_grad=True)
-            feats = checkpoint(lambda *args: self.autoencoder.encoder(*args[1:]), dummy, x)
-        else:
-            feats = self.autoencoder.encoder(x)
+        feats = self.autoencoder.encoder(x)
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
-        if self.use_checkpoint:
-            device = next(self.parameters()).device
-            dummy = torch.tensor(0.0, device=device, requires_grad=True)
-            f_context = [
-                # checkpoint(ae.encoder, y.float()+dummy)
-                checkpoint(lambda *args: ae.encoder(*args[1:]), dummy, y.float())
-                for ae, y in zip(self.context_autoencoders, y_list)
-            ]
-        else:
-            f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+        f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
         f_context = [sum([f for f in row]) for row in zip(*f_context)]
 
         # Apply context
@@ -171,24 +150,25 @@ class CrossAttnUnetModel(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    import psutil
+    from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
+    from utils import estimate_memory_usage
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (64, 64, 64)
     in_channels = 3
     out_channels = 1
     n_cross_channels_list = [1, 1, 2, 8]
 
     # Create data
     x = torch.randn(1, in_channels, *shape)
-    context_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
+    y_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
     model = CrossAttnUnetModel(
         in_channels, out_channels, n_cross_channels_list,
     )
 
-    # Print model parameter info
+    # Print model structure
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
     print('Number of parameters in blocks:')
     for name, block in model.named_children():
@@ -196,25 +176,10 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, *context_list)
+        y = model(x, *y_list)
 
-
-    #### Estimate memory usage ####
-
-    # Measure memory before execution
-    process = psutil.Process(os.getpid())
-    mem_before = process.memory_info().rss  # Total RAM usage before forward pass
-
-    # Forward pass
-    y = model(x, context_list)
-
-    # Backward pass
-    loss = y.sum()
-    loss.backward()
-
-    # Measure memory after execution
-    mem_after = process.memory_info().rss  # Total RAM usage after backward pass
-    print(f"Memory usage: {(mem_after - mem_before) / 1024**3:.2f} GB")
+    # Estimate memory usage
+    estimate_memory_usage(model, x, *y_list, print_stats=True)
 
     # Done
     print('Done!')

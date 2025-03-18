@@ -10,14 +10,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvBlock
+from architectures.blocks import ConvBlock3d
 
 
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        n_features=4, n_groups=1, n_blocks=5, n_layers_per_block=4, 
+        n_features=4, n_blocks=5, n_layers_per_block=4, 
     ):
         super(Unet3d, self).__init__()
         
@@ -25,7 +25,6 @@ class Unet3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.n_features = n_features
-        self.n_groups = n_groups
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
 
@@ -38,7 +37,7 @@ class Unet3d(nn.Module):
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Additional convolutional layers
-            *(ConvBlock(n_features, n_features) for _ in range(n_layers_per_block - 1))
+            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
         )
 
         # Define downsample blocks
@@ -49,16 +48,16 @@ class Unet3d(nn.Module):
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    ConvBlock(n_in, n_out, groups=n_groups, downsample=True),
+                    ConvBlock3d(n_in, n_out, downsample=True),
                     # Additional convolutional layers
-                    *[ConvBlock(n_out, n_out, groups=n_groups) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock3d(n_out, n_out) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
         # Define bottleneck block
         n_in = n_features_per_depth[-1]
         n_out = n_features_per_depth[-1]
-        self.bottleneck = ConvBlock(n_in, n_out, groups=n_groups)
+        self.bottleneck = ConvBlock3d(n_in, n_out)
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -69,15 +68,15 @@ class Unet3d(nn.Module):
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    ConvBlock(n_in, n_out, groups=n_groups, upsample=True),
+                    ConvBlock3d(n_in, n_out, upsample=True),
                     # Additional convolutional layers
-                    *[ConvBlock(n_out, n_out, groups=n_groups) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock3d(n_out, n_out) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
-            *[ConvBlock(n_features, n_features) for _ in range(n_layers_per_block)],
+            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block)],
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
 
@@ -86,7 +85,6 @@ class Unet3d(nn.Module):
             'in_channels': self.in_channels,
             'out_channels': self.out_channels,
             'n_features': self.n_features,
-            'n_groups': self.n_groups,
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
         }
@@ -142,13 +140,13 @@ class Unet3d(nn.Module):
 if __name__ == '__main__':
 
     # Import custom libraries
-    from utils import estimate_memory_usage
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
+    from utils import estimate_memory_usage
 
     # Set constants
+    shape = (64, 64, 64)
     in_channels = 36
     out_channels = 1
-    shape = (256, 256, 256)
 
     # Create data
     x = torch.randn(1, in_channels, *shape)
@@ -159,7 +157,7 @@ if __name__ == '__main__':
         out_channels=out_channels,
     )
 
-    # Print model parameter info
+    # Print model structure
     print(f'Model has {sum(p.numel() for p in model.parameters()):,} parameters.')
     print('Number of parameters in blocks:')
     for name, block in model.named_children():

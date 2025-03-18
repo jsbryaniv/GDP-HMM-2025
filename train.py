@@ -14,8 +14,8 @@ from config import *
 # Set up training function
 def train_model(
     model, datasets, optimizer=None,
-    learning_rate=0.001, max_grad=1, n_epochs=5, epoch_start=0, 
-    loss_val_best=float('inf'), model_state_dict_best=None,
+    learning_rate=0.001, max_grad=1, n_epochs=5, 
+    epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
     jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
