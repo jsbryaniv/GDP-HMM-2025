@@ -104,7 +104,7 @@ class Unet3d(nn.Module):
         feats.append(x)
 
         # Downsample blocks
-        for depth, block in enumerate(self.down_blocks):
+        for i, block in enumerate(self.down_blocks):
             x = block(x)
             feats.append(x)
 

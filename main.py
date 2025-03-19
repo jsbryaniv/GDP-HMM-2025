@@ -17,7 +17,7 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 # Define main function
 def main(
     dataID, modelID, model_kwargs=None,
-    from_checkpoint=False, debug=False,
+    from_checkpoint=False, debug=False, device=None,
 ):
     """
     Main function to train a model on a dataset.
@@ -64,11 +64,15 @@ def main(
             },
         }
 
-    # Move model to device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    if debug:
-        device = torch.device('cpu')
-    model.to(device)
+    # Move model and optimizer to device
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # Get device
+    model.to(device)                                                           # Move model to device
+    if optimizer is not None:                                                  # Move optimizer to device
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(device)
 
 
     ### TRAINING LOOP ###
@@ -129,10 +133,6 @@ if __name__ == '__main__':
     modelID_list = [
         ('diffunet',   {'shape': 128}),
         ('sdm',        {'shape': 128}),
-        ('diffunet',   {'shape': 128, 'scale': 2}),
-        ('sdm',        {'shape': 128, 'scale': 2}),
-        ('diffunet',   {'shape': 256}),
-        ('sdm',        {'shape': 256}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -147,20 +147,20 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # # DEBUGGING all files
-    # for ID in range(len(all_jobs)):
-    #     for ITER in [0, 1]:
-    #         job_args = copy.deepcopy(all_jobs[ID])
-    #         shape = job_args['model_kwargs'].get('shape', None)
-    #         if shape is not None:
-    #             # Make shape smaller for debugging
-    #             job_args['model_kwargs']['shape'] = shape // 2
-    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-    #         print('\n'*5)
+    # DEBUGGING all files
+    for ID in range(len(all_jobs)):
+        for ITER in [0, 1]:
+            job_args = copy.deepcopy(all_jobs[ID])
+            shape = job_args['model_kwargs'].get('shape', None)
+            if shape is not None:
+                # Make shape smaller for debugging
+                job_args['model_kwargs']['shape'] = shape // 2
+            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+            print('\n'*5)
 
-    # Run main function
-    job_args = all_jobs[ID]
-    model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
+    # # Run main function
+    # job_args = all_jobs[ID]
+    # model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
 
     # Done
     print('Done!')

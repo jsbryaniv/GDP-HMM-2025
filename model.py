@@ -27,7 +27,19 @@ class DosePredictionModel(nn.Module):
         self.kwargs = kwargs
 
         # Initialize model
-        if architecture.lower() == "unet":
+        if architecture.lower() == "test":
+            # Test model (Really lightweight Unet)
+            from architectures.unet import Unet3d
+            kwargs = {
+                'in_channels': n_channels,
+                'out_channels': 1,
+                'n_blocks': 0,             # Dummy model for testing (0 blocks)
+                'n_layers_per_block': 0,   # Dummy model for testing (0 layers)
+                'n_features': 1,           # Dummy model for testing (1 feature)
+                **kwargs,
+            }
+            self.model = Unet3d(**kwargs)
+        elif architecture.lower() == "unet":
             # Unet3D
             from architectures.unet import Unet3d
             kwargs = {
@@ -193,7 +205,7 @@ class DosePredictionModel(nn.Module):
             }
 
         # Check architecture
-        if self.architecture.lower() in ["unet", "vit", "moeunet", "moevit"]:
+        if self.architecture.lower() in ["test", "unet", "vit", "moeunet", "moevit"]:
             # Concatenate inputs
             inputs = (
                 torch.cat([scan, beam, ptvs, oars, body], dim=1),
@@ -333,14 +345,8 @@ if __name__ == "__main__":
     n_channels = scan.shape[1] + beam.shape[1] + ptvs.shape[1] + oars.shape[1] + body.shape[1]
     
     # Initialize model    
-    model = DosePredictionModel(
-        architecture="unet", 
-        shape=shape_model, 
-        n_channels=n_channels, 
-        n_blocks=0,             # Dummy model for testing (0 blocks)
-        n_layers_per_block=0,   # Dummy model for testing (0 layers)
-        n_features=1,           # Dummy model for testing (1 feature)
-        n_groups=1,             # Dummy model for testing (1 group)
+    model = DosePredictionModel(architecture="test", 
+        n_channels=n_channels
     )
 
     # Forward pass

@@ -8,6 +8,29 @@ from torch.utils.checkpoint import checkpoint
 
 ### NORMALIZATION BLOCKS ###
 
+# class DyT(Module):
+# def __init__(self, C, init_α):
+# super().__init__()
+# self.α = Parameter(ones(1) * init_α)
+# self.γ = Parameter(ones(C))
+# self.β = Parameter(zeros(C))
+# def forward(self, x):
+# x = tanh(self.alpha * x)
+# return self.γ * x + self.β
+
+
+# Dynamic Tanh
+class VoxelDyTanh3d(nn.Module):
+    def __init__(self, num_channels, init_alpha=1.0):
+        super(VoxelDyTanh3d, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(1) * init_alpha)
+        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
+
+    def forward(self, x):
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
+
 # Volume normalization
 class VoxelNorm3d(nn.Module):
     """
@@ -274,6 +297,59 @@ class ConvVolEncoder3d(nn.Module):
 
         # Return features
         return feats
+
+# Define ConvNeXt3d block
+class ConvNeXtBlock3d(nn.Module):
+    r"""A block that mimics ConvNeXt architecture."""
+    # def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
+    #     super().__init__()
+    #     self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
+    #     self.norm = LayerNorm(dim, eps=1e-6)
+    #     self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
+    #     self.act = nn.GELU()
+    #     self.pwconv2 = nn.Linear(4 * dim, dim)
+    #     self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), 
+    #                                 requires_grad=True) if layer_scale_init_value > 0 else None
+    #     self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+    def __init__(self, n_features, kernel_size=7, expansion=1):
+        super(ConvNeXtBlock3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.kernel_size = kernel_size
+
+        # Depthwise convolution
+        self.depthwise_conv = nn.Conv3d(
+            n_features, n_features, 
+            kernel_size=kernel_size, padding=kernel_size//2,
+            groups=n_features
+        )
+
+        # Voxel normalization
+        self.norm = VoxelNorm3d(n_features)
+
+        # MLP
+        self.mlp = nn.Sequential(
+            nn.Linear(n_features, 4 * n_features),
+            nn.GELU(),
+            nn.Linear(4 * n_features, n_features),
+        )
+
+
+    def forward(self, x):
+        input = x
+        x = self.dwconv(x)
+        x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.pwconv2(x)
+        if self.gamma is not None:
+            x = self.gamma * x
+        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
+
+        x = input + self.drop_path(x)
+        return x
 
 
 ### TRANSFORMER BLOCKS ###
