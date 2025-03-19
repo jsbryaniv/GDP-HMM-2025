@@ -12,7 +12,7 @@ from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d
-from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, VolumeContractSparse3d, VolumeExpandSparse3d
+from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, VolumeContract3d, VolumeExpand3d
 
 
 # Define Diffusion Model Unet
@@ -51,7 +51,7 @@ class DiffUnet3d(nn.Module):
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            VolumeContractSparse3d(n_features=n_features, scale=scale),
+            VolumeContract3d(n_features=n_features, scale=scale),
         )
         self.context_input_blocks = nn.ModuleList()
         for n_channels in n_cross_channels_list:
@@ -60,14 +60,14 @@ class DiffUnet3d(nn.Module):
                     # Merge input channels to n_features
                     nn.Conv3d(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    VolumeContractSparse3d(n_features=n_features, scale=scale),
+                    VolumeContract3d(n_features=n_features, scale=scale),
                 )
             )
 
         # Create output block
         self.output_block = nn.Sequential(
             # Expand volume
-            VolumeExpandSparse3d(n_features=n_features, scale=scale),
+            VolumeExpand3d(n_features=n_features, scale=scale),
             # Merge output channels to in_channels
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )

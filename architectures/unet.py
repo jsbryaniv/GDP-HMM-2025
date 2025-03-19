@@ -13,24 +13,16 @@ import torch.nn.functional as F
 from architectures.blocks import ConvBlock3d
 
 
-# Define simple 3D Unet model
-class Unet3d(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        n_features=4, n_blocks=5, n_layers_per_block=4, 
-    ):
-        super(Unet3d, self).__init__()
+# Define Unet encoder
+class UnetEncoder3d(nn.Module):
+    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4):
+        super(UnetEncoder3d, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
-        self.out_channels = out_channels
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
-
-        # Get n_features per depth
-        n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
-        self.n_features_per_depth = n_features_per_depth
 
         # Define input block
         self.input_block = nn.Sequential(
@@ -43,58 +35,18 @@ class Unet3d(nn.Module):
         # Define downsample blocks
         self.down_blocks = nn.ModuleList()
         for depth in range(n_blocks):
-            n_in = n_features_per_depth[depth]
-            n_out = n_features_per_depth[depth+1]
+            n_in = (depth+1) * n_features
+            n_out = (depth+2) * n_features
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    ConvBlock3d(n_in, n_out, downsample=True),
+                    ConvBlock3d(n_in, n_out, scale=1/2),
                     # Additional convolutional layers
                     *[ConvBlock3d(n_out, n_out) for _ in range(n_layers_per_block - 1)]
                 )
             )
-
-        # Define bottleneck block
-        n_in = n_features_per_depth[-1]
-        n_out = n_features_per_depth[-1]
-        self.bottleneck = ConvBlock3d(n_in, n_out)
-
-        # Define upsample blocks
-        self.up_blocks = nn.ModuleList()
-        for i in range(n_blocks):
-            depth = self.n_blocks - 1 - i
-            n_in = n_features_per_depth[depth+1]
-            n_out = n_features_per_depth[depth]
-            self.up_blocks.append(
-                nn.Sequential(
-                    # Upsample layer
-                    ConvBlock3d(n_in, n_out, upsample=True),
-                    # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out) for _ in range(n_layers_per_block - 1)]
-                )
-            )
-
-        # Define output block
-        self.output_block = nn.Sequential(
-            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block)],
-            nn.Conv3d(n_features, out_channels, kernel_size=1),
-        )
-
-    def get_config(self):
-        return {
-            'in_channels': self.in_channels,
-            'out_channels': self.out_channels,
-            'n_features': self.n_features,
-            'n_blocks': self.n_blocks,
-            'n_layers_per_block': self.n_layers_per_block,
-        }
         
     def forward(self, x):
-        feats = self.encoder(x)
-        x = self.decoder(feats)
-        return x
-        
-    def encoder(self, x):
 
         # Initialize features list
         feats = []
@@ -108,15 +60,42 @@ class Unet3d(nn.Module):
             x = block(x)
             feats.append(x)
 
-        # Bottleneck block
-        x = feats.pop()
-        x = self.bottleneck(x)
-        feats.append(x)
-
         # Return the features
         return feats
-    
-    def decoder(self, feats):
+
+# Define Unet decoder
+class UnetDecoder3d(nn.Module):
+    def __init__(self, out_channels, n_features=4, n_blocks=5, n_layers_per_block=4):
+        super(UnetDecoder3d, self).__init__()
+        
+        # Set attributes
+        self.out_channels = out_channels
+        self.n_features = n_features
+        self.n_blocks = n_blocks
+        self.n_layers_per_block = n_layers_per_block
+
+        # Define upsample blocks
+        self.up_blocks = nn.ModuleList()
+        for i in range(n_blocks):
+            depth = self.n_blocks - 1 - i
+            n_in = (depth+2) * n_features
+            n_out = (depth+1) * n_features
+            self.up_blocks.append(
+                nn.Sequential(
+                    # Upsample layer
+                    ConvBlock3d(n_in, n_out, scale=2),
+                    # Additional convolutional layers
+                    *[ConvBlock3d(n_out, n_out) for _ in range(n_layers_per_block - 1)]
+                )
+            )
+
+        # Define output block
+        self.output_block = nn.Sequential(
+            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block)],
+            nn.Conv3d(n_features, out_channels, kernel_size=1),
+        )
+        
+    def forward(self, feats):
 
         # Get x
         x = feats.pop()
@@ -135,6 +114,48 @@ class Unet3d(nn.Module):
         # Return the output
         return x
 
+# Define simple 3D Unet model
+class Unet3d(nn.Module):
+    def __init__(self, in_channels, out_channels, n_features=4, n_blocks=5, n_layers_per_block=4):
+        super(Unet3d, self).__init__()
+        
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.n_features = n_features
+        self.n_blocks = n_blocks
+        self.n_layers_per_block = n_layers_per_block
+
+        # Define encoder
+        self.encoder = UnetEncoder3d(
+            in_channels=in_channels,
+            n_features=n_features,
+            n_blocks=n_blocks,
+            n_layers_per_block=n_layers_per_block,
+        )
+
+        # Define decoder
+        self.decoder = UnetDecoder3d(
+            out_channels=out_channels,
+            n_features=n_features,
+            n_blocks=n_blocks,
+            n_layers_per_block=n_layers_per_block,
+        )
+
+    def get_config(self):
+        return {
+            'in_channels': self.in_channels,
+            'out_channels': self.out_channels,
+            'n_features': self.n_features,
+            'n_blocks': self.n_blocks,
+            'n_layers_per_block': self.n_layers_per_block,
+        }
+        
+    def forward(self, x):
+        feats = self.encoder(x)
+        x = self.decoder(feats)
+        return x
+    
 
 # Test the model
 if __name__ == '__main__':

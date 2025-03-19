@@ -8,29 +8,6 @@ from torch.utils.checkpoint import checkpoint
 
 ### NORMALIZATION BLOCKS ###
 
-# class DyT(Module):
-# def __init__(self, C, init_α):
-# super().__init__()
-# self.α = Parameter(ones(1) * init_α)
-# self.γ = Parameter(ones(C))
-# self.β = Parameter(zeros(C))
-# def forward(self, x):
-# x = tanh(self.alpha * x)
-# return self.γ * x + self.β
-
-
-# Dynamic Tanh
-class VoxelDyTanh3d(nn.Module):
-    def __init__(self, num_channels, init_alpha=1.0):
-        super(VoxelDyTanh3d, self).__init__()
-        self.alpha = nn.Parameter(torch.ones(1) * init_alpha)
-        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
-        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
-
-    def forward(self, x):
-        x = torch.tanh(self.alpha * x)
-        return self.gamma * x + self.beta
-
 # Volume normalization
 class VoxelNorm3d(nn.Module):
     """
@@ -54,16 +31,77 @@ class VoxelNorm3d(nn.Module):
         # Return output
         return x
 
+# Voxel Dynamic Tanh
+class VoxelDyTanh3d(nn.Module):
+    """Voxel-wise dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
+    # class DyT(Module):
+    # def __init__(self, C, init_α):
+    # super().__init__()
+    # self.α = Parameter(ones(1) * init_α)
+    # self.γ = Parameter(ones(C))
+    # self.β = Parameter(zeros(C))
+    # def forward(self, x):
+    # x = tanh(self.alpha * x)
+    # return self.γ * x + self.β
+    def __init__(self, num_channels, init_alpha=1.0):
+        super(VoxelDyTanh3d, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(num_channels, 1, 1, 1) * init_alpha)
+        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
 
-### PATCH SHAPING BLOCKS ###
+    def forward(self, x):
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
+    
+# Adaptive Voxel Dynamic Tanh
+class AdaptiveVoxelDyTanh3d(nn.Module):
+    """Voxel-wise dynamic tanh activation. Uses initial batches to estimate alpha."""
+    def __init__(self, num_channels, warmup_steps=100, momentum=0.1, eps=1e-6):
+        super().__init__()
 
-# Define sparse Patch Contract class
-class VolumeContractSparse3d(nn.Module):
+        # Set attributes
+        self.num_channels = num_channels
+        self.warmup_steps = warmup_steps
+        self.momentum = momentum
+        self.eps = eps
+
+        # Parameters for scaling and shifting
+        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
+
+        # Delayed initialization of alpha
+        self.alpha = None  # Will be initialized after the first batch
+        self.step_counter = 0  # Tracks how many updates have happened
+
+    def forward(self, x):
+
+        # Configure alpha
+        if self.alpha is None:
+            # Initialize alpha with batch standard deviation
+            batch_std = x.std(dim=(0, 2, 3, 4), keepdim=True) + self.eps
+            self.alpha = nn.Parameter(1.0 / batch_std)
+            self.step_counter += 1
+        elif self.step_counter < self.warmup_steps:
+            # Update alpha with momentum-based moving average
+            batch_std = x.std(dim=(0, 2, 3, 4), keepdim=True) + self.eps
+            new_alpha = 1.0 / batch_std
+            self.alpha.data = self.momentum * new_alpha + (1 - self.momentum) * self.alpha.data
+            self.step_counter += 1
+
+        # Apply DyT transformation
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
+
+
+### VOLUME SHAPING BLOCKS ###
+
+# Define sparse Voxel Contract class
+class VolumeContract3d(nn.Module):
     """Patch Contraction module."""
     def __init__(self, n_features, scale):
-        super(VolumeContractSparse3d, self).__init__()
+        super(VolumeContract3d, self).__init__()
 
-        # Asset scale is power of 2 and buffer is either 0 or scale/2
+        # Asset scale is power of 2
         assert scale & (scale - 1) == 0, "Scale must be power of 2."
         
         # Set attributes
@@ -76,7 +114,6 @@ class VolumeContractSparse3d(nn.Module):
         stride = 2
         padding = 1
 
-        
         # Create layers
         self.layers = nn.ModuleList()
         for i in range(n):
@@ -105,13 +142,13 @@ class VolumeContractSparse3d(nn.Module):
         # Return tensor
         return x
     
-# Define sparse Patch Expand class
-class VolumeExpandSparse3d(nn.Module):
+# Define sparse Voxel Expand class
+class VolumeExpand3d(nn.Module):
     """Patch Expansion module."""
     def __init__(self, n_features, scale):
-        super(VolumeExpandSparse3d, self).__init__()
+        super(VolumeExpand3d, self).__init__()
 
-        # Asset scale is power of 2 and buffer is either 0 or scale/2
+        # Asset scale is power of 2
         assert scale & (scale - 1) == 0, "Scale must be power of 2."
         
         # Set attributes
@@ -155,8 +192,8 @@ class VolumeExpandSparse3d(nn.Module):
 
 ### CONVOLUTIONAL BLOCKS ###
 
-# Convolutional block
-class ConvBlock3d(nn.Module):
+# Convolutional block #TODO: DELETE
+class OldConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
         kernel_size=None, groups=1, beta=.1, 
@@ -224,7 +261,7 @@ class ConvBlock3d(nn.Module):
             )
 
         # Define norm
-        self.norm = nn.GroupNorm(groups, out_channels)
+        self.norm = VoxelNorm3d(out_channels)
 
         # Define activation
         self.activation = nn.ReLU(inplace=True)
@@ -249,69 +286,84 @@ class ConvBlock3d(nn.Module):
         # Return the output
         return x
 
-# Define Volume Encoder
-class ConvVolEncoder3d(nn.Module):
-    """SDM Volume Encoder module."""
-    def __init__(self, in_channels, n_features=4, n_blocks=3, n_layers_per_block=4):
-        super(ConvVolEncoder3d, self).__init__()
+# Convolutional block
+class ConvBlock3d(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=7, expansion=2, beta=.1, scale=1
+    ):
+        super(ConvBlock3d, self).__init__()
 
         # Set attributes
         self.in_channels = in_channels
-        self.n_features = n_features
-        self.n_blocks = n_blocks
-        self.n_layers_per_block = n_layers_per_block
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.expansion = expansion
+        self.beta = beta
+        self.scale = scale
 
-        # Define input block
-        self.input_block = nn.Sequential(
-            # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
-            # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+        # Reshaping
+        if scale > 1:
+            reshape1 = VolumeExpand3d(in_channels, scale)
+            reshape2 = VolumeExpand3d(in_channels, scale)
+        elif scale < 1:
+            reshape1 = VolumeContract3d(in_channels, round(1/scale))
+            reshape2 = VolumeContract3d(in_channels, round(1/scale))
+        else:
+            reshape1 = nn.Identity()
+            reshape2 = nn.Identity()
+
+        # Residual layer
+        if in_channels == out_channels:
+            self.residual = nn.Sequential(reshape1, nn.Identity())
+        else:
+            self.residual = nn.Sequential(reshape1, nn.Conv3d(in_channels, out_channels, kernel_size=1))
+
+        # Convolutional layer
+        self.conv = nn.Sequential(
+            # Reshape
+            reshape2,
+            # Depthwise convolution
+            nn.Conv3d(
+                in_channels, in_channels, 
+                kernel_size=kernel_size, padding=kernel_size//2, groups=in_channels
+            ),
+            # Pointwise convolution
+            nn.Conv3d(in_channels, out_channels, kernel_size=1),
         )
 
-        # Define downsample blocks
-        self.down_blocks = nn.ModuleList()
-        for _ in range(n_blocks):
-            self.down_blocks.append(
-                nn.Sequential(
-                    # Downsample layer
-                    ConvBlock3d(n_features, n_features, downsample=True),
-                    # Additional convolutional layers
-                    *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1)]
-                )
-            )
+        # Voxel normalization
+        self.norm = VoxelNorm3d(out_channels)
+
+        # MLP
+        self.mlp = nn.Sequential(
+            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
+        )
 
     def forward(self, x):
-        
-        # Initialize list of features
-        feats = []
 
-        # Input block
-        x = self.input_block(x)
-        feats.append(x.clone())
+        # Residual connection
+        x0 = self.residual(x)
 
-        # Downsample blocks
-        for block in self.down_blocks:
-            x = block(x)
-            feats.append(x.clone())
+        # Apply depthwise convolution
+        x = self.conv(x)
 
-        # Return features
-        return feats
+        # Apply MLP
+        x = self.norm(x)
+        x = self.mlp(x)
 
+        # Combine with residual
+        x = self.beta * x0 + (1 - self.beta) * x
+
+        # Return output
+        return x
+    
 # Define ConvNeXt3d block
 class ConvNeXtBlock3d(nn.Module):
     r"""A block that mimics ConvNeXt architecture."""
-    # def __init__(self, dim, drop_path=0., layer_scale_init_value=1e-6):
-    #     super().__init__()
-    #     self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim) # depthwise conv
-    #     self.norm = LayerNorm(dim, eps=1e-6)
-    #     self.pwconv1 = nn.Linear(dim, 4 * dim) # pointwise/1x1 convs, implemented with linear layers
-    #     self.act = nn.GELU()
-    #     self.pwconv2 = nn.Linear(4 * dim, dim)
-    #     self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((dim)), 
-    #                                 requires_grad=True) if layer_scale_init_value > 0 else None
-    #     self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-    def __init__(self, n_features, kernel_size=7, expansion=1):
+    def __init__(self, n_features, kernel_size=7, expansion=2):
         super(ConvNeXtBlock3d, self).__init__()
 
         # Set attributes
@@ -319,10 +371,13 @@ class ConvNeXtBlock3d(nn.Module):
         self.kernel_size = kernel_size
 
         # Depthwise convolution
-        self.depthwise_conv = nn.Conv3d(
-            n_features, n_features, 
-            kernel_size=kernel_size, padding=kernel_size//2,
-            groups=n_features
+        self.depthwise_conv = nn.Sequential(
+            nn.Conv3d(
+                n_features, n_features, 
+                kernel_size=kernel_size, padding=kernel_size//2,
+                groups=n_features
+            ),
+            nn.Conv3d(n_features, n_features, kernel_size=1),
         )
 
         # Voxel normalization
@@ -330,25 +385,29 @@ class ConvNeXtBlock3d(nn.Module):
 
         # MLP
         self.mlp = nn.Sequential(
-            nn.Linear(n_features, 4 * n_features),
-            nn.GELU(),
-            nn.Linear(4 * n_features, n_features),
+            nn.Conv3d(n_features, n_features * expansion, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(n_features * expansion, n_features, kernel_size=1),
         )
 
-
     def forward(self, x):
-        input = x
-        x = self.dwconv(x)
-        x = x.permute(0, 2, 3, 1) # (N, C, H, W) -> (N, H, W, C)
-        x = self.norm(x)
-        x = self.pwconv1(x)
-        x = self.act(x)
-        x = self.pwconv2(x)
-        if self.gamma is not None:
-            x = self.gamma * x
-        x = x.permute(0, 3, 1, 2) # (N, H, W, C) -> (N, C, H, W)
 
-        x = input + self.drop_path(x)
+        # Save residual
+        x0 = x
+
+        # Apply depthwise convolution
+        x = self.depthwise_conv(x)
+
+        # Normalize
+        x = self.norm(x)
+
+        # Apply MLP
+        x = self.mlp(x)
+
+        # Combine with residual
+        x = x0 + x
+
+        # Return output
         return x
 
 
