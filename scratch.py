@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 
 
-# Define memory-efficient MLP function for 3D volumes
+
+# Define memory-efficient MLP function for 3D volumes  
 class EfficientMLPFunction3D(torch.autograd.Function):
     """Memory-efficient MLP for 3D volumes."""
     @staticmethod
