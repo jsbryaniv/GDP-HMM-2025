@@ -15,7 +15,7 @@ from dataset import collate_gdp
 # Set up training function
 def train_model(
     model, datasets, optimizer=None,
-    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=5, 
+    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=2, 
     epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
     jobname=None, print_every=100, debug=False,
 ): 
@@ -76,7 +76,7 @@ def train_model(
         if device.type != "cpu":
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_train):
-            if debug and batch_idx > 5:
+            if debug and batch_idx > 2:
                     print('DEBUG MODE: Breaking early.')
                     break
 
@@ -130,7 +130,7 @@ def train_model(
 
         # Loop over validation batches
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_val):
-            if debug and batch_idx > 5:
+            if debug and batch_idx > 2:
                     print('DEBUG MODE: Breaking early.')
                     break
 

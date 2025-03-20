@@ -131,20 +131,24 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',          {'shape': 128}),                                # 0
-        ('unet',          {'shape': 256, 'scale': 2}),                    # 1
-        ('vit',           {'shape': 128, 'scale': 2}),                    # 2
-        ('vit',           {'shape': 256, 'scale': 4, 'n_features': 64}),  # 3
-        ('crossattnunet', {'shape': 128}),                                # 4
-        ('crossattnunet', {'shape': 256, 'scale': 4}),                    # 5
-        ('crossvit',      {'shape': 128, 'scale': 2}),                    # 6
-        ('crossvit',      {'shape': 256, 'scale': 4, 'n_features': 32}),  # 7
-        ('moeunet',       {'shape': 128}),                                # 8
-        ('moeunet',       {'shape': 256, 'scale': 4}),                    # 9
-        ('diffunet',      {'shape': 128}),                                # 10
-        ('diffunet',      {'shape': 256, 'scale': 4}),                    # 11
-        ('diffunet',      {'shape': 128, 'langevin': True}),              # 12
-        ('diffunet',      {'shape': 256, 'langevin': True, 'scale': 4}),  # 13
+        # ('diffunet',      {'shape': 128}),                                # 0
+        # ('diffunet',      {'shape': 256, 'scale': 4}),                    # 1
+        # ('diffunet',      {'shape': 128, 'langevin': True}),              # 2
+        # ('diffunet',      {'shape': 256, 'langevin': True, 'scale': 4}),  # 3
+        ('diffvit',       {'shape': 128, 'scale': 2}),                    # 4
+        ('diffvit',       {'shape': 256, 'scale': 4}),                    # 5
+        ('diffvit',       {'shape': 128, 'langevin': True, 'scale': 2}),  # 6
+        ('diffvit',       {'shape': 256, 'langevin': True, 'scale': 4}),  # 7
+        # ('unet',          {'shape': 128}),                                # 8
+        # ('unet',          {'shape': 256, 'scale': 2}),                    # 9
+        # ('vit',           {'shape': 128, 'scale': 2}),                    # 10
+        # ('vit',           {'shape': 256, 'scale': 4, 'n_features': 64}),  # 11
+        # ('crossattnunet', {'shape': 128}),                                # 12
+        # ('crossattnunet', {'shape': 256, 'scale': 4}),                    # 13
+        # ('crossvit',      {'shape': 128, 'scale': 2}),                    # 14
+        # ('crossvit',      {'shape': 256, 'scale': 4, 'n_features': 32}),  # 15
+        # ('moeunet',       {'shape': 128}),                                # 16
+        # ('moeunet',       {'shape': 256, 'scale': 4}),                    # 17
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -159,20 +163,20 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # # DEBUGGING all files
-    # for ID in range(len(all_jobs)):
-    #     for ITER in [0, 1]:
-    #         job_args = copy.deepcopy(all_jobs[ID])
-    #         shape = job_args['model_kwargs'].get('shape', None)
-    #         if shape is not None:
-    #             # Make shape smaller for debugging
-    #             job_args['model_kwargs']['shape'] = shape // 2
-    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-    #         print('\n'*5)
+    # DEBUGGING all files
+    for ID in range(len(all_jobs)):
+        for ITER in [0, 1]:
+            job_args = copy.deepcopy(all_jobs[ID])
+            shape = job_args['model_kwargs'].get('shape', None)
+            if shape is not None:
+                # Make shape smaller for debugging
+                job_args['model_kwargs']['shape'] = shape // 2
+            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+            print('\n'*5)
 
-    # Run main function
-    job_args = all_jobs[ID]
-    model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
+    # # Run main function
+    # job_args = all_jobs[ID]
+    # model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
 
     # Done
     print('Done!')

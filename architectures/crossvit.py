@@ -18,7 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=128, scale=1, n_features=16, n_heads=4, 
+        shape=128, scale=1, shape_patch_ratio=16, n_features=16, n_heads=4, 
         n_layers=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
@@ -29,6 +29,7 @@ class CrossViT3d(nn.Module):
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
         self.scale = scale
+        self.shape_patch_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -37,23 +38,18 @@ class CrossViT3d(nn.Module):
         # Create main autoencoder
         self.autoencoder = ViT3d(
             in_channels, out_channels,
-            shape=shape, scale=scale, n_features=n_features, 
-            n_heads=n_heads, n_layers=n_layers,
+            shape=shape, scale=scale, shape_patch_ratio=shape_patch_ratio,
+            n_features=n_features, n_heads=n_heads, n_layers=n_layers,
         )
 
         # Create context autoencoders
         self.context_encoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
             self.context_encoders.append(
-                # ViT3d(
-                #     n_channels, n_channels,
-                #     shape=shape, n_features=n_features, 
-                #     n_heads=n_heads, n_layers=n_layers,
-                # )
                 ViTEncoder3d(
                     n_channels,
-                    shape=shape, scale=scale, n_features=n_features, 
-                    n_heads=n_heads, n_layers=n_layers//2,
+                    shape=shape, scale=scale, shape_patch_ratio=shape_patch_ratio,
+                    n_features=n_features, n_heads=n_heads, n_layers=n_layers,
                 )
             )
 
@@ -75,6 +71,7 @@ class CrossViT3d(nn.Module):
             'n_cross_channels_list': self.n_cross_channels_list,
             'shape': self.shape,
             'scale': self.scale,
+            'shape_patch_ratio': self.shape_patch_ratio,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,
@@ -110,18 +107,6 @@ class CrossViT3d(nn.Module):
         
         # Return
         return x
-    
-    # def autoencode_context(self, *y_list):
-    #     """Autoencode context."""
-
-    #     # Encode y_list
-    #     y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_encoders, y_list)]
-
-    #     # Decode y_list
-    #     y_list = [ae.decoder(fs) for ae, fs in zip(self.context_encoders, y_list)]
-
-    #     # Return the output
-    #     return y_list
 
 
 # Test the model
@@ -132,7 +117,7 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (32, 32, 32)
+    shape = (64, 64, 64)
     in_channels = 4
     out_channels = 1
     n_channels_context = [1, 4, 30]

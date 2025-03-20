@@ -13,7 +13,7 @@ module load cuda
 source .env/bin/activate
 
 # Define constants
-N_ITER=20                # Number of iterations to run
+N_ITER=25                # Number of iterations to run
 ARGS=$1                  # First argument is the Python script argument
 ITER=$2                  # Second argument is the iteration number
 if [ -z "$ITER" ]; then  # If ITER is not provided, set it to 0

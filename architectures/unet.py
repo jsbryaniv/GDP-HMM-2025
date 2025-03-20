@@ -23,6 +23,7 @@ class UnetEncoder3d(nn.Module):
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
+        self.scale = scale
 
         # Define input block
         self.input_block = nn.Sequential(

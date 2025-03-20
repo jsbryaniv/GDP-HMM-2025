@@ -132,6 +132,16 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = DiffUnet3d(**kwargs)
+        elif architecture.lower() == "diffvit":
+            # DiffViT3d
+            from architectures.diffvit import DiffViT3d
+            kwargs = {
+                'in_channels': 1,
+                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
+                'shape': shape,
+                **kwargs,
+            }
+            self.model = DiffViT3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         
@@ -219,7 +229,7 @@ class DosePredictionModel(nn.Module):
                 torch.cat([beam, ptvs], dim=1),          # Context 2
                 torch.cat([oars, body], dim=1).float(),  # Context 3
             )
-        elif self.architecture.lower() in ["diffunet", "sdm"]:
+        elif self.architecture.lower() in ["diffunet", "diffvit"]:
             # Separate contexts
             inputs = (
                 ptvs.sum(dim=1).unsqueeze(1),            # Main input
@@ -314,22 +324,6 @@ class DosePredictionModel(nn.Module):
         if torch.isnan(loss) or torch.isinf(loss):
             raise ValueError('Loss is NaN or Inf.')
 
-        # # Plot
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2, len(y_list)+1, figsize=(4*len(y_list)+1, 8))
-        # for i, (y, y_ae) in enumerate(zip([dose]+y_list_corrupt, [pred]+recons)):
-        #     if i >= 3:
-        #         y_ae = torch.sigmoid(y_ae)
-        #     ax[0, i].imshow(y[0,0,y.shape[2]//2].detach().cpu().numpy())
-        #     ax[1, i].imshow(y_ae[0,0,y.shape[2]//2].detach().cpu().numpy())
-        #     ax[0, i].set_title(f'({y.min().item():.2f}, {y.max().item():.2f})')
-        #     ax[1, i].set_title(f'({y_ae.min().item():.2f}, {y_ae.max().item():.2f})')
-        # plt.show()
-        # plt.pause(1)
-        # plt.savefig('_image.png')
-        # plt.close()
-        # print(loss.item())
-
         # Return loss
         return loss
 
@@ -349,8 +343,9 @@ if __name__ == "__main__":
     n_channels = scan.shape[1] + beam.shape[1] + ptvs.shape[1] + oars.shape[1] + body.shape[1]
     
     # Initialize model    
-    model = DosePredictionModel(architecture="test", 
-        n_channels=n_channels
+    model = DosePredictionModel(
+        architecture="test", 
+        n_channels=n_channels,
     )
 
     # Forward pass

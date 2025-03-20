@@ -174,7 +174,6 @@ if __name__ == '__main__':
         model=Unet3d,
         in_channels=in_channels, 
         out_channels=out_channels,
-        use_checkpoint=False,
     )
 
     # Print model structure

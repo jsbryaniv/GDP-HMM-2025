@@ -244,7 +244,7 @@ if __name__ == '__main__':
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (64, 64, 64)
     in_channels = 36
     out_channels = 1
 

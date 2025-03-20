@@ -56,11 +56,6 @@ class CrossAttnUnetModel(nn.Module):
         self.context_encoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
             self.context_encoders.append(
-                # Unet3d(
-                #     n_channels, n_channels, 
-                #     n_features=n_features, n_blocks=n_blocks,
-                #     n_layers_per_block=n_layers_per_block,
-                # )
                 UnetEncoder3d(
                     n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
@@ -80,12 +75,6 @@ class CrossAttnUnetModel(nn.Module):
                     n_layers=n_attn_repeats,
                 )
             )
-        
-        # # Create context feature dropout layers
-        # self.context_dropout = nn.ModuleList()
-        # for depth in range(n_blocks+1):
-        #     p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at last layer; slightly over half at first
-        #     self.context_dropout.append(nn.Dropout(p=p))
     
     def get_config(self):
         """Get configuration."""
@@ -137,23 +126,6 @@ class CrossAttnUnetModel(nn.Module):
 
         # Return the output
         return x
-    
-    # def autoencode_context(self, *y_list):
-    #     """Autoencode context."""
-
-    #     # Encode y_list
-    #     y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
-
-    #     # Apply dropout to context features
-    #     y_list = [
-    #         [dropout(f) for dropout, f in zip(self.context_dropout, y_list[c])] for c in range(self.n_context)
-    #     ]
-
-    #     # Decode y_list
-    #     y_list = [ae.decoder(fs) for ae, fs in zip(self.context_autoencoders, y_list)]
-
-    #     # Return the output
-    #     return y_list
 
 
 # Test the model
