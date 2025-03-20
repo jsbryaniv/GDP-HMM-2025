@@ -139,6 +139,8 @@ if __name__ == '__main__':
         ('diffunet',      {'shape': 256}),
         ('moeunet',       {'shape': 256, 'scale': 4}),
         ('diffunet',      {'shape': 256, 'scale': 4}),
+        ('diffunet',      {'shape': 128, 'n_features': 16}),
+        ('diffunet',      {'shape': 128, 'n_steps': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
