@@ -208,12 +208,12 @@ class ViT3d(nn.Module):
         # Create encoder and decoder
         self.encoder = ViTEncoder3d(
             in_channels=in_channels,
-            shape=shape, scale=scale, patch_size=patch_size,
+            shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
         self.decoder = ViTDecoder3d(
             out_channels=out_channels,
-            shape=shape, scale=scale, patch_size=patch_size,
+            shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
 

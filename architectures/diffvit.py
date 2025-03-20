@@ -19,8 +19,8 @@ from architectures.blocks import ConvBlock3d, CrossTransformerBlock
 class DiffViT3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        shape=128, scale=1, shape_patch_ratio=16, n_features=32, n_heads=4, 
-        n_layers=8, n_layers_mixing=4, n_layers_input=2,
+        shape=128, scale=1, shape_patch_ratio=8, n_features=128, n_heads=4, 
+        n_layers=8, n_layers_mixing=4, n_layers_input=4,
         dt=1, kT_max=10, n_steps=8, langevin=False,
     ):
         super(DiffViT3d, self).__init__()
@@ -189,9 +189,11 @@ class DiffViT3d(nn.Module):
             # Calculate force
             F = checkpoint(
                 self.force, 
-                x.clone().requires_grad_(True), 
-                f_context, 
-                pos_embedding, 
+                # x.clone().requires_grad_(True), 
+                # f_context.clone().requires_grad_(True), 
+                x,
+                f_context,
+                pos_embedding.clone().requires_grad_(True), 
                 use_reentrant=False,
             )
 
