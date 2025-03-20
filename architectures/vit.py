@@ -16,8 +16,8 @@ from architectures.blocks import TransformerBlock, VolumeExpand3d, VolumeContrac
 class ViTEncoder3d(nn.Module):
     def __init__(self, 
         in_channels,
-        shape=(64, 64, 64), patch_size=None,
-        n_features=64, n_heads=4, n_layers=8,
+        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViTEncoder3d, self).__init__()
 
@@ -32,10 +32,8 @@ class ViTEncoder3d(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # # Set default patch size (1/16 of shape)
-            # patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
-            # Set default patch size (1/8 of shape)
-            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
+            # Set default patch size (1/shape_patch_ratio of shape)
+            patch_size = tuple(shape[i] // shape_patch_ratio for i in range(3))
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
@@ -48,16 +46,18 @@ class ViTEncoder3d(nn.Module):
         # Set attributes
         self.in_channels = in_channels
         self.shape = shape
+        self.scale = scale
         self.patch_size = patch_size
+        self.patch_size_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
 
         # Calculate constants
         shape_patchgrid = (
-            shape[0] // patch_size[0],
-            shape[1] // patch_size[1],
-            shape[2] // patch_size[2],
+            shape[0] // (scale * patch_size[0]),
+            shape[1] // (scale * patch_size[1]),
+            shape[2] // (scale * patch_size[2]),
         )
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
         self.shape_patchgrid = shape_patchgrid
@@ -67,22 +67,19 @@ class ViTEncoder3d(nn.Module):
             raise ValueError('Number of patches is too large! Descrease size or increase patch size and stride.')
         
         # Positional Encoding
-        # self.pos_embedding = nn.Parameter(.1 * torch.randn(1, self.n_patches, n_features))
-        pos_embedding_0 = .1*torch.randn(1, n_features, shape_patchgrid[0], 1, 1)
-        pos_embedding_1 = .1*torch.randn(1, n_features, 1, shape_patchgrid[1], 1)
-        pos_embedding_2 = .1*torch.randn(1, n_features, 1, 1, shape_patchgrid[2])
-        pos_embedding = pos_embedding_0 + pos_embedding_1 + pos_embedding_2
-        pos_embedding = pos_embedding.flatten(2).transpose(1, 2)
-        self.pos_embedding = nn.Parameter(pos_embedding)
+        self.pos_embedding_0 = nn.Parameter(.1*torch.randn(1, n_features, shape_patchgrid[0], 1, 1))
+        self.pos_embedding_1 = nn.Parameter(.1*torch.randn(1, n_features, 1, shape_patchgrid[1], 1))
+        self.pos_embedding_2 = nn.Parameter(.1*torch.randn(1, n_features, 1, 1, shape_patchgrid[2]))
 
         # Create input and output blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
+            # Rescale volume
+            VolumeContract3d(n_features=n_features, scale=scale),
             # Contract volume to patches
             VolumeContract3d(n_features=n_features, scale=patch_size[0]),
         )
-
 
         # Transformer Encoders
         self.layers = nn.ModuleList()
@@ -98,7 +95,9 @@ class ViTEncoder3d(nn.Module):
         x = x.flatten(2).transpose(1, 2)
 
         # Add positional encoding
-        x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
+        pos_embedding = self.pos_embedding_0 + self.pos_embedding_1 + self.pos_embedding_2
+        pos_embedding = pos_embedding.flatten(2).transpose(1, 2).expand(x.shape[0], -1, -1)
+        x = x + pos_embedding
 
         # Transformer Encoding
         for layer in self.layers:
@@ -111,8 +110,8 @@ class ViTEncoder3d(nn.Module):
 class ViTDecoder3d(nn.Module):
     def __init__(self, 
         out_channels,
-        shape=(64, 64, 64), patch_size=None,
-        n_features=64, n_heads=4, n_layers=8,
+        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViTDecoder3d, self).__init__()
 
@@ -127,10 +126,8 @@ class ViTDecoder3d(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # # Set default patch size (1/16 of shape)
-            # patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
-            # Set default patch size (1/8 of shape)
-            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
+            # Set default patch size (1/shape_patch_ratio of shape)
+            patch_size = tuple(shape[i] // shape_patch_ratio for i in range(3))
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
@@ -143,16 +140,18 @@ class ViTDecoder3d(nn.Module):
         # Set attributes
         self.out_channels = out_channels
         self.shape = shape
+        self.scale = scale
         self.patch_size = patch_size
+        self.patch_size_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
 
         # Calculate constants
         shape_patchgrid = (
-            shape[0] // patch_size[0],
-            shape[1] // patch_size[1],
-            shape[2] // patch_size[2],
+            shape[0] // (scale * patch_size[0]),
+            shape[1] // (scale * patch_size[1]),
+            shape[2] // (scale * patch_size[2]),
         )
         self.shape_patchgrid = shape_patchgrid
 
@@ -160,6 +159,8 @@ class ViTDecoder3d(nn.Module):
         self.output_block = nn.Sequential(
             # Expand patches to volume
             VolumeExpand3d(n_features=n_features, scale=patch_size[0]),
+            # Rescale volume
+            VolumeExpand3d(n_features=n_features, scale=scale),
             # Project to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1), 
         )
@@ -188,8 +189,8 @@ class ViTDecoder3d(nn.Module):
 class ViT3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(64, 64, 64), patch_size=None,
-        n_features=64, n_heads=4, n_layers=16,
+        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3d, self).__init__()
         
@@ -197,7 +198,9 @@ class ViT3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.shape = shape
+        self.scale = scale
         self.patch_size = patch_size
+        self.patch_size_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -205,12 +208,12 @@ class ViT3d(nn.Module):
         # Create encoder and decoder
         self.encoder = ViTEncoder3d(
             in_channels=in_channels,
-            shape=shape, patch_size=patch_size,
+            shape=shape, scale=scale, patch_size=patch_size,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
         self.decoder = ViTDecoder3d(
             out_channels=out_channels,
-            shape=shape, patch_size=patch_size,
+            shape=shape, scale=scale, patch_size=patch_size,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
 
@@ -219,7 +222,9 @@ class ViT3d(nn.Module):
             'in_channels': self.in_channels,
             'out_channels': self.out_channels,
             'shape': self.shape,
+            'scale': self.scale,
             'patch_size': self.patch_size,
+            'shape_patch_ratio': self.patch_size_ratio,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,

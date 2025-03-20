@@ -76,7 +76,7 @@ def train_model(
         if device.type != "cpu":
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_train):
-            if debug and batch_idx > 10:
+            if debug and batch_idx > 5:
                     print('DEBUG MODE: Breaking early.')
                     break
 
@@ -130,7 +130,7 @@ def train_model(
 
         # Loop over validation batches
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_val):
-            if debug and batch_idx > 10:
+            if debug and batch_idx > 5:
                     print('DEBUG MODE: Breaking early.')
                     break
 

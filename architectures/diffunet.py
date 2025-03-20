@@ -12,17 +12,17 @@ from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d, UnetEncoder3d
-from architectures.blocks import ConvformerDecoder3d, VolumeContract3d, VolumeExpand3d
+from architectures.blocks import ConvBlock3d, ConvformerDecoder3d
 
 
 # Define Diffusion Model Unet
 class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=8, n_blocks=4, 
+        n_features=16, n_blocks=4, 
         n_layers_per_block=2, n_mixing_blocks=2,
         dt=1, kT_max=10, n_steps=8,
-        scale=2,
+        scale=4, langevin=False,
     ):
         super(DiffUnet3d, self).__init__()
         
@@ -37,6 +37,7 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
         self.kT_max = kT_max
         self.n_steps = n_steps
         self.scale = scale
+        self.langevin = langevin
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -46,17 +47,49 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
         self.n_features_per_depth = n_features_per_depth
         self.kT_schedule = kT_schedule
 
+        # Define input blocks
+        self.input_block = nn.Sequential(
+            # Merge input channels to n_features
+            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            # Shrink volume
+            ConvBlock3d(n_features, n_features, scale=1/scale),
+            # Additional convolutional layers
+            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+        )
+        self.context_input_blocks = nn.ModuleList()
+        for n_channels in n_cross_channels_list:
+            self.context_input_blocks.append(
+                nn.Sequential(
+                    # Merge input channels to n_features
+                    nn.Conv3d(n_channels, n_features, kernel_size=1),
+                    # Shrink volume
+                    ConvBlock3d(n_features, n_features, scale=1/scale),
+                    # Additional convolutional layers
+                    *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+                )
+            )
+
+        # Define output block
+        self.output_block = nn.Sequential(
+            # Convolutional layers
+            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1)],
+            # Expand volume
+            ConvBlock3d(n_features, n_features, scale=scale),
+            # Merge features to output channels
+            nn.Conv3d(n_features, in_channels, kernel_size=1),
+        )
+
         # Create main autoencoder
         self.autoencoder = Unet3d(
-            in_channels, in_channels, 
+            n_features, n_features, 
             n_features=n_features, n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
-            scale=scale,
+            scale=1,
         )
         
         # Create context encoders
         self.context_encoders = nn.ModuleList()
-        for n_channels in n_cross_channels_list:
+        for _ in range(len(n_cross_channels_list)):
             self.context_encoders.append(
                 # Unet3d(
                 #     n_features, n_features, 
@@ -64,10 +97,10 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
                 #     n_layers_per_block=n_layers_per_block,
                 # )
                 UnetEncoder3d(
-                    n_channels,
+                    n_features,
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
-                    scale=scale,
+                    scale=1,
                 )
             )
 
@@ -94,6 +127,7 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
             'kT_max': self.kT_max,
             'n_steps': self.n_steps,
             'scale': self.scale,
+            'langevin': self.langevin,
         }
     
     def force(self, x, f_context):
@@ -129,7 +163,11 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
         """
         x is the input tensor
         y_list is a list of context tensors
-        """
+        """ #TODO: Make input and output blocks, so that scaling is easier during training.
+
+        # Input blocks
+        x = self.input_block(x)
+        y_list = [block(y) for block, y in zip(self.context_input_blocks, y_list)]
         
         # Encode features
         feats_context = [block(y) for block, y in zip(self.context_encoders, y_list)]
@@ -142,11 +180,16 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
             x = x + kT * torch.randn_like(x, device=x.device)
             
             # Calculate force
-            # F = self.force(x, feats_context)
             F = checkpoint(self.force, x.clone().requires_grad_(True), feats_context, use_reentrant=False)
 
             # Update position
-            x = x + self.dt * F
+            if self.langevin:
+                x = x + self.dt * F
+            else:
+                x = F
+
+        # Output block
+        x = self.output_block(x)
         
         # Return
         return x

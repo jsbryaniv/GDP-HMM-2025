@@ -20,7 +20,7 @@ class CrossAttnUnetModel(nn.Module):
         in_channels, out_channels, n_cross_channels_list,
         n_features=16, n_blocks=4, n_layers_per_block=4,
         n_attn_repeats=2, attn_kernel_size=5,
-        scale=4,
+        scale=1,
     ):
         super(CrossAttnUnetModel, self).__init__()
         

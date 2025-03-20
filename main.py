@@ -131,16 +131,20 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',          {'shape': 256}),
-        ('vit',           {'shape': 256}),
-        ('crossattnunet', {'shape': 256}),
-        ('crossvit',      {'shape': 256}),
-        ('moeunet',       {'shape': 256}),
-        ('diffunet',      {'shape': 256}),
-        ('moeunet',       {'shape': 256, 'scale': 4}),
-        ('diffunet',      {'shape': 256, 'scale': 4}),
-        ('diffunet',      {'shape': 128, 'n_features': 16}),
-        ('diffunet',      {'shape': 128, 'n_steps': 16}),
+        ('unet',          {'shape': 128}),                                # 0
+        ('unet',          {'shape': 256, 'scale': 2}),                    # 1
+        ('vit',           {'shape': 128, 'scale': 2}),                    # 2
+        ('vit',           {'shape': 256, 'scale': 4, 'n_features': 64}),  # 3
+        ('crossattnunet', {'shape': 128}),                                # 4
+        ('crossattnunet', {'shape': 256, 'scale': 4}),                    # 5
+        ('crossvit',      {'shape': 128, 'scale': 2}),                    # 6
+        ('crossvit',      {'shape': 256, 'scale': 4, 'n_features': 32}),  # 7
+        ('moeunet',       {'shape': 128}),                                # 8
+        ('moeunet',       {'shape': 256, 'scale': 4}),                    # 9
+        ('diffunet',      {'shape': 128}),                                # 10
+        ('diffunet',      {'shape': 256, 'scale': 4}),                    # 11
+        ('diffunet',      {'shape': 128, 'langevin': True}),              # 12
+        ('diffunet',      {'shape': 256, 'langevin': True, 'scale': 4}),  # 13
     ]
     all_jobs = []
     for dataID in dataIDs_list:

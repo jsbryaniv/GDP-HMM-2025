@@ -40,7 +40,7 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
     for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_test):
-        if debug and batch_idx > 10:
+        if debug and batch_idx > 5:
             print('DEBUG MODE: Breaking early.')
             break
         

@@ -305,7 +305,7 @@ class OldConvBlock3d(nn.Module):
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=7, expansion=2, beta=.1, scale=1
+        kernel_size=3, groups=1, beta=.1, scale=1
     ):
         super(ConvBlock3d, self).__init__()
 
@@ -313,7 +313,6 @@ class ConvBlock3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
-        self.expansion = expansion
         self.beta = beta
         self.scale = scale
 
@@ -338,36 +337,53 @@ class ConvBlock3d(nn.Module):
         self.conv = nn.Sequential(
             # Reshape
             reshape2,
-            # Depthwise convolution
+            # Convolution
             nn.Conv3d(
-                in_channels, in_channels, 
-                kernel_size=kernel_size, padding=kernel_size//2, groups=in_channels
+                in_channels, out_channels, 
+                kernel_size=kernel_size, 
+                padding=kernel_size//2,
+                groups=groups,
             ),
-            # Pointwise convolution
-            nn.Conv3d(in_channels, out_channels, kernel_size=1),
+            # # Depthwise convolution
+            # nn.Conv3d(
+            #     in_channels, in_channels, 
+            #     kernel_size=kernel_size, padding=kernel_size//2, groups=in_channels
+            # ),
+            # # Pointwise convolution
+            # nn.Conv3d(in_channels, out_channels, kernel_size=1),
         )
 
         # Voxel normalization
         self.norm = VoxelNorm3d(out_channels)
 
-        # MLP
-        self.mlp = nn.Sequential(
-            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
-        )
+        # # MLP
+        # self.mlp = nn.Sequential(
+        #     nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
+        #     nn.ReLU(inplace=True),
+        #     nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
+        # )
+
+        # Define activation
+        self.activation = nn.ReLU(inplace=True)
+
+        # Define mixing layer to allow negative values
+        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
 
     def forward(self, x):
 
         # Residual connection
         x0 = self.residual(x)
 
-        # Apply depthwise convolution
-        x = self.conv(x)
+        # # Apply depthwise convolution
+        # x = self.conv(x)
+        # x = self.norm(x)
+        # x = self.mlp(x)
 
-        # Apply MLP
+        # Convolutional block
+        x = self.conv(x)
         x = self.norm(x)
-        x = self.mlp(x)
+        x = self.activation(x)
+        x = self.mixing(x)
 
         # Combine with residual
         x = self.beta * x0 + (1 - self.beta) * x
