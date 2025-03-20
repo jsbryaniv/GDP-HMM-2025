@@ -137,6 +137,8 @@ if __name__ == '__main__':
         ('crossvit',      {'shape': 256}),
         ('moeunet',       {'shape': 256}),
         ('diffunet',      {'shape': 256}),
+        ('moeunet',       {'shape': 256, 'scale': 4}),
+        ('diffunet',      {'shape': 256, 'scale': 4}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
