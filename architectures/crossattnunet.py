@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 # Import custom libraries
-from architectures.unet import Unet3d
+from architectures.unet import Unet3d, UnetEncoder3d
 from architectures.blocks import ConvformerDecoder3d
 
 
@@ -18,8 +18,9 @@ class CrossAttnUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=8, n_blocks=5, n_layers_per_block=4,
+        n_features=16, n_blocks=4, n_layers_per_block=4,
         n_attn_repeats=2, attn_kernel_size=5,
+        scale=4,
     ):
         super(CrossAttnUnetModel, self).__init__()
         
@@ -32,6 +33,7 @@ class CrossAttnUnetModel(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.n_attn_repeats = n_attn_repeats
         self.attn_kernel_size = attn_kernel_size
+        self.scale = scale
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -46,17 +48,24 @@ class CrossAttnUnetModel(nn.Module):
         self.autoencoder = Unet3d(
             in_channels, out_channels, 
             n_features=n_features, n_blocks=n_blocks,
-            n_layers_per_block=n_layers_per_block
+            n_layers_per_block=n_layers_per_block,
+            scale=scale,
         )
         
-        # Create context autoencoders
-        self.context_autoencoders = nn.ModuleList()
+        # Create context encoders
+        self.context_encoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
-            self.context_autoencoders.append(
-                Unet3d(
-                    n_channels, n_channels, 
+            self.context_encoders.append(
+                # Unet3d(
+                #     n_channels, n_channels, 
+                #     n_features=n_features, n_blocks=n_blocks,
+                #     n_layers_per_block=n_layers_per_block,
+                # )
+                UnetEncoder3d(
+                    n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
+                    scale=scale,
                 )
             )
 
@@ -72,11 +81,11 @@ class CrossAttnUnetModel(nn.Module):
                 )
             )
         
-        # Create context feature dropout layers
-        self.context_dropout = nn.ModuleList()
-        for depth in range(n_blocks+1):
-            p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at last layer; slightly over half at first
-            self.context_dropout.append(nn.Dropout(p=p))
+        # # Create context feature dropout layers
+        # self.context_dropout = nn.ModuleList()
+        # for depth in range(n_blocks+1):
+        #     p = (1-(1-2/n_features)**(n_blocks-depth))  # No dropouts at last layer; slightly over half at first
+        #     self.context_dropout.append(nn.Dropout(p=p))
     
     def get_config(self):
         """Get configuration."""
@@ -89,6 +98,7 @@ class CrossAttnUnetModel(nn.Module):
             'n_layers_per_block': self.n_layers_per_block,
             'n_attn_repeats': self.n_attn_repeats,
             'attn_kernel_size': self.attn_kernel_size,
+            'scale': self.scale,
         }
 
     def forward(self, x, *y_list):
@@ -102,7 +112,7 @@ class CrossAttnUnetModel(nn.Module):
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
-        f_context = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+        f_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
         f_context = [sum([f for f in row]) for row in zip(*f_context)]
 
         # Apply context
@@ -114,7 +124,7 @@ class CrossAttnUnetModel(nn.Module):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.up_blocks[i](x)
+            x = self.autoencoder.decoder.up_blocks[i](x)
             # Merge with skip
             x_skip = feats[depth]
             x = x + x_skip
@@ -123,27 +133,27 @@ class CrossAttnUnetModel(nn.Module):
             x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
-        x = self.autoencoder.output_block(x)
+        x = self.autoencoder.decoder.output_block(x)
 
         # Return the output
         return x
     
-    def autoencode_context(self, *y_list):
-        """Autoencode context."""
+    # def autoencode_context(self, *y_list):
+    #     """Autoencode context."""
 
-        # Encode y_list
-        y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
+    #     # Encode y_list
+    #     y_list = [ae.encoder(y.float()) for ae, y in zip(self.context_autoencoders, y_list)]
 
-        # Apply dropout to context features
-        y_list = [
-            [dropout(f) for dropout, f in zip(self.context_dropout, y_list[c])] for c in range(self.n_context)
-        ]
+    #     # Apply dropout to context features
+    #     y_list = [
+    #         [dropout(f) for dropout, f in zip(self.context_dropout, y_list[c])] for c in range(self.n_context)
+    #     ]
 
-        # Decode y_list
-        y_list = [ae.decoder(fs) for ae, fs in zip(self.context_autoencoders, y_list)]
+    #     # Decode y_list
+    #     y_list = [ae.decoder(fs) for ae, fs in zip(self.context_autoencoders, y_list)]
 
-        # Return the output
-        return y_list
+    #     # Return the output
+    #     return y_list
 
 
 # Test the model

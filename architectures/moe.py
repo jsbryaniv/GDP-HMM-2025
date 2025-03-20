@@ -34,7 +34,7 @@ class MOEGating3d(nn.Module):
         for i in range(n_blocks):
             self.layers.append(
                 nn.Sequential(
-                    ConvBlock3d(n_features, n_features, downsample=True),
+                    ConvBlock3d(n_features, n_features, scale=1/2),
                     *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block-1)],
                 )
             )
@@ -77,7 +77,7 @@ class MOEGating3d(nn.Module):
 class MOEWrapper3d(nn.Module):
     """Wrapper for a multi-expert model."""
     def __init__(self, 
-        model, in_channels, use_checkpoint=False, 
+        model, in_channels, use_checkpoint=True, 
         n_experts=4, gating_config=None, expert_config=None,
         **kwargs
     ):

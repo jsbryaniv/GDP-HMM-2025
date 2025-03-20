@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvformerEncoder3d
+from architectures.blocks import ConvformerEncoder3d, VolumeContract3d, VolumeExpand3d
 
 
 # Define full convolutional transformer model
@@ -19,6 +19,7 @@ class ConvformerModel(nn.Module):
     def __init__(self,
         in_channels, out_channels,
         n_features=32, n_layers=16, n_heads=4, kernel_size=5, expansion=1,
+        scale=4,
     ):
         super(ConvformerModel, self).__init__()
 
@@ -30,11 +31,15 @@ class ConvformerModel(nn.Module):
         self.n_heads = n_heads
         self.kernel_size = kernel_size
         self.expansion = expansion
+        self.scale = scale
 
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=3, padding=1),
+            # Shrink volume
+            VolumeContract3d(n_features=n_features, scale=scale),
+
         )
 
         # Define convformer encoder
@@ -48,6 +53,9 @@ class ConvformerModel(nn.Module):
 
         # Define output block
         self.output_block = nn.Sequential(
+            # Expand volume
+            VolumeExpand3d(n_features=n_features, scale=scale),
+            # Merge features to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
 
@@ -60,6 +68,7 @@ class ConvformerModel(nn.Module):
             'n_heads': self.n_heads,
             'kernel_size': self.kernel_size,
             'expansion': self.expansion,
+            'scale': self.scale,
         }
 
     def forward(self, x):

@@ -4,6 +4,7 @@ import os
 import json
 import torch
 import numpy as np
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 # Import local
@@ -210,6 +211,58 @@ class GDPDataset(Dataset):
         return scan, beam, ptvs, oars, body, dose
 
 
+# Define collate function
+def collate_gdp(batch):
+    """
+    Collates a batch of tensors by padding them to the max shape in the batch.
+    Works for 3D tensors of arbitrary size.
+    """
+
+    # # Add batch dimension to each tensor
+    # batch = [[x.unsqueeze(0) if x is not None else None for x in tensors] for tensors in batch]
+
+    # Find max shape along each dimension
+    max_shape = list(batch[0][0].shape[-3:])
+    for (scan, *args) in batch:
+        max_shape = [max(max_shape[i], scan.shape[-3+i]) for i in range(len(max_shape))]
+
+    # Pad tensors to max shape
+    padded_scan = []
+    padded_beam = []
+    padded_ptvs = []
+    padded_oars = []
+    padded_body = []
+    padded_dose = []
+    for (scan, beam, ptvs, oars, body, dose) in batch:
+        # Get shape info
+        shape_target = max_shape
+        shape_origin = scan.shape[-3:]
+        # Get pad info
+        padding = [shape_target[i] - shape_origin[i] for i in range(3)]
+        padding = [(p//2, p-p//2) for p in padding]
+        padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
+        # Pad tensors
+        padded_scan.append(F.pad(scan, padding, mode='constant', value=scan.min()))
+        padded_beam.append(F.pad(beam, padding, mode='constant', value=0))
+        padded_ptvs.append(F.pad(ptvs, padding, mode='constant', value=0))
+        padded_oars.append(F.pad(oars, padding, mode='constant', value=False))
+        padded_body.append(F.pad(body, padding, mode='constant', value=False))
+        if dose is not None:
+            padded_dose.append(F.pad(dose, padding, mode='constant', value=0))
+            
+    # Stack padded tensors
+    collated_scan = torch.stack(padded_scan, dim=0)
+    collated_beam = torch.stack(padded_beam, dim=0)
+    collated_ptvs = torch.stack(padded_ptvs, dim=0)
+    collated_oars = torch.stack(padded_oars, dim=0)
+    collated_body = torch.stack(padded_body, dim=0)
+    if len(padded_dose) > 0:
+        collated_dose = torch.stack(padded_dose, dim=0)
+    else:
+        collated_dose = None
+    
+    # Return output
+    return collated_scan, collated_beam, collated_ptvs, collated_oars, collated_body, collated_dose
 
 # Example usage
 if __name__ == "__main__":

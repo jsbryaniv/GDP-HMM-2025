@@ -60,17 +60,17 @@ class DosePredictionModel(nn.Module):
             self.model = MOEWrapper3d(Unet3d, **kwargs)
         elif architecture.lower() == "vit":
             # ViT3D
-            from architectures.vit import ViT3D
+            from architectures.vit import ViT3d
             kwargs = {
                 'in_channels': n_channels,
                 'out_channels': 1,
                 'shape': shape,
                 **kwargs,
             }
-            self.model = ViT3D(**kwargs)
+            self.model = ViT3d(**kwargs)
         elif architecture.lower() == "moevit":
             # MOEViT3D
-            from architectures.vit import ViT3D
+            from architectures.vit import ViT3d
             from architectures.moe import MOEWrapper3d
             kwargs = {
                 'in_channels': n_channels,
@@ -78,7 +78,7 @@ class DosePredictionModel(nn.Module):
                 'shape': shape,
                 **kwargs,
             }
-            self.model = MOEWrapper3d(ViT3D, **kwargs)
+            self.model = MOEWrapper3d(ViT3d, **kwargs)
         elif architecture.lower() == "crossattnunet":
             # CrossAttnUnetModel
             from architectures.crossattnunet import CrossAttnUnetModel
@@ -132,15 +132,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = DiffUnet3d(**kwargs)
-        elif architecture.lower() == "sdm":
-            # ScalarDiffusionModel3d
-            from architectures.sdm import ScalarDiffusionModel3d
-            kwargs = {
-                'in_channels': 1,
-                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
-                **kwargs,
-            }
-            self.model = ScalarDiffusionModel3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         

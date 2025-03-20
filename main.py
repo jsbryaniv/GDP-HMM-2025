@@ -36,7 +36,7 @@ def main(
     # If continuing training, load previous files
     if from_checkpoint:
         # Load previous dataset and model
-        for _ in range(10):
+        for _ in range(5):
             print("WARNING: Be aware job is running with from_checkpoint=True.")  # Print warning message
         print("Loading checkpoint.")
         model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path)  # Load model, datasets, and metadata
@@ -127,12 +127,16 @@ def main(
 
 # Run main function
 if __name__ == '__main__':
-
+    
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',   {'shape': 128}),
-        ('sdm',        {'shape': 128}),
+        ('unet',          {'shape': 256}),
+        ('vit',           {'shape': 256}),
+        ('crossattnunet', {'shape': 256}),
+        ('crossvit',      {'shape': 256}),
+        ('moeunet',       {'shape': 256}),
+        ('diffunet',      {'shape': 256}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -147,20 +151,20 @@ if __name__ == '__main__':
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     ITER = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 
-    # DEBUGGING all files
-    for ID in range(len(all_jobs)):
-        for ITER in [0, 1]:
-            job_args = copy.deepcopy(all_jobs[ID])
-            shape = job_args['model_kwargs'].get('shape', None)
-            if shape is not None:
-                # Make shape smaller for debugging
-                job_args['model_kwargs']['shape'] = shape // 2
-            model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
-            print('\n'*5)
+    # # DEBUGGING all files
+    # for ID in range(len(all_jobs)):
+    #     for ITER in [0, 1]:
+    #         job_args = copy.deepcopy(all_jobs[ID])
+    #         shape = job_args['model_kwargs'].get('shape', None)
+    #         if shape is not None:
+    #             # Make shape smaller for debugging
+    #             job_args['model_kwargs']['shape'] = shape // 2
+    #         model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
+    #         print('\n'*5)
 
-    # # Run main function
-    # job_args = all_jobs[ID]
-    # model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
+    # Run main function
+    job_args = all_jobs[ID]
+    model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
 
     # Done
     print('Done!')

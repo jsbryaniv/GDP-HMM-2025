@@ -9,12 +9,13 @@ from torch.utils.data import DataLoader
 
 # Import local
 from config import *
+from dataset import collate_gdp
 
 
 # Set up training function
 def train_model(
     model, datasets, optimizer=None,
-    learning_rate=0.001, max_grad=1, n_epochs=5, 
+    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=5, 
     epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
     jobname=None, print_every=100, debug=False,
 ): 
@@ -30,14 +31,14 @@ def train_model(
     print(f'Training model with {n_parameters} parameters on {device} for epochs {epoch_start}-{n_epochs}.')
     print('-'*50)
     if debug:
-        for _ in range(10):
+        for _ in range(5):
             print("WARNING: Be aware job is running with debug=True.")
 
     # Set up data loaders
     dataset_train, dataset_val = datasets
-    loader_val = DataLoader(dataset_val, batch_size=1, shuffle=False)
+    loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
     loader_train = DataLoader(
-        dataset_train, batch_size=1, shuffle=True,
+        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
         # pin_memory=True, n_workers=4, prefetch_factor=2,
     )
 

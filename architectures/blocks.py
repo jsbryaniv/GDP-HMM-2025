@@ -6,34 +6,24 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 
-### NORMALIZATION BLOCKS ###
+### ACTIVATION LAYERS ###
 
-# Volume normalization
-class VoxelNorm3d(nn.Module):
-    """
-    Normalize each voxel independently across channels.
-    """
-    def __init__(self, num_channels, eps=1e-5):
-        super(VoxelNorm3d, self).__init__()
-        self.norm = nn.LayerNorm(num_channels, eps=eps)
+# Dynamic Tanh
+class DyTanh(nn.Module):
+    """Dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
+    def __init__(self, n_features, init_alpha=1.0):
+        super(DyTanh, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(n_features) * init_alpha)
+        self.beta = nn.Parameter(torch.zeros(n_features))
+        self.gamma = nn.Parameter(torch.ones(n_features))
 
     def forward(self, x):
-
-        # Reshape to (B, D, H, W, C) so LayerNorm normalizes over C
-        x = x.permute(0, 2, 3, 4, 1)
-
-        # Apply normalization
-        x = self.norm(x)
-
-        # Restore original shape (B, C, D, H, W)
-        x = x.permute(0, 4, 1, 2, 3)
-
-        # Return output
-        return x
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
 
 # Voxel Dynamic Tanh
 class VoxelDyTanh3d(nn.Module):
-    """Voxel-wise dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
+    """Voxel-wise dynamic tanh activation."""
     # class DyT(Module):
     # def __init__(self, C, init_α):
     # super().__init__()
@@ -43,11 +33,11 @@ class VoxelDyTanh3d(nn.Module):
     # def forward(self, x):
     # x = tanh(self.alpha * x)
     # return self.γ * x + self.β
-    def __init__(self, num_channels, init_alpha=1.0):
+    def __init__(self, n_features, init_alpha=1.0):
         super(VoxelDyTanh3d, self).__init__()
-        self.alpha = nn.Parameter(torch.ones(num_channels, 1, 1, 1) * init_alpha)
-        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
-        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
+        self.alpha = nn.Parameter(torch.ones(n_features, 1, 1, 1) * init_alpha)
+        self.beta = nn.Parameter(torch.zeros(n_features, 1, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(n_features, 1, 1, 1))
 
     def forward(self, x):
         x = torch.tanh(self.alpha * x)
@@ -57,7 +47,7 @@ class VoxelDyTanh3d(nn.Module):
 class AdaptiveVoxelDyTanh3d(nn.Module):
     """Voxel-wise dynamic tanh activation. Uses initial batches to estimate alpha."""
     def __init__(self, num_channels, warmup_steps=100, momentum=0.1, eps=1e-6):
-        super().__init__()
+        super(AdaptiveVoxelDyTanh3d, self).__init__()
 
         # Set attributes
         self.num_channels = num_channels
@@ -92,6 +82,31 @@ class AdaptiveVoxelDyTanh3d(nn.Module):
         x = torch.tanh(self.alpha * x)
         return self.gamma * x + self.beta
 
+
+### NORMALIZATION LAYERS ###
+
+# Volume normalization
+class VoxelNorm3d(nn.Module):
+    """
+    Normalize each voxel independently across channels.
+    """
+    def __init__(self, num_channels, eps=1e-5):
+        super(VoxelNorm3d, self).__init__()
+        self.norm = nn.LayerNorm(num_channels, eps=eps)
+
+    def forward(self, x):
+
+        # Reshape to (B, D, H, W, C) so LayerNorm normalizes over C
+        x = x.permute(0, 2, 3, 4, 1)
+
+        # Apply normalization
+        x = self.norm(x)
+
+        # Restore original shape (B, C, D, H, W)
+        x = x.permute(0, 4, 1, 2, 3)
+
+        # Return output
+        return x
 
 ### VOLUME SHAPING BLOCKS ###
 
@@ -192,7 +207,7 @@ class VolumeExpand3d(nn.Module):
 
 ### CONVOLUTIONAL BLOCKS ###
 
-# Convolutional block #TODO: DELETE
+# OLD Convolutional block #TODO: DELETE
 class OldConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
@@ -905,7 +920,7 @@ class VolCrossTransformer3d(nn.Module):
         self.norm2 = VoxelNorm3d(n_features)
         self.norm_context = nn.ModuleList([VoxelNorm3d(n_features) for _ in range(n_context)])
 
-    def forward(self, x, y_list):
+    def forward(self, x, *y_list):
 
         # Apply self-attention
         x_normed = self.norm1(x)

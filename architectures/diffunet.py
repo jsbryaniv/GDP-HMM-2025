@@ -11,18 +11,18 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.unet import Unet3d
-from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, VolumeContract3d, VolumeExpand3d
+from architectures.unet import Unet3d, UnetEncoder3d
+from architectures.blocks import ConvformerDecoder3d, VolumeContract3d, VolumeExpand3d
 
 
 # Define Diffusion Model Unet
-class DiffUnet3d(nn.Module):
+class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=3, 
+        n_features=8, n_blocks=4, 
         n_layers_per_block=2, n_mixing_blocks=2,
         dt=1, kT_max=10, n_steps=8,
-        scale=4,
+        scale=2,
     ):
         super(DiffUnet3d, self).__init__()
         
@@ -46,47 +46,28 @@ class DiffUnet3d(nn.Module):
         self.n_features_per_depth = n_features_per_depth
         self.kT_schedule = kT_schedule
 
-        # Create input blocks
-        self.input_block = nn.Sequential(
-            # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
-            # Shrink volume
-            VolumeContract3d(n_features=n_features, scale=scale),
-        )
-        self.context_input_blocks = nn.ModuleList()
-        for n_channels in n_cross_channels_list:
-            self.context_input_blocks.append(
-                nn.Sequential(
-                    # Merge input channels to n_features
-                    nn.Conv3d(n_channels, n_features, kernel_size=1),
-                    # Shrink volume
-                    VolumeContract3d(n_features=n_features, scale=scale),
-                )
-            )
-
-        # Create output block
-        self.output_block = nn.Sequential(
-            # Expand volume
-            VolumeExpand3d(n_features=n_features, scale=scale),
-            # Merge output channels to in_channels
-            nn.Conv3d(n_features, in_channels, kernel_size=1),
-        )
-
         # Create main autoencoder
         self.autoencoder = Unet3d(
-            n_features, n_features, 
+            in_channels, in_channels, 
             n_features=n_features, n_blocks=n_blocks,
-            n_layers_per_block=n_layers_per_block
+            n_layers_per_block=n_layers_per_block,
+            scale=scale,
         )
         
-        # Create context autoencoders
-        self.context_autoencoders = nn.ModuleList()
+        # Create context encoders
+        self.context_encoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
-            self.context_autoencoders.append(
-                Unet3d(
-                    n_features, n_features, 
+            self.context_encoders.append(
+                # Unet3d(
+                #     n_features, n_features, 
+                #     n_features=n_features, n_blocks=n_blocks,
+                #     n_layers_per_block=n_layers_per_block,
+                # )
+                UnetEncoder3d(
+                    n_channels,
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
+                    scale=scale,
                 )
             )
 
@@ -130,7 +111,7 @@ class DiffUnet3d(nn.Module):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.up_blocks[i](x)
+            x = self.autoencoder.decoder.up_blocks[i](x)
             # Merge with skip
             x_skip = feats[depth]
             x = x + x_skip
@@ -139,7 +120,7 @@ class DiffUnet3d(nn.Module):
             x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
-        x = self.autoencoder.output_block(x)
+        x = self.autoencoder.decoder.output_block(x)
         
         # Return
         return x
@@ -149,13 +130,9 @@ class DiffUnet3d(nn.Module):
         x is the input tensor
         y_list is a list of context tensors
         """
-
-        # Shrink input and context
-        x = self.input_block(x)
-        y_list = [block(y) for block, y in zip(self.context_input_blocks, y_list)]
         
         # Encode features
-        feats_context = [ae.encoder(y) for ae, y in zip(self.context_autoencoders, y_list)]
+        feats_context = [block(y) for block, y in zip(self.context_encoders, y_list)]
         feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
         
         # Loop over temperature schedule
@@ -170,9 +147,6 @@ class DiffUnet3d(nn.Module):
 
             # Update position
             x = x + self.dt * F
-
-        # Expand output
-        x = self.output_block(x)
         
         # Return
         return x
@@ -180,10 +154,6 @@ class DiffUnet3d(nn.Module):
 
 # Test the model
 if __name__ == '__main__':
-
-    # torch.autograd.set_detect_anomaly(True)  # (Optional) Helps debug gradient issues
-    # torch.set_num_threads(1)                 # Forces computations to use one thread
-    # torch.set_num_interop_threads(1)         # Disables inter-op parallelism
 
     # Import custom libraries
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
@@ -210,10 +180,13 @@ if __name__ == '__main__':
         print(f'--{name}: {sum(p.numel() for p in block.parameters()):,}')
 
     # Forward pass
-    y = model(x, *y_list)
+    with torch.no_grad():
+        y = model(x, *y_list)
 
     # Estimate memory usage
     estimate_memory_usage(model, x, *y_list, print_stats=True)
 
     # Done
     print('Done!')
+
+

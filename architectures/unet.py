@@ -10,12 +10,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvBlock3d
+from architectures.blocks import ConvBlock3d, VolumeContract3d, VolumeExpand3d
 
 
 # Define Unet encoder
 class UnetEncoder3d(nn.Module):
-    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4):
+    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
         super(UnetEncoder3d, self).__init__()
         
         # Set attributes
@@ -28,6 +28,8 @@ class UnetEncoder3d(nn.Module):
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
+            # Shrink volume
+            VolumeContract3d(n_features=n_features, scale=scale),
             # Additional convolutional layers
             *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
         )
@@ -65,7 +67,7 @@ class UnetEncoder3d(nn.Module):
 
 # Define Unet decoder
 class UnetDecoder3d(nn.Module):
-    def __init__(self, out_channels, n_features=4, n_blocks=5, n_layers_per_block=4):
+    def __init__(self, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
         super(UnetDecoder3d, self).__init__()
         
         # Set attributes
@@ -73,6 +75,7 @@ class UnetDecoder3d(nn.Module):
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
+        self.scale = scale
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -91,7 +94,11 @@ class UnetDecoder3d(nn.Module):
 
         # Define output block
         self.output_block = nn.Sequential(
+            # Convolutional layers
             *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block)],
+            # Expand volume
+            VolumeExpand3d(n_features=n_features, scale=scale),
+            # Merge features to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
         
@@ -116,7 +123,7 @@ class UnetDecoder3d(nn.Module):
 
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
-    def __init__(self, in_channels, out_channels, n_features=4, n_blocks=5, n_layers_per_block=4):
+    def __init__(self, in_channels, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=2):
         super(Unet3d, self).__init__()
         
         # Set attributes
@@ -125,6 +132,7 @@ class Unet3d(nn.Module):
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
+        self.scale = scale
 
         # Define encoder
         self.encoder = UnetEncoder3d(
@@ -132,6 +140,7 @@ class Unet3d(nn.Module):
             n_features=n_features,
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
+            scale=scale,
         )
 
         # Define decoder
@@ -140,6 +149,7 @@ class Unet3d(nn.Module):
             n_features=n_features,
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
+            scale=scale,
         )
 
     def get_config(self):
@@ -149,6 +159,7 @@ class Unet3d(nn.Module):
             'n_features': self.n_features,
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
+            'scale': self.scale,
         }
         
     def forward(self, x):

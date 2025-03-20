@@ -12,20 +12,16 @@ import torch.nn as nn
 from architectures.blocks import TransformerBlock, VolumeExpand3d, VolumeContract3d
 
 
-# Create class
-class ViT3D(nn.Module):
+# Create Vision Transformer 3D Encoder
+class ViTEncoder3d(nn.Module):
     def __init__(self, 
-        in_channels, out_channels,
+        in_channels,
         shape=(64, 64, 64), patch_size=None,
-        n_features=128, n_heads=4, n_layers=16,
+        n_features=64, n_heads=4, n_layers=8,
     ):
-        super(ViT3D, self).__init__()
+        super(ViTEncoder3d, self).__init__()
 
         ### Check inputs ###
-        # Check input channels
-        if n_layers % 2 != 0:
-            # Number of layers must be even
-            raise ValueError('Number of layers must be even!')
         # Check number of heads
         if n_features % n_heads != 0:
             # n_features must be divisible by n_heads
@@ -36,8 +32,10 @@ class ViT3D(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # Set default patch size (1/16 of shape)
-            patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
+            # # Set default patch size (1/16 of shape)
+            # patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
+            # Set default patch size (1/8 of shape)
+            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
@@ -49,7 +47,6 @@ class ViT3D(nn.Module):
         
         # Set attributes
         self.in_channels = in_channels
-        self.out_channels = out_channels
         self.shape = shape
         self.patch_size = patch_size
         self.n_features = n_features
@@ -65,40 +62,157 @@ class ViT3D(nn.Module):
         n_patches = shape_patchgrid[0] * shape_patchgrid[1] * shape_patchgrid[2]
         self.shape_patchgrid = shape_patchgrid
         self.n_patches = n_patches
-        # Check it n_patches is too large
         if n_patches > 10000:
+            # Check it n_patches is too large
             raise ValueError('Number of patches is too large! Descrease size or increase patch size and stride.')
+        
+        # Positional Encoding
+        # self.pos_embedding = nn.Parameter(.1 * torch.randn(1, self.n_patches, n_features))
+        pos_embedding_0 = .1*torch.randn(1, n_features, shape_patchgrid[0], 1, 1)
+        pos_embedding_1 = .1*torch.randn(1, n_features, 1, shape_patchgrid[1], 1)
+        pos_embedding_2 = .1*torch.randn(1, n_features, 1, 1, shape_patchgrid[2])
+        pos_embedding = pos_embedding_0 + pos_embedding_1 + pos_embedding_2
+        pos_embedding = pos_embedding.flatten(2).transpose(1, 2)
+        self.pos_embedding = nn.Parameter(pos_embedding)
 
         # Create input and output blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
+            # Contract volume to patches
+            VolumeContract3d(n_features=n_features, scale=patch_size[0]),
         )
-        self.output_block = nn.Sequential(
-            # Project to output channels
-            nn.Conv3d(n_features, out_channels, kernel_size=1),
-        )
-        
-        # 3D Patch Embedding and Unembedding Layers
-        self.patch_embed = VolumeContract3d(n_features=n_features, scale=patch_size[0])
-        self.patch_unembed = VolumeExpand3d(n_features=n_features, scale=patch_size[0])
-        
-        # Positional Encoding
-        self.pos_embedding = nn.Parameter(.1*torch.randn(1, self.n_patches, n_features))
+
 
         # Transformer Encoders
-        self.transformer_encoder = nn.ModuleList()
+        self.layers = nn.ModuleList()
         for _ in range(n_layers//2):
-            self.transformer_encoder.append(
+            self.layers.append(
                 TransformerBlock(n_features=n_features, n_heads=n_heads)
             )
 
-        # Transformer Decoders
-        self.transformer_decoder = nn.ModuleList()
+    def forward(self, x):
+
+        # Input block
+        x = self.input_block(x)
+        x = x.flatten(2).transpose(1, 2)
+
+        # Add positional encoding
+        x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
+
+        # Transformer Encoding
+        for layer in self.layers:
+            x = layer(x)
+
+        # Return encoded features
+        return x
+
+# Create Vision Transformer 3D Decoder
+class ViTDecoder3d(nn.Module):
+    def __init__(self, 
+        out_channels,
+        shape=(64, 64, 64), patch_size=None,
+        n_features=64, n_heads=4, n_layers=8,
+    ):
+        super(ViTDecoder3d, self).__init__()
+
+        ### Check inputs ###
+        # Check number of heads
+        if n_features % n_heads != 0:
+            # n_features must be divisible by n_heads
+            raise ValueError('Number of features must be divisible by number of heads!')
+        # Check shape
+        if not isinstance(shape, tuple):
+            # Convert shape to tuple
+            shape = (shape, shape, shape)
+        # Check patch size
+        if patch_size is None:
+            # # Set default patch size (1/16 of shape)
+            # patch_size = (shape[0] // 16, shape[1] // 16, shape[2] // 16)
+            # Set default patch size (1/8 of shape)
+            patch_size = (shape[0] // 8, shape[1] // 8, shape[2] // 8)
+        elif not isinstance(patch_size, tuple):
+            # Convert patch size to tuple
+            patch_size = (patch_size, patch_size, patch_size)
+        # Check shape and patch size compatibility
+        for i in range(3):
+            if shape[i] % patch_size[i] != 0:
+                # Check if shape is divisible by patch size
+                raise ValueError('Shape must be divisible by patch size!')
+        
+        # Set attributes
+        self.out_channels = out_channels
+        self.shape = shape
+        self.patch_size = patch_size
+        self.n_features = n_features
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+
+        # Calculate constants
+        shape_patchgrid = (
+            shape[0] // patch_size[0],
+            shape[1] // patch_size[1],
+            shape[2] // patch_size[2],
+        )
+        self.shape_patchgrid = shape_patchgrid
+
+        # Create output blocks
+        self.output_block = nn.Sequential(
+            # Expand patches to volume
+            VolumeExpand3d(n_features=n_features, scale=patch_size[0]),
+            # Project to output channels
+            nn.Conv3d(n_features, out_channels, kernel_size=1), 
+        )
+
+        # Define layers
+        self.layers = nn.ModuleList()
         for _ in range(n_layers//2):
-            self.transformer_decoder.append(
+            self.layers.append(
                 TransformerBlock(n_features=n_features, n_heads=n_heads)
             )
+
+    def forward(self, x):
+
+        # Transformer Decoding
+        for layer in self.layers:
+            x = layer(x)
+
+        # Output block
+        x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
+        x = self.output_block(x)
+
+        # Return output
+        return x
+
+# Create class
+class ViT3d(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels,
+        shape=(64, 64, 64), patch_size=None,
+        n_features=64, n_heads=4, n_layers=16,
+    ):
+        super(ViT3d, self).__init__()
+        
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.shape = shape
+        self.patch_size = patch_size
+        self.n_features = n_features
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        
+        # Create encoder and decoder
+        self.encoder = ViTEncoder3d(
+            in_channels=in_channels,
+            shape=shape, patch_size=patch_size,
+            n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
+        )
+        self.decoder = ViTDecoder3d(
+            out_channels=out_channels,
+            shape=shape, patch_size=patch_size,
+            n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
+        )
 
     def get_config(self):
         return {
@@ -116,43 +230,6 @@ class ViT3D(nn.Module):
         x = self.decoder(x)
         return x
     
-    def encoder(self, x):
-
-        # Input block
-        x = self.input_block(x)
-
-        # Patch embedding
-        x = self.patch_embed(x)           # Shape: [B, n_features, D//pD, H//pH, W//pW]
-        x = x.flatten(2).transpose(1, 2)  # Shape: [B, n_patches, n_features]
-
-        # Add positional encoding
-        x = x + self.pos_embedding.expand(x.shape[0], -1, -1)
-
-        # Transformer Encoding
-        for layer in self.transformer_encoder:
-            x = layer(x)
-        # x = self.transformer_encoder(x)
-
-        # Return encoded features
-        return x
-    
-    def decoder(self, x):
-
-        # Transformer Decoding
-        for layer in self.transformer_decoder:
-            x = layer(x)
-        # x = self.transformer_decoder(x)
-
-        # Patch unembedding
-        x = x.transpose(1, 2).reshape(-1, self.n_features, *self.shape_patchgrid)
-        x = self.patch_unembed(x)
-
-        # Output block
-        x = self.output_block(x)
-
-        # Return output
-        return x
-
 
 # Test the model
 if __name__ == '__main__':
@@ -162,7 +239,7 @@ if __name__ == '__main__':
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
 
     # Set constants
-    shape = (64, 64, 64)
+    shape = (128, 128, 128)
     in_channels = 36
     out_channels = 1
 
@@ -170,7 +247,7 @@ if __name__ == '__main__':
     x = torch.randn(1, in_channels, *shape)
 
     # Create a model
-    model = ViT3D(
+    model = ViT3d(
         in_channels=in_channels,
         out_channels=out_channels,
         shape=shape, 
