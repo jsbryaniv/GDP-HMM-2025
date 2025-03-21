@@ -16,8 +16,9 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 
 # Define main function
 def main(
-    dataID, modelID, model_kwargs=None,
+    dataID, modelID, batch_size=None,
     from_checkpoint=False, debug=False, device=None,
+    **model_kwargs
 ):
     """
     Main function to train a model on a dataset.
@@ -90,6 +91,7 @@ def main(
         model, 
         datasets=(dataset_train, dataset_val), 
         optimizer=optimizer,
+        batch_size=batch_size,
         jobname=savename, debug=debug,
         epoch_start=epoch_start, loss_val_best=loss_val_best, model_state_dict_best=model_state_dict_best,
     )
@@ -148,21 +150,17 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',      {'shape': 64}),
-        ('unet',          {'shape': 64}),
-        ('crossattnunet', {'shape': 64}),
-        ('diffunet',      {'shape': 128}),
-        ('unet',          {'shape': 128}),
-        ('crossattnunet', {'shape': 128}),
+        ('diffunet',      {'batch_size': 4, 'shape': 64}),
+        ('unet',          {'batch_size': 4, 'shape': 64}),
+        ('crossattnunet', {'batch_size': 4, 'shape': 64}),
+        ('diffunet',      {'batch_size': 4, 'shape': 128}),
+        ('unet',          {'batch_size': 2, 'shape': 128}),
+        ('crossattnunet', {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
-        for (modelID, model_kwargs) in modelID_list:
-            all_jobs.append({
-                'dataID': dataID, 
-                'modelID': modelID,
-                'model_kwargs': model_kwargs,
-            })
+        for (modelID, kwargs) in modelID_list:
+            all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
@@ -176,10 +174,8 @@ if __name__ == '__main__':
         for ID in range(len(all_jobs)):
             for ITER in [0, 1]:
                 job_args = copy.deepcopy(all_jobs[ID])
-                shape = job_args['model_kwargs'].get('shape', None)
-                if shape is not None:
-                    # Make shape smaller for debugging
-                    job_args['model_kwargs']['shape'] = shape // 2
+                if 'shape' in job_args:
+                    job_args['shape'] = job_args['shape'] // 2  # Make shape smaller for debugging
                 model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
                 print('\n'*5)
 
