@@ -53,16 +53,17 @@ def main(
             'dataID': dataID,
             'modelID': modelID,
             'model_kwargs': model_kwargs,
-            'train_stats': {
-                'epoch': 0,
-                'losses_val': [],
-                'losses_train': [],
-                'loss_test': None,
-                'losses_test': None,
-                'loss_val_best': float('inf'),
-                'model_state_dict_best': None,
-                'mem_stats': [],
-            },
+            # 'train_stats': {
+            #     'epoch': 0,
+            #     'losses_val': [],
+            #     'losses_train': [],
+            #     'loss_test': None,
+            #     'losses_test': None,
+            #     'loss_val_best': float('inf'),
+            #     'model_state_dict_best': None,
+            #     'mem_stats': [],
+            #     'time_stats': [],
+            # },
         }
 
     # Move model and optimizer to device
@@ -79,38 +80,50 @@ def main(
     ### TRAINING LOOP ###
     print("Starting training.")
 
+    # Get training progress
+    epoch_start = metadata.get('epoch', 0)
+    loss_val_best = metadata.get('loss_val_best', float('inf'))
+    model_state_dict_best = metadata.get('model_state_dict_best', None)
+
     # Train model
-    model, optimizer, train_stats_new = train_model(
+    model, optimizer, train_stats = train_model(
         model, 
         datasets=(dataset_train, dataset_val), 
         optimizer=optimizer,
         jobname=savename, debug=debug,
-        epoch_start=metadata['train_stats']['epoch'],
-        loss_val_best=metadata['train_stats']['loss_val_best'],
-        model_state_dict_best=metadata['train_stats']['model_state_dict_best'],
+        epoch_start=epoch_start, loss_val_best=loss_val_best, model_state_dict_best=model_state_dict_best,
     )
+
+    # Merge training statistics
+    for key, value in train_stats.items():
+        if isinstance(value, list):
+            value_old = metadata.get(key, [])
+            train_stats[key] = value_old + value
+    metadata.update(train_stats)
 
     ### TESTING ###
     print("Testing model.")
 
     # Test model
     model_best = copy.deepcopy(model)
-    model_best.load_state_dict(train_stats_new['model_state_dict_best'])
+    model_best.load_state_dict(metadata['model_state_dict_best'])
     loss_test, losses_test = test_model(model_best, dataset_test, debug=debug)
+    metadata['loss_test'] = loss_test
+    metadata['losses_test'] = losses_test
 
 
     ### SAVE RESULTS ###
     print("Saving results.")
 
-    # Merge training statistics
-    train_stats_new['loss_test'] = loss_test
-    train_stats_new['losses_test'] = losses_test
-    for key, value in train_stats_new.items():
-        if key in ['losses_test']:
-            continue
-        if isinstance(value, list):
-            train_stats_new[key] = metadata['train_stats'][key] + value
-    metadata['train_stats'] = train_stats_new
+    # # Merge training statistics
+    # train_stats_new['loss_test'] = loss_test
+    # train_stats_new['losses_test'] = losses_test
+    # for key, value in train_stats_new.items():
+    #     if key in ['losses_test']:
+    #         continue
+    #     if isinstance(value, list):
+    #         train_stats_new[key] = metadata['train_stats'][key] + value
+    # metadata['train_stats'] = train_stats_new
 
     # Save checkpoint
     save_checkpoint(
@@ -135,16 +148,20 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
+        # ('diffunet', {'shape': 64}),  # 0
+        # ('diffunet', {'shape': 128}), # 1
+        # # ########
         ('unet', {'version': 0, 'shape': 64}),   # 0 
         ('unet', {'version': 1, 'shape': 64}),   # 1 
         ('unet', {'version': 2, 'shape': 64}),   # 2 
         ('unet', {'version': 3, 'shape': 64}),   # 3 
         ('unet', {'version': 4, 'shape': 64}),   # 4 
-        ('unet', {'version': 0, 'shape': 128}),  # 5 
-        ('unet', {'version': 1, 'shape': 128}),  # 6 
-        ('unet', {'version': 2, 'shape': 128}),  # 7 
-        ('unet', {'version': 3, 'shape': 128}),  # 8 
-        ('unet', {'version': 4, 'shape': 128}),  # 9 
+        # ('unet', {'version': 0, 'shape': 128}),  # 5 
+        # ('unet', {'version': 1, 'shape': 128}),  # 6 
+        # ('unet', {'version': 2, 'shape': 128}),  # 7 
+        # ('unet', {'version': 3, 'shape': 128}),  # 8 
+        # ('unet', {'version': 4, 'shape': 128}),  # 9 
+        # #######
         # ('unet', {'version': 0, 'shape': 256}),  # 10
         # ('unet', {'version': 1, 'shape': 256}),  # 11
         # ('unet', {'version': 2, 'shape': 256}),  # 12

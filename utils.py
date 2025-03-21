@@ -243,7 +243,7 @@ def load_checkpoint(checkpoint_path, load_best=False):
     # Load model from checkpoint
     from model import DosePredictionModel
     if load_best:
-        model_state_dict = checkpoint['train_stats']['model_state_dict_best']
+        model_state_dict = checkpoint['metadata']['model_state_dict_best']
         model = DosePredictionModel.from_checkpoint(checkpoint_path, state_dict=model_state_dict)
     else:
         model = DosePredictionModel.from_checkpoint(checkpoint_path)

@@ -26,11 +26,11 @@ class DosePredictionModel(nn.Module):
         self.shape = shape
         self.kwargs = kwargs
 
-        # If Model is a Unet class, set n_blocks based on shape
-        if 'unet' in architecture.lower():
-            # Number of blocks is the log base 2 of the smallest shape dimension - 2 (latent shape is 4x4x4)
-            n_blocks = int(torch.log2(torch.tensor(shape).min())) - 2
-            kwargs['n_blocks'] = n_blocks
+        # # If Model is a Unet class, set n_blocks based on shape
+        # if 'unet' in architecture.lower():
+        #     # Number of blocks is the log base 2 of the smallest shape dimension - 2 (latent shape is 4x4x4)
+        #     n_blocks = int(torch.log2(torch.tensor(shape).min())) - 2
+        #     kwargs['n_blocks'] = n_blocks
 
         # Initialize model
         if architecture.lower() == "test":
@@ -184,29 +184,29 @@ class DosePredictionModel(nn.Module):
 
         # Reshape inputs
         transform_params=None  # Initialize to None
-        if (self.shape is not None) and (self.shape == (256, 256, 256)) and all(s < 256 for s in scan.shape[2:]):
-            ### Pad to 256x256x256 ###
-            # Get shape info
-            shape_target = (256, 256, 256)
-            shape_origin = scan.shape[2:]
-            # Get pad info
-            padding = [shape_target[i] - shape_origin[i] for i in range(3)]
-            padding = [(p//2, p-p//2) for p in padding]
-            padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
-            # Pad
-            scan = F.pad(scan, padding, value=scan.min())
-            beam = F.pad(beam, padding)
-            ptvs = F.pad(ptvs, padding)
-            oars = F.pad(oars, padding)
-            body = F.pad(body, padding)
-            ### Update transform params ###
-            transform_params = {
-                'type': 'pad',
-                'original_shape': shape_origin,
-                'padding': padding,
-                'resize': None,
-            }
-        elif self.shape is not None:
+        # if (self.shape is not None) and (self.shape == (256, 256, 256)) and all(s < 256 for s in scan.shape[2:]):
+        #     ### Pad to 256x256x256 ###
+        #     # Get shape info
+        #     shape_target = (256, 256, 256)
+        #     shape_origin = scan.shape[2:]
+        #     # Get pad info
+        #     padding = [shape_target[i] - shape_origin[i] for i in range(3)]
+        #     padding = [(p//2, p-p//2) for p in padding]
+        #     padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
+        #     # Pad
+        #     scan = F.pad(scan, padding, value=scan.min())
+        #     beam = F.pad(beam, padding)
+        #     ptvs = F.pad(ptvs, padding)
+        #     oars = F.pad(oars, padding)
+        #     body = F.pad(body, padding)
+        #     ### Update transform params ###
+        #     transform_params = {
+        #         'type': 'pad',
+        #         'original_shape': shape_origin,
+        #         'padding': padding,
+        #         'resize': None,
+        #     }
+        if self.shape is not None:
             ### Resize to shape ###
             scan, resize_params = resize_image_3d(scan, self.shape, fill_value=scan.min())
             beam, _ = resize_image_3d(beam, self.shape)
@@ -238,7 +238,6 @@ class DosePredictionModel(nn.Module):
         elif self.architecture.lower() in ["diffunet", "diffvit"]:
             # Separate contexts
             inputs = (
-                ptvs.sum(dim=1).unsqueeze(1),            # Main input
                 scan,                                    # Context 1  
                 torch.cat([beam, ptvs], dim=1),          # Context 2
                 torch.cat([oars, body], dim=1).float(),  # Context 3
@@ -317,6 +316,11 @@ class DosePredictionModel(nn.Module):
             pred, dose, 
             structures=torch.cat([(ptvs!=0), oars, body], dim=1)
         )
+
+        # Add diffusion loss
+        if self.architecture.lower() in ["diffunet", "diffvit"]:
+            pred_shaped, _ = resize_image_3d(pred, self.shape)
+            likelihood += self.model.calculate_diffusion_loss(pred_shaped, *inputs)
 
         # Compute total loss
         loss = (

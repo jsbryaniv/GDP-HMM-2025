@@ -10,7 +10,7 @@ from torch.utils.checkpoint import checkpoint
 ### ACTIVATION LAYERS ###
 
 # Dynamic Tanh
-class DyTanh(nn.Module):
+class DyTanh(nn.Module): # TODO: Explicitly encode backpropagation through this layer
     """Dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
     def __init__(self, n_features, init_alpha=1.0):
         super(DyTanh, self).__init__()
@@ -22,7 +22,7 @@ class DyTanh(nn.Module):
         x = torch.tanh(self.alpha * x)
         return self.gamma * x + self.beta
 
-# Voxel Dynamic Tanh
+# Voxel Dynamic Tanh  # TODO: Explicitly encode backpropagation through this layer
 class VoxelDyTanh3d(nn.Module):
     """Voxel-wise dynamic tanh activation."""
     # class DyT(Module):
@@ -44,7 +44,7 @@ class VoxelDyTanh3d(nn.Module):
         x = torch.tanh(self.alpha * x)
         return self.gamma * x + self.beta
     
-# Adaptive Voxel Dynamic Tanh
+# Adaptive Voxel Dynamic Tanh  # TODO: Explicitly encode backpropagation through this layer
 class AdaptiveVoxelDyTanh3d(nn.Module):
     """Voxel-wise dynamic tanh activation. Uses initial batches to estimate alpha."""
     def __init__(self, num_channels, warmup_steps=100, momentum=0.1, eps=1e-6):
@@ -82,6 +82,38 @@ class AdaptiveVoxelDyTanh3d(nn.Module):
         # Apply DyT transformation
         x = torch.tanh(self.alpha * x)
         return self.gamma * x + self.beta
+
+
+### MODULATION LAYERS ###
+
+# FiLM Layer, for time embeddings in diffusion models
+class FiLM3d(nn.Module):
+    """Feature-wise Linear Modulation layer for 3D volumes."""
+    def __init__(self, n_features, expansion=4):
+        super(FiLM3d, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.expansion = expansion
+
+        # Define scale layer
+        self.scale_shift = nn.Sequential(
+            nn.Conv3d(1, expansion*n_features, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(expansion*n_features, 2*n_features, kernel_size=1, groups=expansion),
+        )
+
+    def forward(self, x, t):
+
+        # Get modulation parameters
+        scale, shift = self.scale_shift(t.view(-1, 1, 1, 1, 1)).chunk(2, dim=1)
+
+        # Apply modulation
+        x = x * (1 + scale) + shift
+
+        # Return output
+        return x
+
 
 
 ### NORMALIZATION LAYERS ###
@@ -208,6 +240,8 @@ class VolumeExpand3d(nn.Module):
 
 ### CONVOLUTIONAL BLOCKS ###
 
+# TODO: Note: I updated all blocks to have learnable beta=.99 and eliminated use of beta from the forward pass.
+
 # OLD ConvBlock3d
 class OldConvBlock3d(nn.Module):
     def __init__(self, 
@@ -306,7 +340,7 @@ class OldConvBlock3d(nn.Module):
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.1, scale=1
+        kernel_size=3, groups=1, beta=.99, scale=1
     ):
         super(ConvBlock3d, self).__init__()
 
@@ -314,8 +348,11 @@ class ConvBlock3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
-        self.beta = beta
+        # self.beta = beta
         self.scale = scale
+
+        # Set beta
+        self.beta = nn.Parameter(torch.tensor(beta))
 
         # Reshaping
         if scale > 1:
@@ -372,7 +409,8 @@ class ConvBlock3d(nn.Module):
         x = self.mixing(x)
 
         # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
+        # x = self.beta * x0 + (1 - self.beta) * x
+        x = x0 + x
 
         # Return output
         return x
@@ -381,7 +419,7 @@ class ConvBlock3d(nn.Module):
 class ConvBlock3d_v1(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.1, scale=1
+        kernel_size=3, groups=1, beta=.99, scale=1
     ):
         super(ConvBlock3d_v1, self).__init__()
 
@@ -447,7 +485,8 @@ class ConvBlock3d_v1(nn.Module):
         x = self.mixing(x)
 
         # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
+        # x = self.beta * x0 + (1 - self.beta) * x
+        x = x0 + x
 
         # Return output
         return x
@@ -456,7 +495,7 @@ class ConvBlock3d_v1(nn.Module):
 class ConvBlock3d_v2(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.1, scale=1
+        kernel_size=3, groups=1, beta=.99, scale=1
     ):
         super(ConvBlock3d_v2, self).__init__()
 
@@ -522,7 +561,8 @@ class ConvBlock3d_v2(nn.Module):
         x = self.mixing(x)
 
         # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
+        # x = self.beta * x0 + (1 - self.beta) * x
+        x = x0 + x
 
         # Return output
         return x
@@ -531,7 +571,7 @@ class ConvBlock3d_v2(nn.Module):
 class ConvBlock3d_v3(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.1, scale=1
+        kernel_size=3, groups=1, beta=.99, scale=1
     ):
         super(ConvBlock3d_v3, self).__init__()
 
@@ -612,7 +652,8 @@ class ConvBlock3d_v3(nn.Module):
         x = self.mixing(x)
 
         # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
+        # x = self.beta * x0 + (1 - self.beta) * x
+        x = x0 + x
 
         # Return output
         return x
@@ -621,7 +662,7 @@ class ConvBlock3d_v3(nn.Module):
 class ConvBlock3d_v4(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=7, groups=1, beta=.1, scale=1, expansion=4
+        kernel_size=5, beta=.99, scale=1, expansion=4, groups=1
     ):
         super(ConvBlock3d_v4, self).__init__()
 
@@ -632,9 +673,7 @@ class ConvBlock3d_v4(nn.Module):
         self.beta = beta
         self.scale = scale
         self.expansion = expansion
-
-        # # Set groups to LCM of in_channels and out_channels
-        # groups = math.lcm(in_channels, out_channels)
+        
         # Set groups to greatest common divisor of in_channels and out_channels
         groups = math.gcd(in_channels, out_channels)
 
@@ -677,9 +716,9 @@ class ConvBlock3d_v4(nn.Module):
 
         # MLP
         self.mlp = nn.Sequential(
-            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1, groups=expansion),
+            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
             nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1, groups=expansion),
+            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
         )
 
     def forward(self, x):
@@ -693,7 +732,8 @@ class ConvBlock3d_v4(nn.Module):
         x = self.mlp(x)
 
         # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
+        # x = self.beta * x0 + (1 - self.beta) * x
+        x = x0 + x
 
         # Return output
         return x
@@ -870,8 +910,10 @@ class ConvAttn3d(nn.Module):
         tensors, the checkpoint function will recompute the intermediate tensors during the
         backward pass. We trade memory for compute time.
         """
+        q = q.requires_grad_()
+        k = k.requires_grad_()
+        v = v.requires_grad_()
         return checkpoint(self._forward, q, k, v, use_reentrant=False)
-        # return self._forward(q, k, v)  # TODO: Test if this results in major memory savings
     
     def _forward(self, q, k, v):
 

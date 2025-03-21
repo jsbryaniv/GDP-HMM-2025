@@ -186,6 +186,7 @@ class SDM3d(nn.Module):
 
         # Track gradients
         x = x.clone().requires_grad_(True)
+        feats_context = [f.clone().requires_grad_(True) for f in feats_context]
 
         # Calculate energy
         U = checkpoint(self.energy, x, feats_context, use_reentrant=False)

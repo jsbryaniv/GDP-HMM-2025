@@ -6,36 +6,38 @@ if __name__ == "__main__":
 
 # Import libraries
 import torch
+import random
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d, UnetEncoder3d
-from architectures.blocks import ConvBlock3d, ConvformerDecoder3d
+from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
 
 
 # Define Diffusion Model Unet
-class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
+class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        scale=1, n_features=16, n_blocks=4, 
+        n_features=8, n_blocks=4, 
         n_layers_per_block=2, n_mixing_blocks=2,
-        beta_min=1e-4, beta_max=.02, n_steps=16,
+        scale=2, n_steps=16, eta=.1,
+        use_checkpoint=True,
     ):
         super(DiffUnet3d, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
         self.n_cross_channels_list = n_cross_channels_list
-        self.scale = scale
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.n_mixing_blocks = n_mixing_blocks
-        self.beta_min = beta_min
-        self.beta_max = beta_max
+        self.scale = scale
         self.n_steps = n_steps
+        self.eta = eta
+        self.use_checkpoint = use_checkpoint
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -44,24 +46,24 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
         self.n_features_per_depth = n_features_per_depth
 
         # Get noise schedule
-        beta_schedule = torch.linspace(beta_min, beta_max, n_steps).flip(0)
-        alpha_schedule = 1 - beta_schedule
-        alpha_cumprod = alpha_schedule.cumprod(dim=0)
-        self.beta_schedule = beta_schedule
-        self.alpha_schedule = alpha_schedule
-        self.alpha_cumprod = alpha_cumprod
+        a_max = .9
+        a_min = .01
+        alpha = (a_min/a_max)**(1/n_steps)
+        alpha_cumprod = torch.tensor([a_max*alpha**i for i in range(n_steps)], dtype=torch.float32)
+        self.alpha = alpha
+        self.register_buffer('alpha_cumprod', alpha_cumprod)
 
         # Define time embedding layers
-        self.time_embedding = nn.ModuleList()
+        self.time_embedding_blocks = nn.ModuleList()
         for f in n_features_per_depth:
-            self.time_embedding.append(
-                nn.Sequential(
-                    nn.Linear(1, f),
-                    nn.ReLU(), 
-                    nn.Linear(f, f),
-                    nn.Unflatten(1, (f, 1, 1, 1)),
-                )
-            )
+            self.time_embedding_blocks.append(FiLM3d(f))
+            # self.time_embedding_blocks.append(
+            #     nn.Sequential(
+            #         nn.Conv3d(1, f, kernel_size=1),
+            #         nn.ReLU(),
+            #         nn.Conv3d(f, f, kernel_size=1),
+            #     )
+            # )
 
         # Define input blocks
         self.input_block = nn.Sequential(
@@ -135,23 +137,27 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
             'n_layers_per_block': self.n_layers_per_block,
             'n_mixing_blocks': self.n_mixing_blocks,
             'scale': self.scale,
-            'dt': self.dt,
-            'kT_max': self.kT_max,
             'n_steps': self.n_steps,
-            'langevin': self.langevin,
+            'eta': self.eta,
+            'use_checkpoint': self.use_checkpoint,
         }
     
-    def step(self, x, feats_context, t):
-
-        # Check inputs 
-        if isinstance(t, int):
-            t = torch.tensor(t, device=x.device, dtype=x.dtype).unsqueeze(0).unsqueeze(0)
+    def step(self, t, x, feats_context):
+        if self.use_checkpoint:
+            x = x.requires_grad_()
+            feats_context = [f.requires_grad_() for f in feats_context]
+            return checkpoint(self._step, t, x, *feats_context, use_reentrant=False)
+        else:
+            # Regular step
+            return self._step(t, x, *feats_context)
+    
+    def _step(self, t, x, *feats_context):
         
         # Encode x
         feats = self.autoencoder.encoder(x)
 
         # Add time embedding
-        feats = [f + self.time_embedding[i](t) for i, f in enumerate(feats)]
+        feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
 
         # Apply context
         feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
@@ -165,29 +171,78 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
     def forward(self, *context):
 
         # Input blocks
-        context = [block(y) for block, y in zip(self.context_input_blocks, context)]
-
-        # Initialize x
-        x = torch.randn_like(context[0], device=context[0].device)
+        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
         
         # Encode features
-        feats_context = [block(y) for block, y in zip(self.context_encoders, context)]
+        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
         feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
 
+        # Initialize x
+        x = torch.randn_like(latent_context[0], device=context[0].device)
+
         # Diffusion steps
-        for t in reversed(range(self.n_steps)):
+        for t in reversed(range(1, self.n_steps)):
 
             # Predict noise
-            noise_pred = self.step(x, feats_context, t)
+            t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
+            noise_pred = self.step(t_step, x, feats_context)
+
+            # Get constants 
+            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
+            sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
 
             # Update position
-            x = (x - torch.sqrt(1 - self.alpha_cumprod[t]) * noise_pred) / torch.sqrt(self.alpha_cumprod[t])
+            x = (
+                torch.sqrt(a_t1/a_t) * (x - torch.sqrt(1 - a_t) * noise_pred)
+                + torch.sqrt(1 - a_t1 - sigma**2) * noise_pred 
+                + sigma * torch.randn_like(x, device=x.device)
+            )
+
+            # Check for nans and infs
+            if torch.isnan(x).any() or torch.isinf(x).any():
+                raise ValueError('NaNs or Infs detected in the diffusion model.')
+
 
         # Output block
         x = self.output_block(x)
 
         # Return
         return x
+    
+    def calculate_diffusion_loss(self, target, *context, n_samples=4):
+
+        # Input blocks
+        latent_target = self.input_block(target)
+        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
+        
+        # Encode features
+        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
+        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+
+        # Calculate reconstruction loss
+        target_reconstructed = self.output_block(latent_target)
+        loss = F.mse_loss(target_reconstructed, target)
+
+        # Loop over samples
+        for _ in range(n_samples):
+
+            # Sample noise
+            noise = torch.randn_like(latent_target, device=target.device)
+
+            # Sample time step and corrupted target
+            t = torch.randint(0, self.n_steps, (target.shape[0],), device=target.device)
+            alpha_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            latent_target_corrupted = torch.sqrt(alpha_t) * latent_target + torch.sqrt(1 - alpha_t) * noise
+
+            # Step forward
+            noise_pred = self.step(t, latent_target_corrupted, feats_context)
+
+            # Calculate loss
+            loss += F.mse_loss(noise_pred, noise) / n_samples
+
+        # Return
+        return loss
         
 
 # Test the model
@@ -198,12 +253,13 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (64, 64, 64)
+    shape = (128, 128, 128)
     batch_size = 3
     in_channels = 1
     n_cross_channels_list = [1, 4, 36]
 
     # Create data
+    x = torch.randn(batch_size, in_channels, *shape)
     y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
@@ -219,7 +275,8 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(*y_list)
+        loss = model.calculate_diffusion_loss(x, *y_list)
+        pred = model(*y_list)
 
     # Estimate memory usage
     estimate_memory_usage(model, *y_list, print_stats=True)

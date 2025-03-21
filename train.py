@@ -47,11 +47,12 @@ def train_model(
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Set up training statistics
-    losses_train = []
-    losses_val = []
-    mem_stats = []
     if model_state_dict_best is None:
         model_state_dict_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
+    losses_train = []
+    losses_val = []
+    time_stats = []
+    mem_stats = []
 
     # Training loop
     for epoch in range(epoch_start, n_epochs):
@@ -78,8 +79,8 @@ def train_model(
             torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_train):
             if debug and batch_idx > 2:
-                    print('DEBUG MODE: Breaking early.')
-                    break
+                print('DEBUG MODE: Breaking early.')
+                break
 
             # Status update
             if batch_idx % print_every == 0:
@@ -113,14 +114,14 @@ def train_model(
                 mem = 0
             mem_stats.append(mem)
 
+            # Update time statistics
+            t_elapsed = time.time() - t_batch
+            t_batch = time.time()
+            time_stats.append(t_elapsed)
+
             # Status update
             if batch_idx % print_every == 0:
-                # Get time per batch
-                t_elapsed = (time.time() - t_batch) / (1 if batch_idx == 0 else print_every)
-                # Print status
                 print(f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}')
-                # Reset timer and memory tracker
-                t_batch = time.time()
 
         ### Validation ###
         print('--Validation')
@@ -180,11 +181,12 @@ def train_model(
     # Finalize training statistics
     training_statistics = {
         'epoch': epoch,
+        'mem_stats': mem_stats,
+        'time_stats': time_stats,
         'losses_train': losses_train,
         'losses_val': losses_val,
         'loss_val_best': loss_val_best,
         'model_state_dict_best': model_state_dict_best,
-        'mem_stats': mem_stats,
     }
 
     # Return model and training statistics

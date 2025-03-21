@@ -187,15 +187,10 @@ class DiffViT3d(nn.Module):
             x = x + kT * torch.randn_like(x, device=x.device)
             
             # Calculate force
-            F = checkpoint(
-                self.force, 
-                # x.clone().requires_grad_(True), 
-                # f_context.clone().requires_grad_(True), 
-                x,
-                f_context,
-                pos_embedding.clone().requires_grad_(True), 
-                use_reentrant=False,
-            )
+            x = x.requires_grad_()
+            f_context = f_context.requires_grad_()
+            pos_embedding = pos_embedding.requires_grad_()
+            F = checkpoint(self.force, x, f_context, pos_embedding, use_reentrant=False)
 
             # Update position
             if self.langevin:
