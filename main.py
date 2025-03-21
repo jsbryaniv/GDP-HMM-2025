@@ -148,35 +148,12 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # ('diffunet', {'shape': 64}),  # 0
-        # ('diffunet', {'shape': 128}), # 1
-        # # ########
-        ('unet', {'version': 0, 'shape': 64}),   # 0 
-        ('unet', {'version': 1, 'shape': 64}),   # 1 
-        ('unet', {'version': 2, 'shape': 64}),   # 2 
-        ('unet', {'version': 3, 'shape': 64}),   # 3 
-        ('unet', {'version': 4, 'shape': 64}),   # 4 
-        # ('unet', {'version': 0, 'shape': 128}),  # 5 
-        # ('unet', {'version': 1, 'shape': 128}),  # 6 
-        # ('unet', {'version': 2, 'shape': 128}),  # 7 
-        # ('unet', {'version': 3, 'shape': 128}),  # 8 
-        # ('unet', {'version': 4, 'shape': 128}),  # 9 
-        # #######
-        # ('unet', {'version': 0, 'shape': 256}),  # 10
-        # ('unet', {'version': 1, 'shape': 256}),  # 11
-        # ('unet', {'version': 2, 'shape': 256}),  # 12
-        # ('unet', {'version': 3, 'shape': 256}),  # 13
-        # ('unet', {'version': 4, 'shape': 256}),  # 14
-        # ('unet',          {'shape': 128}),                                # 0 
-        # ('unet',          {'shape': 256, 'scale': 2}),                    # 1 
-        # ('vit',           {'shape': 128, 'scale': 2}),                    # 2
-        # ('vit',           {'shape': 256, 'scale': 4, 'n_features': 64}),  # 3
-        # ('crossattnunet', {'shape': 128}),                                # 4
-        # ('crossattnunet', {'shape': 256, 'scale': 4}),                    # 5
-        # ('crossvit',      {'shape': 128, 'scale': 2}),                    # 6
-        # ('crossvit',      {'shape': 256, 'scale': 4, 'n_features': 32}),  # 7
-        # ('moeunet',       {'shape': 128}),                                # 8
-        # ('moeunet',       {'shape': 256, 'scale': 4}),                    # 9
+        ('diffunet',      {'shape': 64}),
+        ('unet',          {'shape': 64}),
+        ('crossattnunet', {'shape': 64}),
+        ('diffunet',      {'shape': 128}),
+        ('unet',          {'shape': 128}),
+        ('crossattnunet', {'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

@@ -6,63 +6,80 @@ if __name__ == "__main__":
 
 # Import libraries
 import torch
+import random
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.vit import ViT3d, ViTEncoder3d
-from architectures.blocks import ConvBlock3d, CrossTransformerBlock
+from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
 
 
 # Define Diffusion Model ViT
 class DiffViT3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        shape=128, scale=1, shape_patch_ratio=8, n_features=128, n_heads=4, 
-        n_layers=8, n_layers_mixing=4, n_layers_input=4,
-        dt=1, kT_max=10, n_steps=8, langevin=False,
+        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        n_features=128, n_heads=4, n_layers=16, n_layers_input=4, n_mixing_blocks=2,
+        n_steps=16, eta=.1,
+        use_checkpoint=True,
     ):
         super(DiffViT3d, self).__init__()
-
-        # Check inputs
-        if isinstance(shape, int):
-            shape = (shape, shape, shape)
-        if isinstance(n_cross_channels_list, int):
-            n_cross_channels_list = [n_cross_channels_list]
         
         # Set attributes
         self.in_channels = in_channels
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
         self.scale = scale
+        self.patch_size = patch_size
         self.shape_patch_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
-        self.n_layers_mixing = n_layers_mixing
         self.n_layers_input = n_layers_input
-        self.dt = dt
-        self.kT_max = kT_max
+        self.n_mixing_blocks = n_mixing_blocks
         self.n_steps = n_steps
-        self.langevin = langevin
-        
+        self.eta = eta
+        self.use_checkpoint = use_checkpoint
+
         # Get constants
         n_context = len(n_cross_channels_list)
-        shape_scaled = tuple(s // scale for s in shape)
-        kT_schedule = torch.linspace(0, kT_max, n_steps).flip(0)
         self.n_context = n_context
-        self.shape_scaled = shape_scaled
-        self.kT_schedule = kT_schedule
+
+        # Get noise schedule
+        a_max = .9
+        a_min = .01
+        alpha = (a_min/a_max)**(1/n_steps)
+        alpha_cumprod = torch.tensor([a_max*alpha**i for i in range(n_steps)], dtype=torch.float32)
+        self.alpha = alpha
+        self.register_buffer('alpha_cumprod', alpha_cumprod)
+
+        # Define time embedding layers
+        nn.Sequential(
+            nn.Linear(1, n_features),
+            nn.ReLU(),
+            nn.Linear(n_features, n_features),
+        )
+        # self.time_embedding_blocks = nn.ModuleList()
+        # for f in n_features_per_depth:
+        #     # self.time_embedding_blocks.append(FiLM3d(f))
+        #     # self.time_embedding_blocks.append(
+        #     #     nn.Sequential(
+        #     #         nn.Conv3d(1, f, kernel_size=1),
+        #     #         nn.ReLU(),
+        #     #         nn.Conv3d(f, f, kernel_size=1),
+        #     #     )
+        #     # )
 
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale, groups=n_features),
+            ConvBlock3d(n_features, n_features, scale=1/scale),
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1))
+            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1))
         )
         self.context_input_blocks = nn.ModuleList()
         for n_channels in n_cross_channels_list:
@@ -71,47 +88,54 @@ class DiffViT3d(nn.Module):
                     # Merge input channels to n_features
                     nn.Conv3d(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    ConvBlock3d(n_features, n_features, scale=1/scale, groups=n_features),
+                    ConvBlock3d(n_features, n_features, scale=1/scale),
                     # Additional convolutional layers
-                    *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1))
+                    *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1))
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1)],
+            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale, groups=n_features),
+            ConvBlock3d(n_features, n_features, scale=scale),
             # Merge features to output channels
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )
 
         # Create main autoencoder
-        self.autoencoder = ViT3d(
-            in_channels=n_features, out_channels=n_features,
-            shape=shape_scaled, scale=1, shape_patch_ratio=shape_patch_ratio,
-            n_features=n_features, n_heads=n_heads, n_layers=n_layers, 
-        )
+        # self.autoencoder = Unet3d(
+        #     n_features, n_features, 
+        #     n_features=n_features, n_blocks=n_blocks,
+        #     n_layers_per_block=n_layers_per_block,
+        #     scale=1,
+        # )
+        # self.autoencoder = ViT3d(
+        #     n_features, n_features,
+        #     shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
+        #     n_features=n_features, n_heads=n_heads, n_layers=n_layers,
         
-        # Create context encoders
-        self.context_encoders = nn.ModuleList()
-        for _ in range(len(n_cross_channels_list)):
-            self.context_encoders.append(
-                ViTEncoder3d(
-                    in_channels=n_features,
-                    shape=shape_scaled, scale=1, shape_patch_ratio=shape_patch_ratio,
-                    n_features=n_features, n_heads=n_heads, n_layers=n_layers//2, 
-                )
-            )
+        # # Create context encoders
+        # self.context_encoders = nn.ModuleList()
+        # for _ in range(len(n_cross_channels_list)):
+        #     self.context_encoders.append(
+        #         UnetEncoder3d(
+        #             n_features,
+        #             n_features=n_features, n_blocks=n_blocks,
+        #             n_layers_per_block=n_layers_per_block,
+        #             scale=1,
+        #         )
+        #     )
 
-        # Create mixing block
-        self.mixing_blocks = nn.ModuleList()
-        for _ in range(n_layers_mixing):
-            self.mixing_blocks.append(
-                CrossTransformerBlock(
-                    n_features=n_features,
-                    n_heads=n_heads,
+        # Create cross attention blocks
+        self.cross_attn_blocks = nn.ModuleList()
+        for depth in range(n_blocks+1):
+            self.cross_attn_blocks.append(
+                ConvformerDecoder3d(
+                    n_features_per_depth[depth], 
+                    n_heads=depth+1,
+                    n_layers=n_mixing_blocks,
                 )
             )
 
@@ -119,90 +143,117 @@ class DiffViT3d(nn.Module):
         return {
             'in_channels': self.in_channels,
             'n_cross_channels_list': self.n_cross_channels_list,
-            'shape': self.shape,
-            'scale': self.scale,
-            'shape_patch_ratio': self.shape_patch_ratio,
             'n_features': self.n_features,
-            'n_heads': self.n_heads,
-            'n_layers': self.n_layers,
-            'n_layers_mixing': self.n_layers_mixing,
-            'n_layers_input': self.n_layers_input,
-            'dt': self.dt,
-            'kT_max': self.kT_max,
+            'n_blocks': self.n_blocks,
+            'n_layers_per_block': self.n_layers_per_block,
+            'n_mixing_blocks': self.n_mixing_blocks,
+            'scale': self.scale,
             'n_steps': self.n_steps,
-            'langevin': self.langevin,
+            'eta': self.eta,
+            'use_checkpoint': self.use_checkpoint,
         }
     
-    def force(self, x, f_context, pos_embedding=None):
-
-        # Encode input
-        x = self.autoencoder.encoder(x)
-
-        # Add positional embeddings
-        if pos_embedding is None:
-            pos_embedding = (
-                self.autoencoder.encoder.pos_embedding_0 
-                + self.autoencoder.encoder.pos_embedding_1 
-                + self.autoencoder.encoder.pos_embedding_2
-            )
-            pos_embedding = pos_embedding.flatten(2).transpose(1, 2).expand(x.shape[0], -1, -1)
-        x = x + pos_embedding 
-
-        # Mixing block
-        for block in self.mixing_blocks:
-            x = block(x, f_context)
-
-        # Decode
-        x = self.autoencoder.decoder(x)
+    def step(self, t, x, feats_context):
+        if self.use_checkpoint:
+            x = x.requires_grad_()
+            feats_context = [f.requires_grad_() for f in feats_context]
+            return checkpoint(self._step, t, x, *feats_context, use_reentrant=False)
+        else:
+            # Regular step
+            return self._step(t, x, *feats_context)
+    
+    def _step(self, t, x, *feats_context):
         
-        # Return
-        return x
+        # Encode x
+        feats = self.autoencoder.encoder(x)
 
-    def forward(self, x, *y_list):
-        """
-        x is the input tensor
-        y_list is a list of context tensors
-        """
+        # Add time embedding
+        feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
+
+        # Apply context
+        feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
+
+        # Decode features
+        noise_pred = self.autoencoder.decoder(feats)
+        
+        # Return noise prediction
+        return noise_pred
+    
+    def forward(self, *context):
 
         # Input blocks
-        x = self.input_block(x)
-        y_list = [block(y) for block, y in zip(self.context_input_blocks, y_list)]
+        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
         
         # Encode features
-        f_context = sum(block(y) for block, y in zip(self.context_encoders, y_list))
+        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
+        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
 
-        # Add positional embeddings to context
-        pos_embedding = (
-            self.autoencoder.encoder.pos_embedding_0 
-            + self.autoencoder.encoder.pos_embedding_1 
-            + self.autoencoder.encoder.pos_embedding_2
-        )
-        pos_embedding = pos_embedding.flatten(2).transpose(1, 2).expand(x.shape[0], -1, -1)
-        f_context = f_context + pos_embedding
-        
-        # Loop over temperature schedule
-        for kT in self.kT_schedule:
+        # Initialize x
+        x = torch.randn_like(latent_context[0], device=context[0].device)
 
-            # Add noise
-            x = x + kT * torch.randn_like(x, device=x.device)
-            
-            # Calculate force
-            x = x.requires_grad_()
-            f_context = f_context.requires_grad_()
-            pos_embedding = pos_embedding.requires_grad_()
-            F = checkpoint(self.force, x, f_context, pos_embedding, use_reentrant=False)
+        # Diffusion steps
+        for t in reversed(range(1, self.n_steps)):
+
+            # Predict noise
+            t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
+            noise_pred = self.step(t_step, x, feats_context)
+
+            # Get constants 
+            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
+            sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
 
             # Update position
-            if self.langevin:
-                x = x + self.dt * F
-            else:
-                x = F
+            x = (
+                torch.sqrt(a_t1/a_t) * (x - torch.sqrt(1 - a_t) * noise_pred)
+                + torch.sqrt(1 - a_t1 - sigma**2) * noise_pred 
+                + sigma * torch.randn_like(x, device=x.device)
+            )
+
+            # Check for nans and infs
+            if torch.isnan(x).any() or torch.isinf(x).any():
+                raise ValueError('NaNs or Infs detected in the diffusion model.')
+
 
         # Output block
         x = self.output_block(x)
 
         # Return
         return x
+    
+    def calculate_diffusion_loss(self, target, *context, n_samples=4):
+
+        # Input blocks
+        latent_target = self.input_block(target)
+        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
+        
+        # Encode features
+        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
+        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+
+        # Calculate reconstruction loss
+        target_reconstructed = self.output_block(latent_target)
+        loss = F.mse_loss(target_reconstructed, target)
+
+        # Loop over samples
+        for _ in range(n_samples):
+
+            # Sample noise
+            noise = torch.randn_like(latent_target, device=target.device)
+
+            # Sample time step and corrupted target
+            t = torch.randint(0, self.n_steps, (target.shape[0],), device=target.device)
+            alpha_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            latent_target_corrupted = torch.sqrt(alpha_t) * latent_target + torch.sqrt(1 - alpha_t) * noise
+
+            # Step forward
+            noise_pred = self.step(t, latent_target_corrupted, feats_context)
+
+            # Calculate loss
+            loss += F.mse_loss(noise_pred, noise) / n_samples
+
+        # Return
+        return loss
         
 
 # Test the model
@@ -214,18 +265,17 @@ if __name__ == '__main__':
 
     # Set constants
     shape = (128, 128, 128)
+    batch_size = 3
     in_channels = 1
     n_cross_channels_list = [1, 4, 36]
 
     # Create data
-    x = torch.randn(1, in_channels, *shape)
-    y_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
+    x = torch.randn(batch_size, in_channels, *shape)
+    y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
-    model = DiffViT3d(
+    model = DiffUnet3d(
         in_channels, n_cross_channels_list,
-        shape=shape,
-        scale=2,
     )
 
     # Print model structure
@@ -236,10 +286,11 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, *y_list)
+        loss = model.calculate_diffusion_loss(x, *y_list)
+        pred = model(*y_list)
 
     # Estimate memory usage
-    estimate_memory_usage(model, x, *y_list, print_stats=True)
+    estimate_memory_usage(model, *y_list, print_stats=True)
 
     # Done
     print('Done!')
