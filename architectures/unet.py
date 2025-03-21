@@ -10,12 +10,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvBlock3d, VolumeContract3d, VolumeExpand3d
+from architectures.blocks import ConvBlock3d, ConvBlock3d_v1, ConvBlock3d_v2, ConvBlock3d_v3, ConvBlock3d_v4
 
 
 # Define Unet encoder
 class UnetEncoder3d(nn.Module):
-    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1, version=0):
         super(UnetEncoder3d, self).__init__()
         
         # Set attributes
@@ -25,14 +25,26 @@ class UnetEncoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
 
+        # Get convblock class
+        if version == 0:
+            convblock = ConvBlock3d
+        elif version == 1:
+            convblock = ConvBlock3d_v1
+        elif version == 2:
+            convblock = ConvBlock3d_v2
+        elif version == 3:
+            convblock = ConvBlock3d_v3
+        elif version == 4:
+            convblock = ConvBlock3d_v4
+
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale),
+            convblock(n_features, n_features, scale=1/scale),
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+            *(convblock(n_features, n_features) for _ in range(n_layers_per_block - 1))
         )
 
         # Define downsample blocks
@@ -43,9 +55,9 @@ class UnetEncoder3d(nn.Module):
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    ConvBlock3d(n_in, n_out, groups=n_features, scale=1/2),
+                    convblock(n_in, n_out, groups=n_features, scale=1/2),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
+                    *[convblock(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
                 )
             )
         
@@ -68,7 +80,7 @@ class UnetEncoder3d(nn.Module):
 
 # Define Unet decoder
 class UnetDecoder3d(nn.Module):
-    def __init__(self, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1, version=0):
         super(UnetDecoder3d, self).__init__()
         
         # Set attributes
@@ -77,6 +89,18 @@ class UnetDecoder3d(nn.Module):
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
+
+        # Get convblock class
+        if version == 0:
+            convblock = ConvBlock3d
+        elif version == 1:
+            convblock = ConvBlock3d_v1
+        elif version == 2:
+            convblock = ConvBlock3d_v2
+        elif version == 3:
+            convblock = ConvBlock3d_v3
+        elif version == 4:
+            convblock = ConvBlock3d_v4
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -87,18 +111,18 @@ class UnetDecoder3d(nn.Module):
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    ConvBlock3d(n_in, n_out, scale=2, groups=n_features),
+                    convblock(n_in, n_out, scale=2, groups=n_features),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
+                    *[convblock(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1)],
+            *[convblock(n_features, n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale),
+            convblock(n_features, n_features, scale=scale),
             # Merge features to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
@@ -124,7 +148,7 @@ class UnetDecoder3d(nn.Module):
 
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
-    def __init__(self, in_channels, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, in_channels, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1, version=0):
         super(Unet3d, self).__init__()
         
         # Set attributes
@@ -134,6 +158,7 @@ class Unet3d(nn.Module):
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
+        self._version = version
 
         # Define encoder
         self.encoder = UnetEncoder3d(
@@ -142,6 +167,7 @@ class Unet3d(nn.Module):
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale,
+            version=version,
         )
 
         # Define decoder
@@ -151,6 +177,7 @@ class Unet3d(nn.Module):
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale,
+            version=version,
         )
 
     def get_config(self):
@@ -161,6 +188,7 @@ class Unet3d(nn.Module):
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
             'scale': self.scale,
+            'version': self._version,
         }
         
     def forward(self, x):
@@ -188,6 +216,7 @@ if __name__ == '__main__':
     model = Unet3d(
         in_channels=in_channels, 
         out_channels=out_channels,
+        version=3,
     )
 
     # Print model structure

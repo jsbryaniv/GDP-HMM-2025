@@ -1,5 +1,6 @@
 
 # Import libraries
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -207,14 +208,14 @@ class VolumeExpand3d(nn.Module):
 
 ### CONVOLUTIONAL BLOCKS ###
 
-# OLD Convolutional block #TODO: DELETE
+# OLD ConvBlock3d
 class OldConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
         kernel_size=None, groups=1, beta=.1, 
         upsample=False, downsample=False, scale=2
     ):
-        super(ConvBlock3d, self).__init__()
+        super(OldConvBlock3d, self).__init__()
 
         # Check inputs
         if upsample and downsample:
@@ -276,7 +277,7 @@ class OldConvBlock3d(nn.Module):
             )
 
         # Define norm
-        self.norm = VoxelNorm3d(out_channels)
+        self.norm = nn.GroupNorm(1, out_channels)
 
         # Define activation
         self.activation = nn.ReLU(inplace=True)
@@ -301,13 +302,238 @@ class OldConvBlock3d(nn.Module):
         # Return the output
         return x
 
-# Convolutional block
+# Original ConvBlock3d version 0
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
         kernel_size=3, groups=1, beta=.1, scale=1
     ):
         super(ConvBlock3d, self).__init__()
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.beta = beta
+        self.scale = scale
+
+        # Reshaping
+        if scale > 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*scale,
+                'padding': scale//2,
+                'stride': scale,
+                'groups': groups,
+            }
+            self.conv = nn.ConvTranspose3d(**convargs)
+            self.residual = nn.ConvTranspose3d(**convargs)
+        elif scale < 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*round(1/scale),
+                'padding': round(1/scale)//2,
+                'stride': round(1/scale),
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Conv3d(**convargs)
+        else:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': kernel_size,
+                'padding': kernel_size//2,
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
+
+        # Voxel normalization
+        self.norm = VoxelNorm3d(out_channels)
+
+        # Define activation
+        self.activation = nn.ReLU(inplace=True)
+
+        # Define mixing layer to allow negative values
+        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+
+        # Residual connection
+        x0 = self.residual(x)
+
+        # Convolutional block
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.mixing(x)
+
+        # Combine with residual
+        x = self.beta * x0 + (1 - self.beta) * x
+
+        # Return output
+        return x
+
+# ConvBlock3d version 1 (with groupnorm)
+class ConvBlock3d_v1(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=3, groups=1, beta=.1, scale=1
+    ):
+        super(ConvBlock3d_v1, self).__init__()
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.beta = beta
+        self.scale = scale
+
+        # Reshaping
+        if scale > 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*scale,
+                'padding': scale//2,
+                'stride': scale,
+                'groups': groups,
+            }
+            self.conv = nn.ConvTranspose3d(**convargs)
+            self.residual = nn.ConvTranspose3d(**convargs)
+        elif scale < 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*round(1/scale),
+                'padding': round(1/scale)//2,
+                'stride': round(1/scale),
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Conv3d(**convargs)
+        else:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': kernel_size,
+                'padding': kernel_size//2,
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
+
+        # Voxel normalization
+        self.norm = nn.GroupNorm(1, out_channels)
+
+        # Define activation
+        self.activation = nn.ReLU(inplace=True)
+
+        # Define mixing layer to allow negative values
+        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+
+        # Residual connection
+        x0 = self.residual(x)
+
+        # Convolutional block
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.mixing(x)
+
+        # Combine with residual
+        x = self.beta * x0 + (1 - self.beta) * x
+
+        # Return output
+        return x
+
+# ConvBlock3d version 2 (with DyTanh)
+class ConvBlock3d_v2(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=3, groups=1, beta=.1, scale=1
+    ):
+        super(ConvBlock3d_v2, self).__init__()
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.beta = beta
+        self.scale = scale
+
+        # Reshaping
+        if scale > 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*scale,
+                'padding': scale//2,
+                'stride': scale,
+                'groups': groups,
+            }
+            self.conv = nn.ConvTranspose3d(**convargs)
+            self.residual = nn.ConvTranspose3d(**convargs)
+        elif scale < 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*round(1/scale),
+                'padding': round(1/scale)//2,
+                'stride': round(1/scale),
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Conv3d(**convargs)
+        else:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': kernel_size,
+                'padding': kernel_size//2,
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
+
+        # Voxel normalization
+        self.norm = VoxelDyTanh3d(out_channels)
+
+        # Define activation
+        self.activation = nn.ReLU(inplace=True)
+
+        # Define mixing layer to allow negative values
+        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
+
+    def forward(self, x):
+
+        # Residual connection
+        x0 = self.residual(x)
+
+        # Convolutional block
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.mixing(x)
+
+        # Combine with residual
+        x = self.beta * x0 + (1 - self.beta) * x
+
+        # Return output
+        return x
+
+# ConvBlock3d version 3 (with Volume Contract/Expand)
+class ConvBlock3d_v3(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=3, groups=1, beta=.1, scale=1
+    ):
+        super(ConvBlock3d_v3, self).__init__()
 
         # Set attributes
         self.in_channels = in_channels
@@ -384,6 +610,87 @@ class ConvBlock3d(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         x = self.mixing(x)
+
+        # Combine with residual
+        x = self.beta * x0 + (1 - self.beta) * x
+
+        # Return output
+        return x
+    
+# ConvBlock3d version 4 (Mimic ConvNeXt)
+class ConvBlock3d_v4(nn.Module):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=7, groups=1, beta=.1, scale=1, expansion=2
+    ):
+        super(ConvBlock3d_v4, self).__init__()
+
+        # Set attributes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.beta = beta
+        self.scale = scale
+        self.expansion = expansion
+
+        # # Set groups to LCM of in_channels and out_channels
+        # groups = math.lcm(in_channels, out_channels)
+        # Set groups to greatest common divisor of in_channels and out_channels
+        groups = math.gcd(in_channels, out_channels)
+
+        # Reshaping
+        if scale > 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*scale,
+                'padding': scale//2,
+                'stride': scale,
+                'groups': groups,
+            }
+            self.conv = nn.ConvTranspose3d(**convargs)
+            self.residual = nn.ConvTranspose3d(**convargs)
+        elif scale < 1:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': 2*round(1/scale),
+                'padding': round(1/scale)//2,
+                'stride': round(1/scale),
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Conv3d(**convargs)
+        else:
+            convargs = {
+                'in_channels': in_channels, 
+                'out_channels': out_channels, 
+                'kernel_size': kernel_size,
+                'padding': kernel_size//2,
+                'groups': groups,
+            }
+            self.conv = nn.Conv3d(**convargs)
+            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
+
+        # Voxel normalization
+        self.norm = VoxelNorm3d(out_channels)
+
+        # MLP
+        self.mlp = nn.Sequential(
+            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
+        )
+
+    def forward(self, x):
+
+        # Residual connection
+        x0 = self.residual(x)
+
+        # Apply depthwise convolution
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.mlp(x)
 
         # Combine with residual
         x = self.beta * x0 + (1 - self.beta) * x
@@ -577,7 +884,7 @@ class ConvAttn3d(nn.Module):
         v = F.pad(v, [self.kernel_size // 2] * 6)
 
         # Initialize attention weights
-        attn_weights = torch.zeros(B, self.kernel_size**3, D, H, W, device=device)
+        attn_weights = torch.zeros(B, self.kernel_size**3, C, D, H, W, device=device)
 
         # Get attention from each kernel position
         index = -1
@@ -591,7 +898,7 @@ class ConvAttn3d(nn.Module):
             k_shift = k[:, :, x:x+D, y:y+H, z:z+W] + pos_emb_shift
 
             # Calculate attention weights
-            attn_weights[:, index] += (q * k_shift).sum(dim=1) / (self.n_features ** 0.5)
+            attn_weights[:, index] += (q * k_shift).sum(dim=1, keepdim=True) / (self.n_features ** 0.5)
 
         # Softmax attention weights
         attn_weights = F.softmax(attn_weights, dim=1)

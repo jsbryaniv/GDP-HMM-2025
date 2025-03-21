@@ -137,13 +137,14 @@ if __name__ == '__main__':
 
     # Set constants
     shape = (64, 64, 64)
+    batch_size = 3
     in_channels = 3
     out_channels = 1
     n_cross_channels_list = [1, 1, 2, 8]
 
     # Create data
-    x = torch.randn(1, in_channels, *shape)
-    y_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
+    x = torch.randn(batch_size, in_channels, *shape)
+    y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
     model = CrossAttnUnetModel(

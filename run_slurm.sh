@@ -57,7 +57,6 @@ ITER=$((ITER+1))
 if [ $ITER -lt $N_ITER ]; then
     echo "Submitting next job with iteration $ITER/$N_ITER at $(date)." >> "$OUT_LOG"
     sbatch run_slurm.sh $ARGS $ITER
-fi
-
-# Print completion message
-echo "Job finished all iterations at $(date)." >> "$OUT_LOG"
+else
+    echo "All iterations completed at $(date)." >> "$OUT_LOG"
+fi 

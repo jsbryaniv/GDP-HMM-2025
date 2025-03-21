@@ -26,6 +26,12 @@ class DosePredictionModel(nn.Module):
         self.shape = shape
         self.kwargs = kwargs
 
+        # If Model is a Unet class, set n_blocks based on shape
+        if 'unet' in architecture.lower():
+            # Number of blocks is the log base 2 of the smallest shape dimension - 2 (latent shape is 4x4x4)
+            n_blocks = int(torch.log2(torch.tensor(shape).min())) - 2
+            kwargs['n_blocks'] = n_blocks
+
         # Initialize model
         if architecture.lower() == "test":
             # Test model (Really lightweight Unet)

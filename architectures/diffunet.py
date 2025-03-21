@@ -19,32 +19,49 @@ from architectures.blocks import ConvBlock3d, ConvformerDecoder3d
 class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=4, 
+        scale=1, n_features=16, n_blocks=4, 
         n_layers_per_block=2, n_mixing_blocks=2,
-        scale=4, dt=1, kT_max=10, n_steps=8, langevin=False,
+        beta_min=1e-4, beta_max=.02, n_steps=16,
     ):
         super(DiffUnet3d, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
         self.n_cross_channels_list = n_cross_channels_list
+        self.scale = scale
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.n_mixing_blocks = n_mixing_blocks
-        self.scale = scale
-        self.dt = dt
-        self.kT_max = kT_max
+        self.beta_min = beta_min
+        self.beta_max = beta_max
         self.n_steps = n_steps
-        self.langevin = langevin
 
         # Get constants
         n_context = len(n_cross_channels_list)
         n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
-        kT_schedule = torch.linspace(0, kT_max, n_steps).flip(0)
         self.n_context = n_context
         self.n_features_per_depth = n_features_per_depth
-        self.kT_schedule = kT_schedule
+
+        # Get noise schedule
+        beta_schedule = torch.linspace(beta_min, beta_max, n_steps).flip(0)
+        alpha_schedule = 1 - beta_schedule
+        alpha_cumprod = alpha_schedule.cumprod(dim=0)
+        self.beta_schedule = beta_schedule
+        self.alpha_schedule = alpha_schedule
+        self.alpha_cumprod = alpha_cumprod
+
+        # Define time embedding layers
+        self.time_embedding = nn.ModuleList()
+        for f in n_features_per_depth:
+            self.time_embedding.append(
+                nn.Sequential(
+                    nn.Linear(1, f),
+                    nn.ReLU(), 
+                    nn.Linear(f, f),
+                    nn.Unflatten(1, (f, 1, 1, 1)),
+                )
+            )
 
         # Define input blocks
         self.input_block = nn.Sequential(
@@ -124,67 +141,51 @@ class DiffUnet3d(nn.Module): # TODO: Make this a wrapper
             'langevin': self.langevin,
         }
     
-    def force(self, x, f_context):
+    def step(self, x, feats_context, t):
 
+        # Check inputs 
+        if isinstance(t, int):
+            t = torch.tensor(t, device=x.device, dtype=x.dtype).unsqueeze(0).unsqueeze(0)
+        
         # Encode x
         feats = self.autoencoder.encoder(x)
-        x = feats.pop()
+
+        # Add time embedding
+        feats = [f + self.time_embedding[i](t) for i, f in enumerate(feats)]
 
         # Apply context
-        depth = self.n_blocks
-        fcon = f_context[-1]
-        x = self.cross_attn_blocks[depth](x, fcon)
+        feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
 
-        # Upsample blocks
-        for i in range(self.n_blocks):
-            depth = self.n_blocks - 1 - i
-            # Upsample
-            x = self.autoencoder.decoder.up_blocks[i](x)
-            # Merge with skip
-            x_skip = feats[depth]
-            x = x + x_skip
-            # Apply cross attention
-            fcon = f_context[depth]
-            x = self.cross_attn_blocks[depth](x, fcon)
-
-        # Output block
-        x = self.autoencoder.decoder.output_block(x)
+        # Decode features
+        noise_pred = self.autoencoder.decoder(feats)
         
-        # Return
-        return x
-
-    def forward(self, x, *y_list):
-        """
-        x is the input tensor
-        y_list is a list of context tensors
-        """
+        # Return noise prediction
+        return noise_pred
+    
+    def forward(self, *context):
 
         # Input blocks
-        x = self.input_block(x)
-        y_list = [block(y) for block, y in zip(self.context_input_blocks, y_list)]
+        context = [block(y) for block, y in zip(self.context_input_blocks, context)]
+
+        # Initialize x
+        x = torch.randn_like(context[0], device=context[0].device)
         
         # Encode features
-        feats_context = [block(y) for block, y in zip(self.context_encoders, y_list)]
+        feats_context = [block(y) for block, y in zip(self.context_encoders, context)]
         feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
-        
-        # Loop over temperature schedule
-        for kT in self.kT_schedule:
 
-            # Add noise
-            x = x + kT * torch.randn_like(x, device=x.device)
-            
-            # Calculate force
-            F = checkpoint(self.force, x.clone().requires_grad_(True), feats_context, use_reentrant=False)
+        # Diffusion steps
+        for t in reversed(range(self.n_steps)):
+
+            # Predict noise
+            noise_pred = self.step(x, feats_context, t)
 
             # Update position
-            if self.langevin:
-                x = x + self.dt * F
-            else:
-                x = F
+            x = (x - torch.sqrt(1 - self.alpha_cumprod[t]) * noise_pred) / torch.sqrt(self.alpha_cumprod[t])
 
         # Output block
         x = self.output_block(x)
-        
+
         # Return
         return x
         
@@ -198,12 +199,12 @@ if __name__ == '__main__':
 
     # Set constants
     shape = (64, 64, 64)
+    batch_size = 3
     in_channels = 1
     n_cross_channels_list = [1, 4, 36]
 
     # Create data
-    x = torch.randn(1, in_channels, *shape)
-    y_list = [torch.randn(1, c, *shape) for c in n_cross_channels_list]
+    y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
     model = DiffUnet3d(
@@ -218,10 +219,10 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        y = model(x, *y_list)
+        y = model(*y_list)
 
     # Estimate memory usage
-    estimate_memory_usage(model, x, *y_list, print_stats=True)
+    estimate_memory_usage(model, *y_list, print_stats=True)
 
     # Done
     print('Done!')
