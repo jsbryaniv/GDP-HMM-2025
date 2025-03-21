@@ -621,7 +621,7 @@ class ConvBlock3d_v3(nn.Module):
 class ConvBlock3d_v4(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=7, groups=1, beta=.1, scale=1, expansion=2
+        kernel_size=7, groups=1, beta=.1, scale=1, expansion=4
     ):
         super(ConvBlock3d_v4, self).__init__()
 
@@ -677,9 +677,9 @@ class ConvBlock3d_v4(nn.Module):
 
         # MLP
         self.mlp = nn.Sequential(
-            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
+            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1, groups=expansion),
             nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
+            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1, groups=expansion),
         )
 
     def forward(self, x):
