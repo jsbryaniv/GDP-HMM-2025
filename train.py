@@ -49,6 +49,7 @@ def train_model(
     # Set up training statistics
     losses_train = []
     losses_val = []
+    mem_stats = []
     if model_state_dict_best is None:
         model_state_dict_best = copy.deepcopy({k: v.detach().cpu() for k, v in model.state_dict().items()})
 
@@ -104,20 +105,22 @@ def train_model(
             # Update average loss
             loss_train_avg += loss.item() / len(loader_train)
 
+            # Get memory usage
+            if device.type != "cpu":
+                mem = torch.cuda.max_memory_allocated(device) / 1024**3
+                torch.cuda.reset_peak_memory_stats(device)
+            else:
+                mem = 0
+            mem_stats.append(mem)
+
             # Status update
             if batch_idx % print_every == 0:
                 # Get time per batch
                 t_elapsed = (time.time() - t_batch) / (1 if batch_idx == 0 else print_every)
-                # Get memory usage 
-                mem = 'n/a' if device.type == "cpu" else f'{torch.cuda.max_memory_allocated() / 1024**3:.2f}'
                 # Print status
-                print(
-                    f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem} GB | Loss: {loss.item():.4f}'
-                )
+                print(f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}')
                 # Reset timer and memory tracker
                 t_batch = time.time()
-                if device.type != "cpu":
-                    torch.cuda.reset_peak_memory_stats(device)
 
         ### Validation ###
         print('--Validation')
@@ -181,6 +184,7 @@ def train_model(
         'losses_val': losses_val,
         'loss_val_best': loss_val_best,
         'model_state_dict_best': model_state_dict_best,
+        'mem_stats': mem_stats,
     }
 
     # Return model and training statistics

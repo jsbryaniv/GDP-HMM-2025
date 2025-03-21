@@ -61,6 +61,7 @@ def main(
                 'losses_test': None,
                 'loss_val_best': float('inf'),
                 'model_state_dict_best': None,
+                'mem_stats': [],
             },
         }
 
@@ -104,8 +105,11 @@ def main(
     # Merge training statistics
     train_stats_new['loss_test'] = loss_test
     train_stats_new['losses_test'] = losses_test
-    train_stats_new['losses_val'] = metadata['train_stats']['losses_val'] + train_stats_new['losses_val']
-    train_stats_new['losses_train'] = metadata['train_stats']['losses_train'] + train_stats_new['losses_train']
+    for key, value in train_stats_new.items():
+        if key in ['losses_test']:
+            continue
+        if isinstance(value, list):
+            train_stats_new[key] = metadata['train_stats'][key] + value
     metadata['train_stats'] = train_stats_new
 
     # Save checkpoint
