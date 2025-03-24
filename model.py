@@ -54,16 +54,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = Unet3d(**kwargs)
-        elif architecture.lower() == "moeunet":
-            # MOEUnet3D
-            from architectures.unet import Unet3d
-            from architectures.moe import MOEWrapper3d
-            kwargs = {
-                'in_channels': n_channels,
-                'out_channels': 1,
-                **kwargs,
-            }
-            self.model = MOEWrapper3d(Unet3d, **kwargs)
         elif architecture.lower() == "vit":
             # ViT3D
             from architectures.vit import ViT3d
@@ -74,6 +64,16 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = ViT3d(**kwargs)
+        elif architecture.lower() == "moeunet":
+            # MOEUnet3D
+            from architectures.unet import Unet3d
+            from architectures.moe import MOEWrapper3d
+            kwargs = {
+                'in_channels': n_channels,
+                'out_channels': 1,
+                **kwargs,
+            }
+            self.model = MOEWrapper3d(Unet3d, **kwargs)
         elif architecture.lower() == "moevit":
             # MOEViT3D
             from architectures.vit import ViT3d
@@ -85,50 +85,27 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = MOEWrapper3d(ViT3d, **kwargs)
-        elif architecture.lower() == "crossattnunet":
-            # CrossAttnUnetModel
-            from architectures.crossattnunet import CrossAttnUnetModel
+        elif architecture.lower() == "crossunet":
+            # CrossUnetModel
+            from architectures.crossunet import CrossUnetModel
             kwargs = {
-                'in_channels': 4,
+                'in_channels': n_channels,
                 'out_channels': 1,
                 'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
                 **kwargs,
             }
-            self.model = CrossAttnUnetModel(**kwargs)
-        elif architecture.lower() == "moecrossattnunet":
-            # MOECrossAttnUnetModel
-            from architectures.crossattnunet import CrossAttnUnetModel
-            from architectures.moe import MOEWrapper3d
-            kwargs = {
-                'in_channels': 4,
-                'out_channels': 1,
-                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
-                **kwargs,
-            }
-            self.model = MOEWrapper3d(CrossAttnUnetModel, **kwargs)
+            self.model = CrossUnetModel(**kwargs)
         elif architecture.lower() == "crossvit":
             # CrossViT3d
             from architectures.crossvit import CrossViT3d
             kwargs = {
-                'in_channels': 4,
+                'in_channels': n_channels,
                 'out_channels': 1,
                 'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
                 'shape': shape,
                 **kwargs,
             }
             self.model = CrossViT3d(**kwargs)
-        elif architecture.lower() == "moecrossvit":
-            # MOECrossViT3d
-            from architectures.crossvit import CrossViT3d
-            from architectures.moe import MOEWrapper3d
-            kwargs = {
-                'in_channels': 4,
-                'out_channels': 1,
-                'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = MOEWrapper3d(CrossViT3d, **kwargs)
         elif architecture.lower() == "diffunet":
             # DiffUnet3d
             from architectures.diffunet import DiffUnet3d
@@ -148,6 +125,25 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = DiffViT3d(**kwargs)
+        elif architecture.lower() == "diffunetlight":
+            # DiffUnet3d
+            from architectures.diffunet import DiffUnet3d
+            kwargs = {
+                'in_channels': 1,
+                'n_cross_channels_list': [n_channels],
+                **kwargs,
+            }
+            self.model = DiffUnet3d(**kwargs)
+        elif architecture.lower() == "diffvitlight":
+            # DiffViT3d
+            from architectures.diffvit import DiffViT3d
+            kwargs = {
+                'in_channels': 1,
+                'n_cross_channels_list': [n_channels],
+                'shape': shape,
+                **kwargs,
+            }
+            self.model = DiffViT3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         
@@ -160,7 +156,7 @@ class DosePredictionModel(nn.Module):
         }
     
     @classmethod
-    def from_checkpoint(cls, checkpoint_path, model_state_dict=None):
+    def from_checkpoint(cls, checkpoint_path, model_config=None, model_state_dict=None):
         """
         Load model from checkpoint.
         """
@@ -168,14 +164,15 @@ class DosePredictionModel(nn.Module):
         # Load checkpoint
         checkpoint = torch.load(checkpoint_path, weights_only=False)
         
-        # Initialize model
-        model = cls(**checkpoint['model_config'])
+        # Initialize model with config
+        if model_config is None:
+            model_config = checkpoint['model_config']
+        model = cls(**model_config)
         
         # Load model state
-        if model_state_dict is not None:
-            model.load_state_dict(model_state_dict)
-        else:
-            model.load_state_dict(checkpoint['model_state_dict'])
+        if model_state_dict is None:
+            model_state_dict = checkpoint['model_state_dict']
+        model.load_state_dict(model_state_dict)
         
         # Return model
         return model
@@ -227,13 +224,13 @@ class DosePredictionModel(nn.Module):
             inputs = (
                 torch.cat([scan, beam, ptvs, oars, body], dim=1),
             )
-        elif self.architecture.lower() in ["crossattnunet", "crossvit", "moecrossattnunet", "moecrossvit"]:
+        elif self.architecture.lower() in ["crossunet", "crossvit", "moecrossunet", "moecrossvit"]:
             # Separate contexts
             inputs = (
-                torch.cat([beam, ptvs], dim=1).clone(),  # Main input
-                scan,                                    # Context 1  
-                torch.cat([beam, ptvs], dim=1),          # Context 2
-                torch.cat([oars, body], dim=1).float(),  # Context 3
+                torch.cat([scan, beam, ptvs, oars, body], dim=1).clone(),  # Main input
+                scan,                                                      # Context 1  
+                torch.cat([beam, ptvs], dim=1),                            # Context 2
+                torch.cat([oars, body], dim=1).float(),                    # Context 3
             )
         elif self.architecture.lower() in ["diffunet", "diffvit"]:
             # Separate contexts
@@ -241,6 +238,11 @@ class DosePredictionModel(nn.Module):
                 scan,                                    # Context 1  
                 torch.cat([beam, ptvs], dim=1),          # Context 2
                 torch.cat([oars, body], dim=1).float(),  # Context 3
+            )
+        elif self.architecture.lower() in ["diffunetlight", "diffvitlight"]:
+            # Separate contexts
+            inputs = (
+                torch.cat([scan, beam, ptvs, oars, body], dim=1),  # All context grouped together
             )
 
         # Return inputs
@@ -271,6 +273,11 @@ class DosePredictionModel(nn.Module):
         return x
         
     def forward(self, scan, beam, ptvs, oars, body):
+
+        # # Rescale ptvs
+        # ptvs_scale = ptvs.max()  # TODO: This may not work
+        # if ptvs_scale > 0:
+        #     ptvs = ptvs / ptvs_scale
         
         # Format inputs
         inputs, transform_params = self.format_inputs(scan, beam, ptvs, oars, body)
@@ -280,6 +287,9 @@ class DosePredictionModel(nn.Module):
 
         # Format outputs
         pred = self.format_outputs(pred, transform_params)
+
+        # # Rescale prediction
+        # pred = pred * ptvs_scale  # TODO: This may not work
 
         # Return prediction
         return pred
@@ -308,6 +318,15 @@ class DosePredictionModel(nn.Module):
         # Compute likelihood
         likelihood = F.mse_loss(pred, dose)
 
+        # Add diffusion loss
+        if self.architecture.lower() in ["diffunet", "diffvit"]:
+            # Format input
+            dose_for_diff, _ = resize_image_3d(dose, self.shape)
+            # if ptvs.max() > 0:
+            #     dose_for_diff = dose_for_diff / ptvs.max()  # TODO: Eliminate if we dont rescale ptvs
+            # Compute diffusion loss
+            likelihood += self.model.calculate_diffusion_loss(dose_for_diff, *inputs)
+
         # Compute competition loss
         loss_competition = competition_loss(pred, dose, body)
 
@@ -316,11 +335,6 @@ class DosePredictionModel(nn.Module):
             pred, dose, 
             structures=torch.cat([(ptvs!=0), oars, body], dim=1)
         )
-
-        # Add diffusion loss
-        if self.architecture.lower() in ["diffunet", "diffvit"]:
-            pred_shaped, _ = resize_image_3d(pred, self.shape)
-            likelihood += self.model.calculate_diffusion_loss(pred_shaped, *inputs)
 
         # Compute total loss
         loss = (

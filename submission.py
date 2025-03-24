@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # Import local
 from config import *
 from dataset import GDPDataset
-from model import DosePredictionModel
+from utils import load_checkpoint
 
 
 # Define dose predictor
@@ -97,9 +97,9 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Get model and metadata
-    savename = 'model_All_CrossAttnUnet_shape=128'
-    savepath = os.path.join(PATH_OUTPUT, f'{savename}.pth')
-    model = DosePredictionModel.from_checkpoint(savepath)
+    savename = 'model_All_crossunet_shape=128'
+    checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
+    model, _, _, _ = load_checkpoint(checkpoint_path, load_best=True)
     model.to(device)
 
     # Get validation results

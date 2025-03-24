@@ -20,7 +20,7 @@ from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=8, n_blocks=4, 
+        n_features=16, n_blocks=5, 
         n_layers_per_block=2, n_mixing_blocks=2,
         scale=2, n_steps=16, eta=.1,
         use_checkpoint=True,
@@ -57,13 +57,6 @@ class DiffUnet3d(nn.Module):
         self.time_embedding_blocks = nn.ModuleList()
         for f in n_features_per_depth:
             self.time_embedding_blocks.append(FiLM3d(f))
-            # self.time_embedding_blocks.append(
-            #     nn.Sequential(
-            #         nn.Conv3d(1, f, kernel_size=1),
-            #         nn.ReLU(),
-            #         nn.Conv3d(f, f, kernel_size=1),
-            #     )
-            # )
 
         # Define input blocks
         self.input_block = nn.Sequential(
@@ -122,8 +115,7 @@ class DiffUnet3d(nn.Module):
         for depth in range(n_blocks+1):
             self.cross_attn_blocks.append(
                 ConvformerDecoder3d(
-                    n_features_per_depth[depth], 
-                    n_heads=depth+1,
+                    n_features_per_depth[depth],
                     n_layers=n_mixing_blocks,
                 )
             )
@@ -253,10 +245,10 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (64, 64, 64)
     batch_size = 3
     in_channels = 1
-    n_cross_channels_list = [1, 4, 36]
+    n_cross_channels_list = [36]
 
     # Create data
     x = torch.randn(batch_size, in_channels, *shape)

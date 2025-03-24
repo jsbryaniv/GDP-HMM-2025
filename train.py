@@ -83,7 +83,7 @@ def train_model(
                 break
 
             # Status update
-            if batch_idx % print_every == 0:
+            if (batch_idx % print_every == 0) or ((epoch == epoch_start) and (batch_idx < 10)):
                 print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)} {jobname}')
 
             # Send to device
@@ -119,8 +119,7 @@ def train_model(
             t_batch = time.time()
             time_stats.append(t_elapsed)
 
-            # Status update #TODO: Print batches 0-10 or so
-            # if batch_idx % print_every == 0:
+            # Status update
             if (batch_idx % print_every == 0) or ((epoch == epoch_start) and (batch_idx < 10)):
                 print(f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}')
 

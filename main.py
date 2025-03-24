@@ -54,17 +54,6 @@ def main(
             'dataID': dataID,
             'modelID': modelID,
             'model_kwargs': model_kwargs,
-            # 'train_stats': {
-            #     'epoch': 0,
-            #     'losses_val': [],
-            #     'losses_train': [],
-            #     'loss_test': None,
-            #     'losses_test': None,
-            #     'loss_val_best': float('inf'),
-            #     'model_state_dict_best': None,
-            #     'mem_stats': [],
-            #     'time_stats': [],
-            # },
         }
 
     # Move model and optimizer to device
@@ -117,16 +106,6 @@ def main(
     ### SAVE RESULTS ###
     print("Saving results.")
 
-    # # Merge training statistics
-    # train_stats_new['loss_test'] = loss_test
-    # train_stats_new['losses_test'] = losses_test
-    # for key, value in train_stats_new.items():
-    #     if key in ['losses_test']:
-    #         continue
-    #     if isinstance(value, list):
-    #         train_stats_new[key] = metadata['train_stats'][key] + value
-    # metadata['train_stats'] = train_stats_new
-
     # Save checkpoint
     save_checkpoint(
         checkpoint_path,
@@ -150,12 +129,12 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',      {'batch_size': 4, 'shape': 64}),
-        ('unet',          {'batch_size': 4, 'shape': 64}),
-        ('crossattnunet', {'batch_size': 4, 'shape': 64}),
-        ('diffunet',      {'batch_size': 4, 'shape': 128}),
         ('unet',          {'batch_size': 2, 'shape': 128}),
-        ('crossattnunet', {'batch_size': 2, 'shape': 128}),
+        ('crossunet',     {'batch_size': 2, 'shape': 128}),
+        ('diffunet',      {'batch_size': 2, 'shape': 128}),
+        ('diffunetlight', {'batch_size': 2, 'shape': 128}),
+        ('diffvit',       {'batch_size': 2, 'shape': 128}),
+        ('diffvitlight',  {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

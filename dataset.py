@@ -264,8 +264,13 @@ def collate_gdp(batch):
     # Return output
     return collated_scan, collated_beam, collated_ptvs, collated_oars, collated_body, collated_dose
 
+
+
 # Example usage
 if __name__ == "__main__":
+
+    # Index 733 shape = (141, 156, 259)
+    # Index 734 shape = (141, 156, 259)
 
     # Import libraries
     import matplotlib.pyplot as plt
@@ -273,36 +278,104 @@ if __name__ == "__main__":
     # Create dataset
     dataset = GDPDataset(
         treatment='All', 
-        validation_set=False,
+        validation_set=True,
     )
 
-    # Initialize max shape
-    max_shape = (0, 0, 0)
-    # Index 733 shape = (141, 156, 259)
-    # Index 734 shape = (141, 156, 259)
-
     # Loop over dataset
-    print('Looping over dataset')
     for i in range(len(dataset)):
-        # Get data
+        print(f'--{i}/{len(dataset)}')
         scan, beam, ptvs, oars, body, dose = dataset[i]
-        shape = scan.shape[1:]
-        max_shape = tuple([max(s, m) for s, m in zip(shape, max_shape)])
-        # Print
-        print(i, scan.shape, max_shape)
-        # Plot data
-        fig, ax = plt.subplots(1, 1)
-        plt.ion()
-        plt.show()
-        z_slize = scan.shape[1] // 2
-        ax.imshow(scan[0, z_slize].detach().cpu().numpy(), cmap='gray')
-        plt.tight_layout()
-        plt.pause(0.1)
-        plt.savefig('_image.png')
-        plt.close()
+        if i == 733:
+            print('Index 733 shape =', scan.shape[-3:])
+        if i == 734:
+            print('Index 734 shape =', scan.shape[-3:])
 
-    # Print max shape
-    print('Max shape:', max_shape)
+    # # Initialize lists
+    # shapes_val = []
+    # dose_val = []
+    # ptvs_val = []
+    # isVMAT_val = []
+
+    # # Loop over dataset
+    # print('Looping over dataset')
+    # for i in range(len(dataset)):
+    #     if i % 100 == 0:
+    #         print(f'--{i}/{len(dataset)}')
+
+    #     # Get data
+    #     # scan, beam, ptvs, oars, body, dose = dataset[i]
+    #     scan, beam, ptvs, oars, body, dose, isVMAT = dataset[i]
+
+    #     # Append data
+    #     shapes_val.append([i for i in scan.shape[1:]])
+    #     dose_val.append(dose.max() if dose is not None else None)
+    #     ptvs_val.append(np.unique(ptvs.detach().cpu().numpy()))
+    #     isVMAT_val.append(isVMAT)
+
+    # # Create dataset
+    # dataset = GDPDataset(
+    #     treatment='All', 
+    #     validation_set=False,
+    # )
+
+    # # Initialize lists
+    # shapes_train = []
+    # dose_train = []
+    # ptvs_train = []
+    # isVMAT_train = []
+
+    # # Loop over dataset
+    # print('Looping over dataset')
+    # for i in range(len(dataset)):
+    #     if i % 100 == 0:
+    #         print(f'--{i}/{len(dataset)}')
+
+    #     # Get data
+    #     # scan, beam, ptvs, oars, body, dose = dataset[i]
+    #     scan, beam, ptvs, oars, body, dose, isVMAT = dataset[i]
+
+    #     # Append data
+    #     shapes_train.append([i for i in scan.shape[1:]])
+    #     dose_train.append(dose.max().item() if dose is not None else None)
+    #     ptvs_train.append(np.unique(ptvs.detach().cpu().numpy()))
+    #     isVMAT_train.append(isVMAT)
+
+
+    # # Get max shape of validation set
+    # max_shape_val = (0, 0, 0)
+    # for shape in shapes_val:
+    #     max_shape_val = tuple([max(s, m) for s, m in zip(shape, max_shape_val)])
+    # print('Max shape validation set:', max_shape_val)  # (138, 148, 229)
+
+    # # Get max shape of training set
+    # max_shape_train = (0, 0, 0)
+    # for shape in shapes_train:
+    #     max_shape_train = tuple([max(s, m) for s, m in zip(shape, max_shape_train)])
+    # print('Max shape training set:', max_shape_train)  # (165, 156, 259)
+
+    # # Get unique PTV values in validation set
+    # ptvs_val_unique = set()
+    # for ptvs in ptvs_val:
+    #     ptvs_val_unique.update(ptvs)
+    # ptvs_val_unique = sorted(list(ptvs_val_unique))
+    # print('Unique PTV values in validation set:', ptvs_val_unique)
+    # # [0.0, 50.0, 50.4, 52.1, 52.5, 53.4, 53.6, 53.9, 54.0, 54.5, 55.6, 56.0, 56.1, 57.0, 58.0, 59.0, 59.4, 59.5, 59.8, 60.0, 62.7, 63.0, 65.0, 66.0, 68.0, 70.0]
+
+    # # Get unique PTV values in training set
+    # ptvs_train_unique = set()
+    # for ptvs in ptvs_train:
+    #     ptvs_train_unique.update(ptvs)
+    # ptvs_train_unique = sorted(list(ptvs_train_unique))
+    # print('Unique PTV values in training set:', ptvs_train_unique)  
+    # # [0.0, 10.0, 28.0, 40.2, 42.8, 43.2, 44.8, 45.0, 46.9, 47.9, 49.3, 49.4, 50.0, 50.4, 50.5, 50.6, 50.9, 51.4, 51.6, 51.7, 51.9, 52.0, 52.3, 52.4, 52.5, 52.6, 52.8, 52.9, 53.0, 53.3, 54.0, 54.1, 54.5, 54.8, 55.0, 55.1, 55.8, 56.0, 56.1, 56.7, 57.0, 57.1, 57.6, 58.0, 58.1, 59.0, 59.2, 59.4, 59.5, 59.6, 60.0, 60.1, 61.8, 62.0, 62.7, 63.0, 64.0, 65.0, 66.0, 67.0, 68.0, 69.0, 70.0, 72.0]
+
+    # # Get fraction of VMAT in validation set
+    # isVMAT_val_frac = sum(isVMAT_val) / len(isVMAT_val)
+    # print('Fraction of VMAT in validation set:', isVMAT_val_frac)  # 0.4044943820224719
+
+    # # Get fraction of VMAT in training set
+    # isVMAT_train_frac = sum(isVMAT_train) / len(isVMAT_train)
+    # print('Fraction of VMAT in training set:', isVMAT_train_frac)  # 0.4278762599930483
 
     # Done
     print("Done")

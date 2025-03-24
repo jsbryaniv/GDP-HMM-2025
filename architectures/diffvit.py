@@ -13,39 +13,44 @@ from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.vit import ViT3d, ViTEncoder3d
-from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
+from architectures.blocks import ConvBlock3d, CrossTransformerBlock, FiLM
 
 
 # Define Diffusion Model ViT
 class DiffViT3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
-        n_features=128, n_heads=4, n_layers=16, n_layers_input=4, n_mixing_blocks=2,
-        n_steps=16, eta=.1,
+        shape=(64, 64, 64), shape_patch_ratio=8,
+        n_features=64, n_heads=4, n_layers=8, n_layers_input=4, n_mixing_blocks=4,
+        scale=4, n_steps=16, eta=.1,
         use_checkpoint=True,
     ):
         super(DiffViT3d, self).__init__()
+
+        # Check inputs
+        if isinstance(shape, int):
+            shape = (shape, shape, shape)
         
         # Set attributes
         self.in_channels = in_channels
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
-        self.scale = scale
-        self.patch_size = patch_size
         self.shape_patch_ratio = shape_patch_ratio
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
         self.n_layers_input = n_layers_input
         self.n_mixing_blocks = n_mixing_blocks
+        self.scale = scale
         self.n_steps = n_steps
         self.eta = eta
         self.use_checkpoint = use_checkpoint
 
         # Get constants
         n_context = len(n_cross_channels_list)
+        shape_latent = tuple(s//scale for s in shape)
         self.n_context = n_context
+        self.shape_latent = shape_latent
 
         # Get noise schedule
         a_max = .9
@@ -56,30 +61,16 @@ class DiffViT3d(nn.Module):
         self.register_buffer('alpha_cumprod', alpha_cumprod)
 
         # Define time embedding layers
-        nn.Sequential(
-            nn.Linear(1, n_features),
-            nn.ReLU(),
-            nn.Linear(n_features, n_features),
-        )
-        # self.time_embedding_blocks = nn.ModuleList()
-        # for f in n_features_per_depth:
-        #     # self.time_embedding_blocks.append(FiLM3d(f))
-        #     # self.time_embedding_blocks.append(
-        #     #     nn.Sequential(
-        #     #         nn.Conv3d(1, f, kernel_size=1),
-        #     #         nn.ReLU(),
-        #     #         nn.Conv3d(f, f, kernel_size=1),
-        #     #     )
-        #     # )
+        self.time_embedding_block = FiLM(n_features)
 
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale),
+            ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1))
+            *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1))
         )
         self.context_input_blocks = nn.ModuleList()
         for n_channels in n_cross_channels_list:
@@ -88,54 +79,47 @@ class DiffViT3d(nn.Module):
                     # Merge input channels to n_features
                     nn.Conv3d(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    ConvBlock3d(n_features, n_features, scale=1/scale),
+                    ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
                     # Additional convolutional layers
-                    *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1))
+                    *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1))
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_input - 1)],
+            *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_input - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale),
+            ConvBlock3d(n_features, n_features, groups=n_features, scale=scale),
             # Merge features to output channels
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )
 
         # Create main autoencoder
-        # self.autoencoder = Unet3d(
-        #     n_features, n_features, 
-        #     n_features=n_features, n_blocks=n_blocks,
-        #     n_layers_per_block=n_layers_per_block,
-        #     scale=1,
-        # )
-        # self.autoencoder = ViT3d(
-        #     n_features, n_features,
-        #     shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
-        #     n_features=n_features, n_heads=n_heads, n_layers=n_layers,
+        self.autoencoder = ViT3d(
+            n_features, n_features,
+            shape=shape_latent, scale=1, shape_patch_ratio=shape_patch_ratio,
+            n_features=n_features, n_heads=n_heads, n_layers=n_layers,
+        )
         
-        # # Create context encoders
-        # self.context_encoders = nn.ModuleList()
-        # for _ in range(len(n_cross_channels_list)):
-        #     self.context_encoders.append(
-        #         UnetEncoder3d(
-        #             n_features,
-        #             n_features=n_features, n_blocks=n_blocks,
-        #             n_layers_per_block=n_layers_per_block,
-        #             scale=1,
-        #         )
-        #     )
+        # Create context encoders
+        self.context_encoders = nn.ModuleList()
+        for _ in range(len(n_cross_channels_list)):
+            self.context_encoders.append(
+                ViTEncoder3d(
+                    n_features,
+                    shape=shape_latent, scale=1, shape_patch_ratio=shape_patch_ratio,
+                    n_features=n_features, n_heads=n_heads, n_layers=n_layers,
+                )
+            )
 
-        # Create cross attention blocks
-        self.cross_attn_blocks = nn.ModuleList()
-        for depth in range(n_blocks+1):
-            self.cross_attn_blocks.append(
-                ConvformerDecoder3d(
-                    n_features_per_depth[depth], 
-                    n_heads=depth+1,
-                    n_layers=n_mixing_blocks,
+        # Create mixing block
+        self.mixing_blocks = nn.ModuleList()
+        for _ in range(n_mixing_blocks):
+            self.mixing_blocks.append(
+                CrossTransformerBlock(
+                    n_features=n_features,
+                    n_heads=n_heads,
                 )
             )
 
@@ -143,9 +127,12 @@ class DiffViT3d(nn.Module):
         return {
             'in_channels': self.in_channels,
             'n_cross_channels_list': self.n_cross_channels_list,
+            'shape': self.shape,
+            'shape_patch_ratio': self.shape_patch_ratio,
             'n_features': self.n_features,
-            'n_blocks': self.n_blocks,
-            'n_layers_per_block': self.n_layers_per_block,
+            'n_heads': self.n_heads,
+            'n_layers': self.n_layers,
+            'n_layers_input': self.n_layers_input,
             'n_mixing_blocks': self.n_mixing_blocks,
             'scale': self.scale,
             'n_steps': self.n_steps,
@@ -155,23 +142,24 @@ class DiffViT3d(nn.Module):
     
     def step(self, t, x, feats_context):
         if self.use_checkpoint:
-            x = x.requires_grad_()
-            feats_context = [f.requires_grad_() for f in feats_context]
-            return checkpoint(self._step, t, x, *feats_context, use_reentrant=False)
+            x = x.requires_grad_(True)
+            feats_context = feats_context.requires_grad_(True)
+            return checkpoint(self._step, t, x, feats_context, use_reentrant=False)
         else:
             # Regular step
-            return self._step(t, x, *feats_context)
+            return self._step(t, x, feats_context)
     
-    def _step(self, t, x, *feats_context):
+    def _step(self, t, x, feats_context):
         
         # Encode x
         feats = self.autoencoder.encoder(x)
 
-        # Add time embedding
-        feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
+        # Apply time embedding
+        feats = self.time_embedding_block(feats, t.float())
 
         # Apply context
-        feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
+        for block in self.mixing_blocks:
+            feats = block(feats, feats_context)
 
         # Decode features
         noise_pred = self.autoencoder.decoder(feats)
@@ -185,8 +173,7 @@ class DiffViT3d(nn.Module):
         latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
         
         # Encode features
-        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
-        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+        feats_context = sum(block(y) for block, y in zip(self.context_encoders, latent_context))
 
         # Initialize x
         x = torch.randn_like(latent_context[0], device=context[0].device)
@@ -228,8 +215,7 @@ class DiffViT3d(nn.Module):
         latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
         
         # Encode features
-        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
-        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+        feats_context = sum(block(y) for block, y in zip(self.context_encoders, latent_context))
 
         # Calculate reconstruction loss
         target_reconstructed = self.output_block(latent_target)
@@ -264,17 +250,17 @@ if __name__ == '__main__':
     from utils import estimate_memory_usage
 
     # Set constants
-    shape = (128, 128, 128)
+    shape = (64, 64, 64)
     batch_size = 3
     in_channels = 1
-    n_cross_channels_list = [1, 4, 36]
+    n_cross_channels_list = [36]
 
     # Create data
     x = torch.randn(batch_size, in_channels, *shape)
     y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
-    model = DiffUnet3d(
+    model = DiffViT3d(
         in_channels, n_cross_channels_list,
     )
 

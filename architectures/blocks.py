@@ -14,7 +14,7 @@ class DyTanh(nn.Module): # TODO: Explicitly encode backpropagation through this 
     """Dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
     def __init__(self, n_features, init_alpha=1.0):
         super(DyTanh, self).__init__()
-        self.alpha = nn.Parameter(torch.ones(n_features) * init_alpha)
+        self.alpha = nn.Parameter(init_alpha)
         self.beta = nn.Parameter(torch.zeros(n_features))
         self.gamma = nn.Parameter(torch.ones(n_features))
 
@@ -22,71 +22,37 @@ class DyTanh(nn.Module): # TODO: Explicitly encode backpropagation through this 
         x = torch.tanh(self.alpha * x)
         return self.gamma * x + self.beta
 
-# Voxel Dynamic Tanh  # TODO: Explicitly encode backpropagation through this layer
-class VoxelDyTanh3d(nn.Module):
-    """Voxel-wise dynamic tanh activation."""
-    # class DyT(Module):
-    # def __init__(self, C, init_α):
-    # super().__init__()
-    # self.α = Parameter(ones(1) * init_α)
-    # self.γ = Parameter(ones(C))
-    # self.β = Parameter(zeros(C))
-    # def forward(self, x):
-    # x = tanh(self.alpha * x)
-    # return self.γ * x + self.β
-    def __init__(self, n_features, init_alpha=1.0):
-        super(VoxelDyTanh3d, self).__init__()
-        self.alpha = nn.Parameter(torch.ones(n_features, 1, 1, 1) * init_alpha)
-        self.beta = nn.Parameter(torch.zeros(n_features, 1, 1, 1))
-        self.gamma = nn.Parameter(torch.ones(n_features, 1, 1, 1))
-
-    def forward(self, x):
-        x = torch.tanh(self.alpha * x)
-        return self.gamma * x + self.beta
-    
-# Adaptive Voxel Dynamic Tanh  # TODO: Explicitly encode backpropagation through this layer
-class AdaptiveVoxelDyTanh3d(nn.Module):
-    """Voxel-wise dynamic tanh activation. Uses initial batches to estimate alpha."""
-    def __init__(self, num_channels, warmup_steps=100, momentum=0.1, eps=1e-6):
-        super(AdaptiveVoxelDyTanh3d, self).__init__()
-
-        # Set attributes
-        self.num_channels = num_channels
-        self.warmup_steps = warmup_steps
-        self.momentum = momentum
-        self.eps = eps
-
-        # Parameters for scaling and shifting
-        self.beta = nn.Parameter(torch.zeros(num_channels, 1, 1, 1))
-        self.gamma = nn.Parameter(torch.ones(num_channels, 1, 1, 1))
-
-        # Delayed initialization of alpha
-        self.alpha = None  # Will be initialized after the first batch
-        self.step_counter = 0  # Tracks how many updates have happened
-
-    def forward(self, x):
-
-        # Configure alpha
-        if self.alpha is None:
-            # Initialize alpha with batch standard deviation
-            batch_std = x.std(dim=(0, 2, 3, 4), keepdim=True) + self.eps
-            self.alpha = nn.Parameter(1.0 / batch_std)
-            self.step_counter += 1
-        elif self.step_counter < self.warmup_steps:
-            # Update alpha with momentum-based moving average
-            batch_std = x.std(dim=(0, 2, 3, 4), keepdim=True) + self.eps
-            new_alpha = 1.0 / batch_std
-            self.alpha.data = self.momentum * new_alpha + (1 - self.momentum) * self.alpha.data
-            self.step_counter += 1
-
-        # Apply DyT transformation
-        x = torch.tanh(self.alpha * x)
-        return self.gamma * x + self.beta
-
-
 ### MODULATION LAYERS ###
 
-# FiLM Layer, for time embeddings in diffusion models
+# FiLM Layer, for time embeddings in diffusion models, linear version
+class FiLM(nn.Module):
+    """Feature-wise Linear Modulation layer."""
+    def __init__(self, n_features, expansion=4):
+        super(FiLM, self).__init__()
+
+        # Set attributes
+        self.n_features = n_features
+        self.expansion = expansion
+
+        # Define scale layer
+        self.scale_shift = nn.Sequential(
+            nn.Linear(1, expansion*n_features),
+            nn.ReLU(inplace=True),
+            nn.Linear(expansion*n_features, 2*n_features),
+        )
+
+    def forward(self, x, t):
+
+        # Get modulation parameters
+        scale, shift = self.scale_shift(t.view(-1, 1, 1)).chunk(2, dim=-1)
+
+        # Apply modulation
+        x = x * (1 + scale) + shift
+
+        # Return output
+        return x
+
+# FiLM Layer, for time embeddings in diffusion models, volume version
 class FiLM3d(nn.Module):
     """Feature-wise Linear Modulation layer for 3D volumes."""
     def __init__(self, n_features, expansion=4):
@@ -240,107 +206,11 @@ class VolumeExpand3d(nn.Module):
 
 ### CONVOLUTIONAL BLOCKS ###
 
-# TODO: Note: I updated all blocks to have learnable beta=.99 and eliminated use of beta from the forward pass.
-
-# OLD ConvBlock3d
-class OldConvBlock3d(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        kernel_size=None, groups=1, beta=.1, 
-        upsample=False, downsample=False, scale=2
-    ):
-        super(OldConvBlock3d, self).__init__()
-
-        # Check inputs
-        if upsample and downsample:
-            raise ValueError('Cannot upsample and downsample at the same time.')
-        if upsample or downsample:
-            assert scale & (scale - 1) == 0, "Scale must be power of 2."
-            # Define constants
-            stride = scale
-            padding = scale // 2
-            kernel_size = scale + 2 * padding
-        else:
-            # Define constants
-            kernel_size = 3
-            padding = kernel_size // 2
-            stride = 1
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.groups = groups
-        self.beta = beta
-        self.upsample = upsample
-        self.downsample = downsample
-        self.scale = scale
-
-        # Define convolutional and residual layers
-        if upsample:
-            # Residual layer
-            self.residual = nn.ConvTranspose3d(
-                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
-            )
-            # Convolutional layer
-            self.conv = nn.ConvTranspose3d(  
-                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
-            )
-        elif downsample:
-            # Residual layer
-            self.residual = nn.Conv3d(
-                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
-            )
-            # Convolutional layer
-            self.conv = nn.Conv3d(
-                in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=groups
-            )
-        else:
-            # Residual layer
-            if in_channels == out_channels:
-                self.residual = nn.Identity()
-            else:
-                self.residual = nn.Conv3d(
-                    in_channels, out_channels, kernel_size=1, stride=1, groups=groups
-                )
-            # Convolutional layer
-            self.conv = nn.Sequential(
-                nn.Conv3d(
-                    in_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=groups,
-                ),
-            )
-
-        # Define norm
-        self.norm = nn.GroupNorm(1, out_channels)
-
-        # Define activation
-        self.activation = nn.ReLU(inplace=True)
-
-        # Define mixing layer to allow negative values
-        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-        
-        # Residual connection
-        x0 = self.residual(x)
-
-        # Convolutional block
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.mixing(x)
-
-        # Combine with residual
-        x = self.beta * x0 + (1 - self.beta) * x
-
-        # Return the output
-        return x
-
-# Original ConvBlock3d version 0
+# ConvBlock3d
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.99, scale=1
+        kernel_size=3, groups=1, scale=1
     ):
         super(ConvBlock3d, self).__init__()
 
@@ -348,11 +218,7 @@ class ConvBlock3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
-        # self.beta = beta
         self.scale = scale
-
-        # Set beta
-        self.beta = nn.Parameter(torch.tensor(beta))
 
         # Reshaping
         if scale > 1:
@@ -407,380 +273,6 @@ class ConvBlock3d(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         x = self.mixing(x)
-
-        # Combine with residual
-        # x = self.beta * x0 + (1 - self.beta) * x
-        x = x0 + x
-
-        # Return output
-        return x
-
-# ConvBlock3d version 1 (with groupnorm)
-class ConvBlock3d_v1(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.99, scale=1
-    ):
-        super(ConvBlock3d_v1, self).__init__()
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.beta = beta
-        self.scale = scale
-
-        # Reshaping
-        if scale > 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*scale,
-                'padding': scale//2,
-                'stride': scale,
-                'groups': groups,
-            }
-            self.conv = nn.ConvTranspose3d(**convargs)
-            self.residual = nn.ConvTranspose3d(**convargs)
-        elif scale < 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*round(1/scale),
-                'padding': round(1/scale)//2,
-                'stride': round(1/scale),
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Conv3d(**convargs)
-        else:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': kernel_size,
-                'padding': kernel_size//2,
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
-
-        # Voxel normalization
-        self.norm = nn.GroupNorm(1, out_channels)
-
-        # Define activation
-        self.activation = nn.ReLU(inplace=True)
-
-        # Define mixing layer to allow negative values
-        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-
-        # Residual connection
-        x0 = self.residual(x)
-
-        # Convolutional block
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.mixing(x)
-
-        # Combine with residual
-        # x = self.beta * x0 + (1 - self.beta) * x
-        x = x0 + x
-
-        # Return output
-        return x
-
-# ConvBlock3d version 2 (with DyTanh)
-class ConvBlock3d_v2(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.99, scale=1
-    ):
-        super(ConvBlock3d_v2, self).__init__()
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.beta = beta
-        self.scale = scale
-
-        # Reshaping
-        if scale > 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*scale,
-                'padding': scale//2,
-                'stride': scale,
-                'groups': groups,
-            }
-            self.conv = nn.ConvTranspose3d(**convargs)
-            self.residual = nn.ConvTranspose3d(**convargs)
-        elif scale < 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*round(1/scale),
-                'padding': round(1/scale)//2,
-                'stride': round(1/scale),
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Conv3d(**convargs)
-        else:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': kernel_size,
-                'padding': kernel_size//2,
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
-
-        # Voxel normalization
-        self.norm = VoxelDyTanh3d(out_channels)
-
-        # Define activation
-        self.activation = nn.ReLU(inplace=True)
-
-        # Define mixing layer to allow negative values
-        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-
-        # Residual connection
-        x0 = self.residual(x)
-
-        # Convolutional block
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.mixing(x)
-
-        # Combine with residual
-        # x = self.beta * x0 + (1 - self.beta) * x
-        x = x0 + x
-
-        # Return output
-        return x
-
-# ConvBlock3d version 3 (with Volume Contract/Expand)
-class ConvBlock3d_v3(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        kernel_size=3, groups=1, beta=.99, scale=1
-    ):
-        super(ConvBlock3d_v3, self).__init__()
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.beta = beta
-        self.scale = scale
-
-        # Reshaping
-        if scale > 1:
-            reshape1 = VolumeExpand3d(in_channels, scale)
-            reshape2 = VolumeExpand3d(in_channels, scale)
-        elif scale < 1:
-            reshape1 = VolumeContract3d(in_channels, round(1/scale))
-            reshape2 = VolumeContract3d(in_channels, round(1/scale))
-        else:
-            reshape1 = nn.Identity()
-            reshape2 = nn.Identity()
-
-        # Residual layer
-        if in_channels == out_channels:
-            self.residual = nn.Sequential(reshape1, nn.Identity())
-        else:
-            self.residual = nn.Sequential(reshape1, nn.Conv3d(in_channels, out_channels, kernel_size=1))
-
-        # Convolutional layer
-        self.conv = nn.Sequential(
-            # Reshape
-            reshape2,
-            # Convolution
-            nn.Conv3d(
-                in_channels, out_channels, 
-                kernel_size=kernel_size, 
-                padding=kernel_size//2,
-                groups=groups,
-            ),
-            # # Depthwise convolution
-            # nn.Conv3d(
-            #     in_channels, in_channels, 
-            #     kernel_size=kernel_size, padding=kernel_size//2, groups=in_channels
-            # ),
-            # # Pointwise convolution
-            # nn.Conv3d(in_channels, out_channels, kernel_size=1),
-        )
-
-        # Voxel normalization
-        self.norm = VoxelNorm3d(out_channels)
-
-        # # MLP
-        # self.mlp = nn.Sequential(
-        #     nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
-        # )
-
-        # Define activation
-        self.activation = nn.ReLU(inplace=True)
-
-        # Define mixing layer to allow negative values
-        self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-
-        # Residual connection
-        x0 = self.residual(x)
-
-        # # Apply depthwise convolution
-        # x = self.conv(x)
-        # x = self.norm(x)
-        # x = self.mlp(x)
-
-        # Convolutional block
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.mixing(x)
-
-        # Combine with residual
-        # x = self.beta * x0 + (1 - self.beta) * x
-        x = x0 + x
-
-        # Return output
-        return x
-    
-# ConvBlock3d version 4 (Mimic ConvNeXt)
-class ConvBlock3d_v4(nn.Module):
-    def __init__(self, 
-        in_channels, out_channels, 
-        kernel_size=5, beta=.99, scale=1, expansion=4, groups=1
-    ):
-        super(ConvBlock3d_v4, self).__init__()
-
-        # Set attributes
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.kernel_size = kernel_size
-        self.beta = beta
-        self.scale = scale
-        self.expansion = expansion
-        
-        # Set groups to greatest common divisor of in_channels and out_channels
-        groups = math.gcd(in_channels, out_channels)
-
-        # Reshaping
-        if scale > 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*scale,
-                'padding': scale//2,
-                'stride': scale,
-                'groups': groups,
-            }
-            self.conv = nn.ConvTranspose3d(**convargs)
-            self.residual = nn.ConvTranspose3d(**convargs)
-        elif scale < 1:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': 2*round(1/scale),
-                'padding': round(1/scale)//2,
-                'stride': round(1/scale),
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Conv3d(**convargs)
-        else:
-            convargs = {
-                'in_channels': in_channels, 
-                'out_channels': out_channels, 
-                'kernel_size': kernel_size,
-                'padding': kernel_size//2,
-                'groups': groups,
-            }
-            self.conv = nn.Conv3d(**convargs)
-            self.residual = nn.Identity() if in_channels == out_channels else nn.Conv3d(**convargs)
-
-        # Voxel normalization
-        self.norm = VoxelNorm3d(out_channels)
-
-        # MLP
-        self.mlp = nn.Sequential(
-            nn.Conv3d(out_channels, out_channels * expansion, kernel_size=1),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels * expansion, out_channels, kernel_size=1),
-        )
-
-    def forward(self, x):
-
-        # Residual connection
-        x0 = self.residual(x)
-
-        # Apply depthwise convolution
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.mlp(x)
-
-        # Combine with residual
-        # x = self.beta * x0 + (1 - self.beta) * x
-        x = x0 + x
-
-        # Return output
-        return x
-    
-# Define ConvNeXt3d block
-class ConvNeXtBlock3d(nn.Module):
-    r"""A block that mimics ConvNeXt architecture."""
-    def __init__(self, n_features, kernel_size=7, expansion=2):
-        super(ConvNeXtBlock3d, self).__init__()
-
-        # Set attributes
-        self.n_features = n_features
-        self.kernel_size = kernel_size
-
-        # Depthwise convolution
-        self.depthwise_conv = nn.Sequential(
-            nn.Conv3d(
-                n_features, n_features, 
-                kernel_size=kernel_size, padding=kernel_size//2,
-                groups=n_features
-            ),
-            nn.Conv3d(n_features, n_features, kernel_size=1),
-        )
-
-        # Voxel normalization
-        self.norm = VoxelNorm3d(n_features)
-
-        # MLP
-        self.mlp = nn.Sequential(
-            nn.Conv3d(n_features, n_features * expansion, kernel_size=1),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(n_features * expansion, n_features, kernel_size=1),
-        )
-
-    def forward(self, x):
-
-        # Save residual
-        x0 = x
-
-        # Apply depthwise convolution
-        x = self.depthwise_conv(x)
-
-        # Normalize
-        x = self.norm(x)
-
-        # Apply MLP
-        x = self.mlp(x)
 
         # Combine with residual
         x = x0 + x

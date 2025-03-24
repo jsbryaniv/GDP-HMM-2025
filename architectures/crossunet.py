@@ -14,15 +14,15 @@ from architectures.blocks import ConvformerDecoder3d
 
 
 # Define cross attention unet model
-class CrossAttnUnetModel(nn.Module):
+class CrossUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=16, n_blocks=4, n_layers_per_block=4,
+        n_features=16, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=2, attn_kernel_size=5,
         scale=2,
     ):
-        super(CrossAttnUnetModel, self).__init__()
+        super(CrossUnetModel, self).__init__()
         
         # Set attributes
         self.in_channels = in_channels
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     y_list = [torch.randn(batch_size, c, *shape) for c in n_cross_channels_list]
 
     # Create a model
-    model = CrossAttnUnetModel(
+    model = CrossUnetModel(
         in_channels, out_channels, n_cross_channels_list,
     )
 

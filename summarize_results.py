@@ -147,7 +147,7 @@ def plot_results_summary(fig_ax_list):
     losses = [loss for _, _, loss in fig_ax_list]
 
     # Get constants
-    n_jobs = len(all_jobs)
+    n_jobs = len(all_savenames)
     n_rows = axs[0].shape[0]
     n_cols = 3 + 2*n_jobs
 
@@ -166,7 +166,7 @@ def plot_results_summary(fig_ax_list):
         # Plot predicted dose for each job
         for job in range(n_jobs):
             title = '\n'.join([
-                all_jobs[job].split('_')[2],
+                all_savenames[job].split('_')[2],
                 'img_loss='+axs[job][i, 2].get_title().split('=')[-1],
                 'avg_loss='+f'{losses[job]:.4f}',
             ])
@@ -179,9 +179,9 @@ def plot_results_summary(fig_ax_list):
         ax[i, n_jobs+2].set_xlim([0, 80])
 
         # Plot predicted DVH for each job
-        for job in range(len(all_jobs)):
+        for job in range(len(all_savenames)):
             ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-            ax[i, n_jobs+3+job].set_title(f'DVH {all_jobs[job].split("_")[2]}')
+            ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
             ax[i, n_jobs+3+job].set_xlim([0, 80])
 
     # Finalize plot
@@ -194,36 +194,37 @@ def plot_results_summary(fig_ax_list):
 
 # Main script
 if __name__ == '__main__':
-
-    # Set constants
-    dataID = 'All'
+    
+    # Set up all jobs
+    dataIDs_list = ['All']
     modelID_list = [
-        ('CrossAttnUnet',     {'shape': 128}),                                           # 0
-        ('CrossViT',          {'shape': 128}),                                           # 1
-        ('ViT',               {'shape': 128}),                                           # 2
-        ('Unet',              {'shape': 256}),                                           # 3
-        ('Unet',              {'shape': 128}),                                           # 4
-        ('MOECrossAttnUnet',  {'shape': 128}),                                           # 5
-        ('MOECrossViT',       {'shape': 128}),                                           # 6
-        ('MOEViT',            {'shape': 128}),                                           # 7
-        ('MOEUnet',           {'shape': 128}),                                           # 8
-        ('MOEUnet',           {'shape': 256}),                                           # 9
-        ('CrossAttnUnet',     {'shape': 128, 'n_features': 16}),                         # 10
-        ('CrossAttnUnet',     {'shape': 256, 'n_features': 4, 'use_checkpoint': True}),  # 11
+        # ('diffunet',      {'batch_size': 4, 'shape': 64}),
+        # ('unet',          {'batch_size': 4, 'shape': 64}),
+        # ('crossunet', {'batch_size': 4, 'shape': 64}),
+        ('diffunet',      {'batch_size': 4, 'shape': 128}),
+        ('unet',          {'batch_size': 2, 'shape': 128}),
+        ('crossunet', {'batch_size': 2, 'shape': 128}),
     ]
-    all_jobs = [get_savename(dataID, modelID, **model_kwargs) for modelID, model_kwargs in modelID_list]
-    all_jobs = [j for j in all_jobs if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
+    all_jobs = []
+    for dataID in dataIDs_list:
+        for (modelID, kwargs) in modelID_list:
+            kwargs = {k: v for k, v in kwargs.items() if not k in ['batch_size']}  # Remove batch size
+            all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
+
+    # Convert to savenames
+    all_savenames = [get_savename(**args) for args in all_jobs]
+    all_savenames = [j for j in all_savenames if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
 
     # Plot each job separately
     data_list = []
-    for savename in all_jobs:
+    for savename in all_savenames:
 
         # Load checkpoint
         checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
-        model, datasets, metadata = load_checkpoint(checkpoint_path)
-        loss_test = metadata['train_stats']['loss_test']
-        losses_train = metadata['train_stats']['losses_train']
-        losses_val = metadata['train_stats']['losses_val']
+        model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path, load_best=True)
+        loss_test = metadata['loss_test']
+        losses_train = metadata['losses_train']
+        losses_val = metadata['losses_val']
 
         # Plot losses
         fig, ax = plot_losses(losses_train, losses_val)
