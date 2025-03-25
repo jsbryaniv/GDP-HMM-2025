@@ -18,7 +18,7 @@ from architectures.blocks import ConvBlock3d, VoxelNorm3d
 # Define MOE Gating
 class MOEGating3d(nn.Module):
     """Multi-expert gating mechanism."""
-    def __init__(self, in_channels, n_experts, n_features=16, n_blocks=3, n_layers_per_block=2):
+    def __init__(self, in_channels, n_experts, n_features=16, n_blocks=5, n_layers_per_block=2):
         super(MOEGating3d, self).__init__()
 
         # Set up attributes

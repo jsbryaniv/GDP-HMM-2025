@@ -26,12 +26,6 @@ class DosePredictionModel(nn.Module):
         self.shape = shape
         self.kwargs = kwargs
 
-        # # If Model is a Unet class, set n_blocks based on shape
-        # if 'unet' in architecture.lower():
-        #     # Number of blocks is the log base 2 of the smallest shape dimension - 2 (latent shape is 4x4x4)
-        #     n_blocks = int(torch.log2(torch.tensor(shape).min())) - 2
-        #     kwargs['n_blocks'] = n_blocks
-
         # Initialize model
         if architecture.lower() == "test":
             # Test model (Really lightweight Unet)
@@ -92,6 +86,16 @@ class DosePredictionModel(nn.Module):
                 'in_channels': n_channels,
                 'out_channels': 1,
                 'n_cross_channels_list': [1, 4, n_channels-5],  # scan, (beam, ptvs), (oars, body)
+                **kwargs,
+            }
+            self.model = CrossUnetModel(**kwargs)        
+        elif architecture.lower() == "crossunetlight":
+            # CrossUnetModel
+            from architectures.crossunet import CrossUnetModel
+            kwargs = {
+                'in_channels': n_channels,
+                'out_channels': 1,
+                'n_cross_channels_list': [n_channels],
                 **kwargs,
             }
             self.model = CrossUnetModel(**kwargs)
@@ -232,6 +236,12 @@ class DosePredictionModel(nn.Module):
                 torch.cat([beam, ptvs], dim=1),                            # Context 2
                 torch.cat([oars, body], dim=1).float(),                    # Context 3
             )
+        elif self.architecture.lower() in ["crossunetlight", "crossvitlight", "moecrossunetlight", "moecrossvitlight"]:
+            # Separate contexts
+            inputs = (
+                torch.cat([scan, beam, ptvs, oars, body], dim=1).clone(),  # Main input
+                torch.cat([scan, beam, ptvs, oars, body], dim=1).clone(),  # Context
+            )
         elif self.architecture.lower() in ["diffunet", "diffvit"]:
             # Separate contexts
             inputs = (
@@ -274,10 +284,10 @@ class DosePredictionModel(nn.Module):
         
     def forward(self, scan, beam, ptvs, oars, body):
 
-        # # Rescale ptvs
-        # ptvs_scale = ptvs.max()  # TODO: This may not work
-        # if ptvs_scale > 0:
-        #     ptvs = ptvs / ptvs_scale
+        # Rescale ptvs
+        ptvs_scale = ptvs.max()
+        if ptvs_scale > 0:
+            ptvs = ptvs / ptvs_scale
         
         # Format inputs
         inputs, transform_params = self.format_inputs(scan, beam, ptvs, oars, body)
@@ -288,8 +298,8 @@ class DosePredictionModel(nn.Module):
         # Format outputs
         pred = self.format_outputs(pred, transform_params)
 
-        # # Rescale prediction
-        # pred = pred * ptvs_scale  # TODO: This may not work
+        # Rescale prediction
+        pred = pred * ptvs_scale
 
         # Return prediction
         return pred
@@ -320,11 +330,8 @@ class DosePredictionModel(nn.Module):
 
         # Add diffusion loss
         if self.architecture.lower() in ["diffunet", "diffvit"]:
-            # Format input
-            dose_for_diff, _ = resize_image_3d(dose, self.shape)
-            # if ptvs.max() > 0:
-            #     dose_for_diff = dose_for_diff / ptvs.max()  # TODO: Eliminate if we dont rescale ptvs
-            # Compute diffusion loss
+            dose_for_diff = resize_image_3d(dose, self.shape)[0]                             # Resize dose
+            dose_for_diff = dose_for_diff / ptvs.max() if ptvs.max() > 0 else dose_for_diff  # Rescale dose
             likelihood += self.model.calculate_diffusion_loss(dose_for_diff, *inputs)
 
         # Compute competition loss

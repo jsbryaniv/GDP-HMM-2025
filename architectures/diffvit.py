@@ -20,9 +20,9 @@ from architectures.blocks import ConvBlock3d, CrossTransformerBlock, FiLM
 class DiffViT3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        shape=(64, 64, 64), shape_patch_ratio=8,
+        shape=(64, 64, 64), shape_patch_ratio=16,
         n_features=64, n_heads=4, n_layers=8, n_layers_input=4, n_mixing_blocks=4,
-        scale=4, n_steps=16, eta=.1,
+        scale=2, n_steps=16, eta=.1,
         use_checkpoint=True,
     ):
         super(DiffViT3d, self).__init__()

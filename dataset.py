@@ -278,17 +278,14 @@ if __name__ == "__main__":
     # Create dataset
     dataset = GDPDataset(
         treatment='All', 
-        validation_set=True,
+        validation_set=False,
     )
 
     # Loop over dataset
     for i in range(len(dataset)):
         print(f'--{i}/{len(dataset)}')
         scan, beam, ptvs, oars, body, dose = dataset[i]
-        if i == 733:
-            print('Index 733 shape =', scan.shape[-3:])
-        if i == 734:
-            print('Index 734 shape =', scan.shape[-3:])
+        print(scan.shape)
 
     # # Initialize lists
     # shapes_val = []

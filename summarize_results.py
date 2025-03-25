@@ -198,12 +198,12 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # ('diffunet',      {'batch_size': 4, 'shape': 64}),
-        # ('unet',          {'batch_size': 4, 'shape': 64}),
-        # ('crossunet', {'batch_size': 4, 'shape': 64}),
-        ('diffunet',      {'batch_size': 4, 'shape': 128}),
         ('unet',          {'batch_size': 2, 'shape': 128}),
-        ('crossunet', {'batch_size': 2, 'shape': 128}),
+        ('crossunet',     {'batch_size': 2, 'shape': 128}),
+        ('diffunet',      {'batch_size': 2, 'shape': 128}),
+        ('diffunetlight', {'batch_size': 2, 'shape': 128}),
+        ('diffvit',       {'batch_size': 2, 'shape': 128}),
+        ('diffvitlight',  {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -218,6 +218,7 @@ if __name__ == '__main__':
     # Plot each job separately
     data_list = []
     for savename in all_savenames:
+        print(savename)
 
         # Load checkpoint
         checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')

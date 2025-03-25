@@ -63,9 +63,9 @@ class DiffUnet3d(nn.Module):
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale),
+            ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+            *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
         )
         self.context_input_blocks = nn.ModuleList()
         for n_channels in n_cross_channels_list:
@@ -74,18 +74,18 @@ class DiffUnet3d(nn.Module):
                     # Merge input channels to n_features
                     nn.Conv3d(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    ConvBlock3d(n_features, n_features, scale=1/scale),
+                    ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
                     # Additional convolutional layers
-                    *(ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1))
+                    *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features) for _ in range(n_layers_per_block - 1)],
+            *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale),
+            ConvBlock3d(n_features, n_features, groups=n_features, scale=scale),
             # Merge features to output channels
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )
