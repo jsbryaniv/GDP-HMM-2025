@@ -129,11 +129,16 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',           {'batch_size': 2, 'shape': 128}),
-        ('crossunet',      {'batch_size': 2, 'shape': 128}),
-        ('crossunetlight', {'batch_size': 2, 'shape': 128}),
-        ('diffunet',       {'batch_size': 3, 'shape': 128}),
-        ('diffunetlight',  {'batch_size': 4, 'shape': 128}),
+        ('unet',           {'batch_size': 8, 'shape': 64}),
+        ('crossunet',      {'batch_size': 8, 'shape': 64}),
+        ('crossunetlight', {'batch_size': 8, 'shape': 64}),
+        ('diffunet',       {'batch_size': 12, 'shape': 64}),
+        ('diffunetlight',  {'batch_size': 16, 'shape': 64}),
+        # ('unet',           {'batch_size': 2, 'shape': 128}),
+        # ('crossunet',      {'batch_size': 2, 'shape': 128}),
+        # ('crossunetlight', {'batch_size': 2, 'shape': 128}),
+        # ('diffunet',       {'batch_size': 3, 'shape': 128}),
+        # ('diffunetlight',  {'batch_size': 4, 'shape': 128}),
         # ('diffvit',        {'batch_size': 2, 'shape': 128}),
         # ('diffvitlight',   {'batch_size': 2, 'shape': 128}),
     ]
