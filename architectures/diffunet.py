@@ -120,6 +120,26 @@ class DiffUnet3d(nn.Module):
                 )
             )
 
+        # Initialize weights
+        self._init_weights()
+
+    def _init_weights(self):
+        
+        # All convolutional layers to small scale
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
+                m.weight.data *= 0.5  # reduce scale
+
+        # Special case: zero the final conv that predicts noise
+        final_layer = self.autoencoder.decoder.output_block[-1]
+        nn.init.zeros_(final_layer.weight)
+        if final_layer.bias is not None:
+            nn.init.zeros_(final_layer.bias)
+
+        # Done
+        return
+
     def get_config(self):
         return {
             'in_channels': self.in_channels,
@@ -175,7 +195,7 @@ class DiffUnet3d(nn.Module):
         # Diffusion steps
         for t in reversed(range(1, self.n_steps)):
 
-            # Predict noise
+            # Predict noise 
             t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
             noise_pred = self.step(t_step, x, feats_context)
 
@@ -184,7 +204,7 @@ class DiffUnet3d(nn.Module):
             a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
             sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
 
-            # Update position
+            # Update position 
             x = (
                 torch.sqrt(a_t1/a_t) * (x - torch.sqrt(1 - a_t) * noise_pred)
                 + torch.sqrt(1 - a_t1 - sigma**2) * noise_pred 
@@ -194,7 +214,6 @@ class DiffUnet3d(nn.Module):
             # Check for nans and infs
             if torch.isnan(x).any() or torch.isinf(x).any():
                 raise ValueError('NaNs or Infs detected in the diffusion model.')
-
 
         # Output block
         x = self.output_block(x)

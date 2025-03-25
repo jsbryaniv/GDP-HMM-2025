@@ -82,7 +82,10 @@ def main(
         optimizer=optimizer,
         batch_size=batch_size,
         jobname=savename, debug=debug,
-        epoch_start=epoch_start, loss_val_best=loss_val_best, model_state_dict_best=model_state_dict_best,
+        # Continue training parameters
+        epoch_start=epoch_start, 
+        loss_val_best=loss_val_best,
+        model_state_dict_best=model_state_dict_best,
     )
 
     # Merge training statistics
@@ -129,18 +132,15 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',           {'batch_size': 8, 'shape': 64}),
-        ('crossunet',      {'batch_size': 8, 'shape': 64}),
-        ('crossunetlight', {'batch_size': 8, 'shape': 64}),
-        ('diffunet',       {'batch_size': 12, 'shape': 64}),
-        ('diffunetlight',  {'batch_size': 16, 'shape': 64}),
-        # ('unet',           {'batch_size': 2, 'shape': 128}),
-        # ('crossunet',      {'batch_size': 2, 'shape': 128}),
-        # ('crossunetlight', {'batch_size': 2, 'shape': 128}),
-        # ('diffunet',       {'batch_size': 3, 'shape': 128}),
-        # ('diffunetlight',  {'batch_size': 4, 'shape': 128}),
-        # ('diffvit',        {'batch_size': 2, 'shape': 128}),
-        # ('diffvitlight',   {'batch_size': 2, 'shape': 128}),
+        ('unet',           {'batch_size': 2, 'shape': 128}),
+        ('crossunet',      {'batch_size': 2, 'shape': 128}),
+        ('crossunetlight', {'batch_size': 2, 'shape': 128}),
+        ('diffunet',       {'batch_size': 2, 'shape': 128}),
+        ('diffunetlight',  {'batch_size': 4, 'shape': 128}),
+        ('diffvit',        {'batch_size': 2, 'shape': 128}),
+        ('diffvitlight',   {'batch_size': 2, 'shape': 128}),
+        # ('diffvit',        {'batch_size': 1, 'shape': 64, 'n_features': 16, 'ratio_shape_patch': 16}),
+        # ('diffvitlight',   {'batch_size': 1, 'shape': 64, 'n_features': 16, 'ratio_shape_patch': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -159,8 +159,10 @@ if __name__ == '__main__':
         for ID in range(len(all_jobs)):
             for ITER in [0, 1]:
                 job_args = copy.deepcopy(all_jobs[ID])
-                if 'shape' in job_args:
-                    job_args['shape'] = job_args['shape'] // 2  # Make shape smaller for debugging
+                if 'shape' in job_args:  # Make shape smaller for debugging
+                    job_args['shape'] = job_args['shape'] // 2
+                if 'batch_size' in job_args:  # Make batch size smaller for debugging
+                    job_args['batch_size'] = min(2, job_args['batch_size'])  
                 model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
                 print('\n'*5)
 

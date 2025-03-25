@@ -16,7 +16,7 @@ from architectures.blocks import TransformerBlock, VolumeExpand3d, VolumeContrac
 class ViTEncoder3d(nn.Module):
     def __init__(self, 
         in_channels,
-        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        shape=(64, 64, 64), scale=1, patch_size=None, ratio_shape_patch=8,
         n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViTEncoder3d, self).__init__()
@@ -32,8 +32,8 @@ class ViTEncoder3d(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # Set default patch size (1/shape_patch_ratio of shape)
-            patch_size = tuple(shape[i] // shape_patch_ratio for i in range(3))
+            # Set default patch size (1/ratio_shape_patch of shape)
+            patch_size = tuple(shape[i] // (scale * ratio_shape_patch) for i in range(3))
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
@@ -48,7 +48,7 @@ class ViTEncoder3d(nn.Module):
         self.shape = shape
         self.scale = scale
         self.patch_size = patch_size
-        self.patch_size_ratio = shape_patch_ratio
+        self.patch_size_ratio = ratio_shape_patch
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -110,7 +110,7 @@ class ViTEncoder3d(nn.Module):
 class ViTDecoder3d(nn.Module):
     def __init__(self, 
         out_channels,
-        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        shape=(64, 64, 64), scale=1, patch_size=None, ratio_shape_patch=8,
         n_features=128, n_heads=4, n_layers=8,
     ):
         super(ViTDecoder3d, self).__init__()
@@ -126,8 +126,8 @@ class ViTDecoder3d(nn.Module):
             shape = (shape, shape, shape)
         # Check patch size
         if patch_size is None:
-            # Set default patch size (1/shape_patch_ratio of shape)
-            patch_size = tuple(shape[i] // shape_patch_ratio for i in range(3))
+            # Set default patch size (1/ratio_shape_patch of shape)
+            patch_size = tuple(shape[i] // (scale * ratio_shape_patch) for i in range(3))
         elif not isinstance(patch_size, tuple):
             # Convert patch size to tuple
             patch_size = (patch_size, patch_size, patch_size)
@@ -142,7 +142,7 @@ class ViTDecoder3d(nn.Module):
         self.shape = shape
         self.scale = scale
         self.patch_size = patch_size
-        self.patch_size_ratio = shape_patch_ratio
+        self.ratio_shape_patch = ratio_shape_patch
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -189,7 +189,7 @@ class ViTDecoder3d(nn.Module):
 class ViT3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels,
-        shape=(64, 64, 64), scale=1, patch_size=None, shape_patch_ratio=16,
+        shape=(64, 64, 64), scale=1, patch_size=None, ratio_shape_patch=8,
         n_features=128, n_heads=4, n_layers=16,
     ):
         super(ViT3d, self).__init__()
@@ -200,7 +200,7 @@ class ViT3d(nn.Module):
         self.shape = shape
         self.scale = scale
         self.patch_size = patch_size
-        self.patch_size_ratio = shape_patch_ratio
+        self.patch_size_ratio = ratio_shape_patch
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -208,12 +208,12 @@ class ViT3d(nn.Module):
         # Create encoder and decoder
         self.encoder = ViTEncoder3d(
             in_channels=in_channels,
-            shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
+            shape=shape, scale=scale, patch_size=patch_size, ratio_shape_patch=ratio_shape_patch,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
         self.decoder = ViTDecoder3d(
             out_channels=out_channels,
-            shape=shape, scale=scale, patch_size=patch_size, shape_patch_ratio=shape_patch_ratio,
+            shape=shape, scale=scale, patch_size=patch_size, ratio_shape_patch=ratio_shape_patch,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers//2,
         )
 
@@ -224,7 +224,7 @@ class ViT3d(nn.Module):
             'shape': self.shape,
             'scale': self.scale,
             'patch_size': self.patch_size,
-            'shape_patch_ratio': self.patch_size_ratio,
+            'ratio_shape_patch': self.patch_size_ratio,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,

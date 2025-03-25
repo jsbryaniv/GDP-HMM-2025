@@ -183,30 +183,17 @@ class DosePredictionModel(nn.Module):
         
     def format_inputs(self, scan, beam, ptvs, oars, body):
 
+        # Initialize transform params
+        transform_params = {
+            'original_shape': scan.shape[2:],
+        }
+
+        # Rescale doses
+        dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1
+        ptvs = ptvs / dose_scale
+        transform_params['dose_scale'] = dose_scale
+
         # Reshape inputs
-        transform_params=None  # Initialize to None
-        # if (self.shape is not None) and (self.shape == (256, 256, 256)) and all(s < 256 for s in scan.shape[2:]):
-        #     ### Pad to 256x256x256 ###
-        #     # Get shape info
-        #     shape_target = (256, 256, 256)
-        #     shape_origin = scan.shape[2:]
-        #     # Get pad info
-        #     padding = [shape_target[i] - shape_origin[i] for i in range(3)]
-        #     padding = [(p//2, p-p//2) for p in padding]
-        #     padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
-        #     # Pad
-        #     scan = F.pad(scan, padding, value=scan.min())
-        #     beam = F.pad(beam, padding)
-        #     ptvs = F.pad(ptvs, padding)
-        #     oars = F.pad(oars, padding)
-        #     body = F.pad(body, padding)
-        #     ### Update transform params ###
-        #     transform_params = {
-        #         'type': 'pad',
-        #         'original_shape': shape_origin,
-        #         'padding': padding,
-        #         'resize': None,
-        #     }
         if self.shape is not None:
             ### Resize to shape ###
             scan, resize_params = resize_image_3d(scan, self.shape, fill_value=scan.min())
@@ -215,12 +202,8 @@ class DosePredictionModel(nn.Module):
             oars, _ = resize_image_3d(oars, self.shape)
             body, _ = resize_image_3d(body, self.shape)
             ### Update transform params ###
-            transform_params = {
-                'type': 'resize',
-                'original_shape': None,
-                'padding': None,
-                'resize': resize_params,
-            }
+            transform_params['type'] = 'resize'
+            transform_params['resize'] = resize_params
 
         # Check architecture
         if self.architecture.lower() in ["test", "unet", "vit", "moeunet", "moevit"]:
@@ -262,32 +245,17 @@ class DosePredictionModel(nn.Module):
         
         # Reshape prediction
         if self.shape is not None:
-            ### Extract transform params ###
-            transform_type = transform_params['type']
-            original_shape = transform_params['original_shape']
-            padding = transform_params['padding']
             resize_params = transform_params['resize']
-            if transform_type == 'pad':
-                ### Unpad to original shape ###
-                x = x[
-                    :, :, 
-                    padding[4]:256-padding[5],
-                    padding[2]:256-padding[3],
-                    padding[0]:256-padding[1],
-                ]
-            elif transform_type == 'resize':
-                ### Resize to padded shape ###
-                x = reverse_resize_3d(x, resize_params)
+            x = reverse_resize_3d(x, resize_params)
+
+        # Rescale prediction
+        dose_scale = transform_params['dose_scale']
+        x = x * dose_scale
 
         # Return prediction
         return x
         
     def forward(self, scan, beam, ptvs, oars, body):
-
-        # Rescale ptvs
-        ptvs_scale = ptvs.max()
-        if ptvs_scale > 0:
-            ptvs = ptvs / ptvs_scale
         
         # Format inputs
         inputs, transform_params = self.format_inputs(scan, beam, ptvs, oars, body)
@@ -297,9 +265,6 @@ class DosePredictionModel(nn.Module):
 
         # Format outputs
         pred = self.format_outputs(pred, transform_params)
-
-        # Rescale prediction
-        pred = pred * ptvs_scale
 
         # Return prediction
         return pred
@@ -321,18 +286,19 @@ class DosePredictionModel(nn.Module):
         prior /= n_parameters
 
         # Get prediction
-        inputs, transform_params = self.format_inputs(scan, beam, ptvs, oars, body)
-        pred = self.model(*inputs)
-        pred = self.format_outputs(pred, transform_params)
+        pred = self(scan, beam, ptvs, oars, body)
 
         # Compute likelihood
         likelihood = F.mse_loss(pred, dose)
 
         # Add diffusion loss
         if self.architecture.lower() in ["diffunet", "diffvit"]:
-            dose_for_diff = resize_image_3d(dose, self.shape)[0]                             # Resize dose
-            dose_for_diff = dose_for_diff / ptvs.max() if ptvs.max() > 0 else dose_for_diff  # Rescale dose
-            likelihood += self.model.calculate_diffusion_loss(dose_for_diff, *inputs)
+            inputs = self.format_inputs(scan, beam, ptvs, oars, body)[0]             # Format inputs
+            dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1                  # Get dose scale
+            dose_for_diff = resize_image_3d(dose, self.shape)[0]                     # Resize dose
+            dose_for_diff = dose_for_diff / dose_scale                               # Rescale dose
+            loss_diff = self.model.calculate_diffusion_loss(dose_for_diff, *inputs)  # Calculate diffusion loss
+            likelihood += dose_scale * loss_diff                                     # Add diffusion loss (scaled by dose)
 
         # Compute competition loss
         loss_competition = competition_loss(pred, dose, body)

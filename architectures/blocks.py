@@ -41,6 +41,10 @@ class FiLM(nn.Module):
             nn.Linear(expansion*n_features, 2*n_features),
         )
 
+        # Initialize final weights to zero
+        nn.init.zeros_(self.scale_shift[-1].weight)
+        nn.init.zeros_(self.scale_shift[-1].bias)
+
     def forward(self, x, t):
 
         # Get modulation parameters
@@ -68,6 +72,10 @@ class FiLM3d(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv3d(expansion*n_features, 2*n_features, kernel_size=1, groups=expansion),
         )
+
+        # Initialize final weights to zero
+        nn.init.zeros_(self.scale_shift[-1].weight)
+        nn.init.zeros_(self.scale_shift[-1].bias)
 
     def forward(self, x, t):
 

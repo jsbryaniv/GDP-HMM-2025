@@ -18,7 +18,7 @@ class CrossViT3d(nn.Module):
     """Cross attention vistion transformer model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        shape=128, scale=1, shape_patch_ratio=16, n_features=16, n_heads=4, 
+        shape=128, scale=1, ratio_shape_patch=8, n_features=16, n_heads=4, 
         n_layers=8, n_layers_mixing=8,
     ):
         super(CrossViT3d, self).__init__()
@@ -29,7 +29,7 @@ class CrossViT3d(nn.Module):
         self.n_cross_channels_list = n_cross_channels_list
         self.shape = shape
         self.scale = scale
-        self.shape_patch_ratio = shape_patch_ratio
+        self.ratio_shape_patch = ratio_shape_patch
         self.n_features = n_features
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -38,7 +38,7 @@ class CrossViT3d(nn.Module):
         # Create main autoencoder
         self.autoencoder = ViT3d(
             in_channels, out_channels,
-            shape=shape, scale=scale, shape_patch_ratio=shape_patch_ratio,
+            shape=shape, scale=scale, ratio_shape_patch=ratio_shape_patch,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers,
         )
 
@@ -48,7 +48,7 @@ class CrossViT3d(nn.Module):
             self.context_encoders.append(
                 ViTEncoder3d(
                     n_channels,
-                    shape=shape, scale=scale, shape_patch_ratio=shape_patch_ratio,
+                    shape=shape, scale=scale, ratio_shape_patch=ratio_shape_patch,
                     n_features=n_features, n_heads=n_heads, n_layers=n_layers,
                 )
             )
@@ -71,7 +71,7 @@ class CrossViT3d(nn.Module):
             'n_cross_channels_list': self.n_cross_channels_list,
             'shape': self.shape,
             'scale': self.scale,
-            'shape_patch_ratio': self.shape_patch_ratio,
+            'ratio_shape_patch': self.ratio_shape_patch,
             'n_features': self.n_features,
             'n_heads': self.n_heads,
             'n_layers': self.n_layers,

@@ -282,10 +282,14 @@ if __name__ == "__main__":
     )
 
     # Loop over dataset
+    outputs = []
     for i in range(len(dataset)):
-        print(f'--{i}/{len(dataset)}')
         scan, beam, ptvs, oars, body, dose = dataset[i]
-        print(scan.shape)
+        print([scan, beam])
+        outputs.append([scan, beam])
+
+    # Done
+    print("Done")
 
     # # Initialize lists
     # shapes_val = []
@@ -373,9 +377,6 @@ if __name__ == "__main__":
     # # Get fraction of VMAT in training set
     # isVMAT_train_frac = sum(isVMAT_train) / len(isVMAT_train)
     # print('Fraction of VMAT in training set:', isVMAT_train_frac)  # 0.4278762599930483
-
-    # Done
-    print("Done")
 
 
 
