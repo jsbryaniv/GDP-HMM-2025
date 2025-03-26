@@ -124,19 +124,6 @@ class MOEWrapper3d(nn.Module):
         if self.use_checkpoint:
             """Checkpointing is enabled."""
 
-            # # Initialize dummy variable
-            # device = next(self.parameters()).device
-            # dummy = torch.tensor(0.0, requires_grad=True).to(device)
-
-            # # Get gating weights
-            # weights = checkpoint(lambda *args: self.gating(*args[1:]), dummy, inputs[0])
-
-            # # Get expert outputs
-            # x = torch.stack(
-            #     [checkpoint(lambda *args: expert(*args[1:]), dummy, *inputs) for expert in self.experts],
-            #     dim=1
-            # )
-
             # Turn on requires_grad for inputs
             inputs = [tensor.requires_grad_() for tensor in inputs]
 

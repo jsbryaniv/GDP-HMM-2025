@@ -20,7 +20,7 @@ from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=5, 
+        n_features=8, n_blocks=5, 
         n_layers_per_block=2, n_mixing_blocks=2,
         scale=2, n_steps=16, eta=.1,
         use_checkpoint=True,
@@ -41,9 +41,7 @@ class DiffUnet3d(nn.Module):
 
         # Get constants
         n_context = len(n_cross_channels_list)
-        n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
         self.n_context = n_context
-        self.n_features_per_depth = n_features_per_depth
 
         # Get noise schedule
         a_max = .9
@@ -53,17 +51,12 @@ class DiffUnet3d(nn.Module):
         self.alpha = alpha
         self.register_buffer('alpha_cumprod', alpha_cumprod)
 
-        # Define time embedding layers
-        self.time_embedding_blocks = nn.ModuleList()
-        for f in n_features_per_depth:
-            self.time_embedding_blocks.append(FiLM3d(f))
-
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
+            ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
             *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
         )
@@ -74,7 +67,7 @@ class DiffUnet3d(nn.Module):
                     # Merge input channels to n_features
                     nn.Conv3d(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
+                    ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
                     # Additional convolutional layers
                     *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
                 )
@@ -85,7 +78,7 @@ class DiffUnet3d(nn.Module):
             # Convolutional layers
             *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, groups=n_features, scale=scale),
+            ConvBlock3d(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Merge features to output channels
             nn.Conv3d(n_features, in_channels, kernel_size=1),
         )
@@ -110,6 +103,9 @@ class DiffUnet3d(nn.Module):
                 )
             )
 
+        # Get features per depth
+        n_features_per_depth = self.autoencoder.n_features_per_depth
+
         # Create cross attention blocks
         self.cross_attn_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
@@ -119,6 +115,11 @@ class DiffUnet3d(nn.Module):
                     n_layers=n_mixing_blocks,
                 )
             )
+
+        # Define time embedding layers
+        self.time_embedding_blocks = nn.ModuleList()
+        for f in n_features_per_depth:
+            self.time_embedding_blocks.append(FiLM3d(f))
 
         # Initialize weights
         self._init_weights()
@@ -154,6 +155,27 @@ class DiffUnet3d(nn.Module):
             'use_checkpoint': self.use_checkpoint,
         }
     
+    def encode_context(self, *context):
+        if self.use_checkpoint:
+            context = [c.requires_grad_() for c in context]
+            return checkpoint(self._encode_context, *context, use_reentrant=False)
+        else:
+            return self._encode_context(*context)
+        
+    def _encode_context(self, *context):
+        
+        # Input blocks
+        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
+        
+        # Encode features
+        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
+
+        # Sum features at each block
+        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+
+        # Return
+        return latent_context, feats_context
+    
     def step(self, t, x, feats_context):
         if self.use_checkpoint:
             x = x.requires_grad_()
@@ -165,6 +187,18 @@ class DiffUnet3d(nn.Module):
     
     def _step(self, t, x, *feats_context):
         
+        # # Encode x
+        # feats = self.autoencoder.encoder(x)
+
+        # # Add time embedding
+        # feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
+
+        # # Apply context
+        # feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
+
+        # # Decode features
+        # noise_pred = self.autoencoder.decoder(feats)
+
         # Encode x
         feats = self.autoencoder.encoder(x)
 
@@ -172,22 +206,33 @@ class DiffUnet3d(nn.Module):
         feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
 
         # Apply context
-        feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
+        depth = self.n_blocks
+        fcon = feats_context[-1]
+        x = feats.pop()
+        x = self.cross_attn_blocks[depth](x, fcon)
 
-        # Decode features
-        noise_pred = self.autoencoder.decoder(feats)
+        # Upsample blocks
+        for i in range(self.n_blocks):
+            depth = self.n_blocks - 1 - i
+            # Upsample
+            x = self.autoencoder.decoder.up_blocks[i](x)
+            # Merge with skip
+            x_skip = feats[depth]
+            x = x + x_skip
+            # Apply cross attention
+            fcon = feats_context[depth]
+            x = self.cross_attn_blocks[depth](x, fcon)
+
+        # Output block
+        noise_pred = self.autoencoder.decoder.output_block(x)
         
         # Return noise prediction
         return noise_pred
     
     def forward(self, *context):
 
-        # Input blocks
-        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
-        
-        # Encode features
-        feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
-        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+        # Encode context
+        latent_context, feats_context = self.encode_context(*context)
 
         # Initialize x
         x = torch.randn_like(latent_context[0], device=context[0].device)

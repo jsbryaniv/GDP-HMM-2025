@@ -19,7 +19,7 @@ class CrossUnetModel(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         n_features=16, n_blocks=5, n_layers_per_block=4,
-        n_attn_repeats=2, attn_kernel_size=5,
+        n_attn_repeats=4, attn_kernel_size=5,
         scale=2,
     ):
         super(CrossUnetModel, self).__init__()
@@ -37,13 +37,10 @@ class CrossUnetModel(nn.Module):
 
         # Get constants
         n_context = len(n_cross_channels_list)
-        n_features_per_depth = [n_features * (i+1) for i in range(n_blocks+1)]
         self.n_context = n_context
-        self.n_features_per_depth = n_features_per_depth
 
 
         ### AUTOENCODERS ###
-
         # Create main autoencoder
         self.autoencoder = Unet3d(
             in_channels, out_channels, 
@@ -64,6 +61,9 @@ class CrossUnetModel(nn.Module):
                 )
             )
 
+        # Get features per depth
+        n_features_per_depth = self.autoencoder.n_features_per_depth
+
         # Create cross attention blocks
         self.cross_attn_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
@@ -71,7 +71,6 @@ class CrossUnetModel(nn.Module):
                 ConvformerDecoder3d(
                     n_features_per_depth[depth], 
                     kernel_size=attn_kernel_size,
-                    n_heads=depth+1,
                     n_layers=n_attn_repeats,
                 )
             )

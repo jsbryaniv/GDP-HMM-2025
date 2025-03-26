@@ -25,12 +25,15 @@ class UnetEncoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
 
+        # Get number of features per depth
+        self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
             nn.Conv3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, groups=n_features, scale=1/scale),
+            ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
             *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
         )
@@ -38,14 +41,15 @@ class UnetEncoder3d(nn.Module):
         # Define downsample blocks
         self.down_blocks = nn.ModuleList()
         for depth in range(n_blocks):
-            n_in = (depth+1) * n_features
-            n_out = (depth+2) * n_features
+            n_in = self.n_features_per_depth[depth]
+            n_out = self.n_features_per_depth[depth+1]
+            dropout = min(.3, .1*depth)
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
                     ConvBlock3d(n_in, n_out, groups=n_features, scale=1/2),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock3d(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )
             )
         
@@ -66,6 +70,7 @@ class UnetEncoder3d(nn.Module):
         # Return the features
         return feats
 
+
 # Define Unet decoder
 class UnetDecoder3d(nn.Module):
     def __init__(self, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
@@ -78,18 +83,22 @@ class UnetDecoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
 
+        # Get number of features per depth
+        self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
         for i in range(n_blocks):
             depth = self.n_blocks - 1 - i
-            n_in = (depth+2) * n_features
-            n_out = (depth+1) * n_features
+            n_in = self.n_features_per_depth[depth+1]
+            n_out = self.n_features_per_depth[depth]
+            dropout = min(.3, .1*depth)
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    ConvBlock3d(n_in, n_out, scale=2, groups=n_features),
+                    ConvBlock3d(n_in, n_out, groups=n_features, scale=2),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features) for _ in range(n_layers_per_block - 1)]
+                    *[ConvBlock3d(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
@@ -98,7 +107,7 @@ class UnetDecoder3d(nn.Module):
             # Convolutional layers
             *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, groups=n_features, scale=scale),
+            ConvBlock3d(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Merge features to output channels
             nn.Conv3d(n_features, out_channels, kernel_size=1),
         )
@@ -121,6 +130,7 @@ class UnetDecoder3d(nn.Module):
 
         # Return the output
         return x
+
 
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
@@ -152,6 +162,9 @@ class Unet3d(nn.Module):
             n_layers_per_block=n_layers_per_block,
             scale=scale,
         )
+
+        # Get attributes from encoder and decoder
+        self.n_features_per_depth = self.encoder.n_features_per_depth
 
     def get_config(self):
         return {
