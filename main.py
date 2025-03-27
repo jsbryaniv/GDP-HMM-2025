@@ -132,11 +132,11 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # ('unet',           {'batch_size': 2, 'shape': 128}),
-        # ('crossunet',      {'batch_size': 2, 'shape': 128}),
-        # ('crossunetlight', {'batch_size': 2, 'shape': 128}),
-        # ('diffunet',       {'batch_size': 2, 'shape': 128}),
-        # ('diffunetlight',  {'batch_size': 2, 'shape': 128}),
+        ('unet',           {'batch_size': 2, 'shape': 128}),
+        ('crossunet',      {'batch_size': 2, 'shape': 128}),
+        ('crossunetlight', {'batch_size': 2, 'shape': 128}),
+        ('diffunet',       {'batch_size': 2, 'shape': 128}),
+        ('diffunetlight',  {'batch_size': 2, 'shape': 128}),
         ('diffunet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_blocks': 6}),
         ('diffunetlight',  {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_blocks': 6}),
     ]
