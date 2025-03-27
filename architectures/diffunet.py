@@ -266,7 +266,7 @@ class DiffUnet3d(nn.Module):
         # Return
         return x
     
-    def calculate_diffusion_loss(self, target, *context, n_samples=4):
+    def calculate_diffusion_loss(self, target, *context, n_samples=2):
 
         # Input blocks
         latent_target = self.input_block(target)

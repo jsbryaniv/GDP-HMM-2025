@@ -48,12 +48,16 @@ def plot_model_results(
             break
 
         # Send to device
-        scan = scan.to(device)
-        beam = beam.to(device)
-        ptvs = ptvs.to(device)
-        oars = oars.to(device)
-        body = body.to(device)
-        dose = dose.to(device)
+        # scan = scan.to(device)
+        # beam = beam.to(device)
+        # ptvs = ptvs.to(device)
+        # oars = oars.to(device)
+        # body = body.to(device)
+        # dose = dose.to(device)
+        scan, beam, ptvs, oars, body, dose = [
+            x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
+        ]
+
 
         # Forward pass
         with torch.no_grad():
@@ -198,12 +202,11 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',          {'batch_size': 2, 'shape': 128}),
-        ('crossunet',     {'batch_size': 2, 'shape': 128}),
-        ('diffunet',      {'batch_size': 2, 'shape': 128}),
-        ('diffunetlight', {'batch_size': 2, 'shape': 128}),
-        ('diffvit',       {'batch_size': 2, 'shape': 128}),
-        ('diffvitlight',  {'batch_size': 2, 'shape': 128}),
+        ('unet',           {'batch_size': 2, 'shape': 128}),
+        ('crossunet',      {'batch_size': 2, 'shape': 128}),
+        ('crossunetlight', {'batch_size': 2, 'shape': 128}),
+        ('diffunet',       {'batch_size': 2, 'shape': 128}),
+        ('diffunetlight',  {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

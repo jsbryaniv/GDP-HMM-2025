@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 
 # Import local
 from config import *
-MACHINE
+from utils import augment_data_3d
 
 # Define global variables
 BAD_FILES = [
@@ -67,13 +67,14 @@ All_OAR_DICT = {key: i for i, key in enumerate(All_OAR_LIST)}
 
 # Create dataset class
 class GDPDataset(Dataset):
-    def __init__(self, treatment, validation_set=False):
+    def __init__(self, treatment, validation_set=False, augment=True):
         super(GDPDataset, self).__init__()
-        # Max shape of dataset in each dimension: (138, 148, 229)
 
-        # Get treatment
+        # Check inputs
+        if validation_set:
+            augment = False  # Turn off augmentation for validation set
         if treatment is None:
-            treatment = 'All'
+            treatment = 'All'  # Get treatment
         
         # Load dose dictionary
         dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
@@ -107,6 +108,10 @@ class GDPDataset(Dataset):
         self.scan_min = scan_min                # Lower bound for HU values
         self.scan_max = scan_max                # Upper bound for HU values
         self.scan_norm = scan_norm              # Denominator for normalizing HU values
+        self.augment = augment                  # Augmentation flag
+
+        # Set up augmentor
+        self.augmentor = augment_data_3d if augment else None
 
         # Get list of files
         path_train_or_val = 'valid_nodose' if validation_set else 'train'
@@ -127,7 +132,8 @@ class GDPDataset(Dataset):
     def get_config(self):
         return {
             'treatment': self.treatment,
-            'validation_set': self.validation_set
+            'validation_set': self.validation_set,
+            'augment': self.augment,
         }
 
     def __len__(self):
@@ -207,6 +213,13 @@ class GDPDataset(Dataset):
         else:
             dose = torch.tensor(dose, dtype=torch.float32)
 
+        # Augment data
+        if self.augment:
+            scan, beam, ptvs, oars, body, dose = self.augmentor(
+                scan, beam, ptvs, oars, body, 
+                targets=dose,
+            )
+
         # Return data
         return scan, beam, ptvs, oars, body, dose
 
@@ -285,8 +298,19 @@ if __name__ == "__main__":
     outputs = []
     for i in range(len(dataset)):
         scan, beam, ptvs, oars, body, dose = dataset[i]
-        print([scan, beam])
-        outputs.append([scan, beam])
+        
+        # Plot
+        fig, ax = plt.subplots(1, 6)
+        plt.ion()
+        plt.show()
+        d_slice = scan.shape[1] // 2
+        for i, x in enumerate([scan, beam, ptvs, oars, body, dose]):
+            ax[i].imshow(x[0, d_slice], cmap='gray')
+            ax[i].axis('off')
+        plt.tight_layout()
+        plt.pause(0.1)
+        plt.savefig('_image.png')
+        plt.close()
 
     # Done
     print("Done")

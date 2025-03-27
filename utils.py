@@ -71,7 +71,7 @@ def get_dvh(dose, structures, bins=100, max_dose=None):
     return dvh_val, dvh_bin
 
 
-### RESHAPING DATA ###
+### DATA MANIPULATION ###
 
 # Define function to resize 3D image
 def resize_image_3d(image, target_shape, fill_value=0):
@@ -169,8 +169,104 @@ def reverse_resize_3d(image, transform_params):
     # Return output
     return restored_image
 
+# Data augmentor
+def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=False):
+    """
+    Apply the same augmentation to all inputs and targets. Avoid noise and block mask for targets.
+    """
 
-### DATA AND MODEL SAVING AND LOADING ###
+    # Convert inputs to list
+    inputs = list(inputs)
+    if targets is None:
+        targets = []
+    elif isinstance(targets, torch.Tensor):
+        targets = [targets]
+
+    # Get constants
+    device = inputs[0].device
+    D, H, W = inputs[0].shape[-3:]
+
+    # Affine transformation
+    if affine:
+        """Apply the same affine transformation to all inputs and targets."""
+
+        # Sample angles, scales, and translations
+        rot_max = 10 * 3.1415 / 180
+        scale_max = 0.1
+        shift_max = 0.05
+        angles = (2 * torch.rand(3, device=device) - 1) * rot_max        # xyz angles
+        scales = (2 * torch.rand(3, device=device) - 1) * scale_max + 1  # xyz scales
+        shifts = (2 * torch.rand(3, device=device) - 1) * shift_max      # xyz shifts
+
+        # Rotation matrices (Rx, Ry, Rz)
+        cx, cy, cz = torch.cos(angles)
+        sx, sy, sz = torch.sin(angles)
+        Rx = torch.tensor([
+            [1, 0, 0],
+            [0, cx, -sx],
+            [0, sx,  cx]
+        ], device=device)
+        Ry = torch.tensor([
+            [cy, 0, sy],
+            [0,  1, 0],
+            [-sy,0, cy]
+        ], device=device)
+        Rz = torch.tensor([
+            [cz, -sz, 0],
+            [sz,  cz, 0],
+            [0,   0,  1]
+        ], device=device)
+        R = torch.matmul(torch.matmul(Rz, Ry), Rx)
+
+        # Scale matrix
+        S = torch.diag(scales)
+
+        # Full affine transformation matrix and grid
+        theta = torch.eye(3, 4, device=device)
+        theta[:, :3] = torch.matmul(R, S)
+        theta[:, 3] = shifts
+        grid = F.affine_grid(theta.unsqueeze(0), size=(1, 1, D, H, W), align_corners=False)
+
+        # Create warp function
+        def warp(x):
+            # Add batch dimension
+            x = x.unsqueeze(0)
+            # Check if input dtype
+            if x.dtype in [torch.float32, torch.float64]:
+                # Apply bilinear interpolation for floats
+                x = F.grid_sample(x, grid, mode='bilinear', align_corners=False)
+            else:
+                # Apply nearest-neighbor interpolation for bools
+                x = F.grid_sample(x.float(), grid, mode='nearest', align_corners=False).to(x.dtype)
+            # Remove batch dimension
+            x = x.squeeze(0)
+            # Return warped tensor
+            return x 
+        
+        # Apply affine transformation to all inputs and targets
+        inputs = [warp(x) for x in inputs]
+        targets = [warp(x) for x in targets]
+
+    # Noise
+    if noise:
+        """Apply different noise to each input."""
+        inputs = [
+            x + torch.randn_like(x, device=device) * 0.1 * x.std()  # Add noise to tensor
+            if x.dtype in [torch.float32, torch.float64] else x     # if tensor is float
+            for x in inputs                                         # for each input
+        ]
+
+    # Block mask
+    if block_mask:
+        """Apply the same block mask to all inputs."""
+        mask = torch.ones_like(inputs[0], device=device)       # Initialize mask
+        mask = block_mask_3d(mask, block_size=8, p=0.2)        # Apply random block masking
+        inputs = [(x * mask).astype(x.dtype) for x in inputs]  # Apply mask to inputs
+
+    # Return augmented data
+    return inputs + targets
+
+### SAVING AND LOADING ###
 
 # Get savename function
 def get_savename(dataID, modelID, **kwargs):

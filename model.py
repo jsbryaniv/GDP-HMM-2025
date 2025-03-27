@@ -283,7 +283,7 @@ class DosePredictionModel(nn.Module):
                 prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
             else:
                 prior += param.pow(2).sum()
-        prior /= n_parameters
+        prior = prior * max(1/n_parameters, 1e-6)
 
         # Get prediction
         pred = self(scan, beam, ptvs, oars, body)

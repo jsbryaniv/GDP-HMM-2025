@@ -6,6 +6,7 @@ import time
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 
 # Import local
 from config import *
@@ -45,6 +46,10 @@ def train_model(
     # Set up optimizer
     if optimizer is None:
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Set up autocast and scaler for mixed precision training
+    use_amp = device.type == 'cuda' and torch.cuda.is_available()
+    scaler = torch.amp.GradScaler(device, enabled=use_amp)
 
     # Set up training statistics
     if model_state_dict_best is None:
@@ -87,21 +92,36 @@ def train_model(
                 print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)} {jobname}')
 
             # Send to device
-            scan = scan.to(device)
-            beam = beam.to(device)
-            ptvs = ptvs.to(device)
-            oars = oars.to(device)
-            body = body.to(device)
-            dose = dose.to(device)
+            # scan = scan.to(device)
+            # beam = beam.to(device)
+            # ptvs = ptvs.to(device)
+            # oars = oars.to(device)
+            # body = body.to(device)
+            # dose = dose.to(device)
+            scan, beam, ptvs, oars, body, dose = [
+                x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
+            ]
+
+            # # Get loss
+            # loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+
+            # # Backward pass and optimization
+            # optimizer.zero_grad()
+            # loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
+            # optimizer.step()
 
             # Get loss
-            loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+            optimizer.zero_grad()
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Backward pass and optimization
             optimizer.zero_grad()
-            loss.backward()
+            scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
 
             # Update average loss
             loss_train_avg += loss.item() / len(loader_train)
@@ -139,12 +159,16 @@ def train_model(
                     break
 
             # Send to device
-            scan = scan.to(device)
-            beam = beam.to(device)
-            ptvs = ptvs.to(device)
-            oars = oars.to(device)
-            body = body.to(device)
-            dose = dose.to(device)
+            # scan = scan.to(device)
+            # beam = beam.to(device)
+            # ptvs = ptvs.to(device)
+            # oars = oars.to(device)
+            # body = body.to(device)
+            # dose = dose.to(device)
+            scan, beam, ptvs, oars, body, dose = [
+                x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
+            ]
+
 
             # Get loss
             with torch.no_grad():
