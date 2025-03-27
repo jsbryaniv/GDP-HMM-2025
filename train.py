@@ -102,26 +102,26 @@ def train_model(
                 x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
             ]
 
-            # # Get loss
-            # loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
-
-            # # Backward pass and optimization
-            # optimizer.zero_grad()
-            # loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            # optimizer.step()
-
             # Get loss
-            optimizer.zero_grad()
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
-                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+            loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Backward pass and optimization
             optimizer.zero_grad()
-            scaler.scale(loss).backward()
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
+
+            # # Get loss
+            # optimizer.zero_grad()
+            # with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+            #     loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+
+            # # Backward pass and optimization
+            # optimizer.zero_grad()
+            # scaler.scale(loss).backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
+            # scaler.step(optimizer)
+            # scaler.update()
 
             # Update average loss
             loss_train_avg += loss.item() / len(loader_train)
