@@ -92,36 +92,30 @@ def train_model(
                 print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)} {jobname}')
 
             # Send to device
-            # scan = scan.to(device)
-            # beam = beam.to(device)
-            # ptvs = ptvs.to(device)
-            # oars = oars.to(device)
-            # body = body.to(device)
-            # dose = dose.to(device)
             scan, beam, ptvs, oars, body, dose = [
                 x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
             ]
 
-            # Get loss
-            loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
-
-            # Backward pass and optimization
+            # Zero gradients
             optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            optimizer.step()
 
             # # Get loss
-            # optimizer.zero_grad()
-            # with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
-            #     loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+            # loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # # Backward pass and optimization
-            # optimizer.zero_grad()
-            # scaler.scale(loss).backward()
+            # loss.backward()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            # scaler.step(optimizer)
-            # scaler.update()
+            # optimizer.step()
+
+            # Get loss
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+
+            # Backward pass and optimization
+            scaler.scale(loss).backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
+            scaler.step(optimizer)
+            scaler.update()
 
             # Update average loss
             loss_train_avg += loss.item() / len(loader_train)
@@ -159,16 +153,9 @@ def train_model(
                     break
 
             # Send to device
-            # scan = scan.to(device)
-            # beam = beam.to(device)
-            # ptvs = ptvs.to(device)
-            # oars = oars.to(device)
-            # body = body.to(device)
-            # dose = dose.to(device)
             scan, beam, ptvs, oars, body, dose = [
                 x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
             ]
-
 
             # Get loss
             with torch.no_grad():

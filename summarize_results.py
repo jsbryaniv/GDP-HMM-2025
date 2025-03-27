@@ -48,12 +48,6 @@ def plot_model_results(
             break
 
         # Send to device
-        # scan = scan.to(device)
-        # beam = beam.to(device)
-        # ptvs = ptvs.to(device)
-        # oars = oars.to(device)
-        # body = body.to(device)
-        # dose = dose.to(device)
         scan, beam, ptvs, oars, body, dose = [
             x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
         ]
