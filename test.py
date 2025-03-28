@@ -49,7 +49,6 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
             x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
         ]
 
-
         # Forward pass
         pred = model(scan, beam, ptvs, oars, body)
         pred = pred.squeeze().cpu().numpy()

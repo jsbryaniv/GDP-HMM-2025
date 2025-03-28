@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
         # Debug main function
         for ID in range(len(all_jobs)):
-            for ITER in [0, 1]:
+            for ITER in [1]:  # [0, 1]:  # DEBUG add back 0
                 job_args = copy.deepcopy(all_jobs[ID])
                 if 'shape' in job_args:  # Make shape smaller for debugging
                     job_args['shape'] = job_args['shape'] // 2

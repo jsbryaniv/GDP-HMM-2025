@@ -19,6 +19,23 @@ from config import *
 
 ### CUSTOM FUNCTIONS ###
 
+# D97 normalization function
+def norm_d97(dose, ptvs):
+
+    # Get PTV high dose and mask
+    dose_ptvhigh = ptvs.max()
+    dose_ptvhigh_mask = (ptvs == dose_ptvhigh).any(axis=-4, keepdims=True)
+
+    # Normalize using D97 of PTV_High
+    norm_scale = dose_ptvhigh / (np.percentile(dose[dose_ptvhigh_mask], 3) + 1e-5)
+    dose = dose * norm_scale
+
+    # Clip dose to 0 and 1.2 * PTV_High
+    dose = np.clip(dose, 0, dose_ptvhigh * 1.2)
+
+    # Return normalized dose
+    return dose
+
 # Randomly mask 3D volume
 def block_mask_3d(volume, block_size=8, p=0.2):
     B, C, D, H, W = volume.shape
@@ -292,16 +309,26 @@ def initialize_datasets(dataID, validation_set=False):
     # Import dataset
     from dataset import GDPDataset
 
-    # Create dataset
-    dataset = GDPDataset(treatment=dataID, validation_set=validation_set)
+    # Get number of samples
+    n_samples = len(GDPDataset(treatment=dataID, validation_set=validation_set))
 
-    # Split into train, validation, and test sets
-    test_size = int(0.2 * len(dataset))
-    dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
-        dataset,
-        [test_size, test_size, len(dataset) - 2*test_size],
-        generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
-    )
+    # Get indices for split
+    test_size = int(0.2 * n_samples)
+    indices = torch.randperm(n_samples, generator=torch.Generator().manual_seed(42))
+    indices_test = indices[:test_size]
+    indices_val  = indices[test_size:2*test_size]
+    indices_train = indices[2*test_size:]
+
+    # Create subsets
+    dataset_train = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_train)
+    dataset_val = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_val)
+    dataset_test = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_test)
+
+    # dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
+    #     dataset,
+    #     [test_size, test_size, len(dataset) - 2*test_size],
+    #     generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
+    # )
 
     # Return dataset
     return dataset_val, dataset_test, dataset_train
@@ -348,10 +375,9 @@ def load_checkpoint(checkpoint_path, load_best=False):
     from dataset import GDPDataset
     data_config = checkpoint['data_config']
     data_indices = checkpoint['data_indices']
-    dataset = GDPDataset(**data_config)
-    dataset_train = Subset(dataset, data_indices['train'])
-    dataset_val = Subset(dataset, data_indices['val'])
-    dataset_test = Subset(dataset, data_indices['test'])
+    dataset_train = Subset(GDPDataset(**{**data_config, 'augment': True}), data_indices['train'])
+    dataset_val = Subset(GDPDataset(**{**data_config, 'augment': True}), data_indices['val'])
+    dataset_test = Subset(GDPDataset(**{**data_config, 'augment': False}), data_indices['test'])
     datasets = (dataset_train, dataset_val, dataset_test)
 
     # Load optimizer

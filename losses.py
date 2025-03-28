@@ -102,4 +102,3 @@ def dvh_loss(pred_dose, target_dose, structures, max_dose=None, bins=100):
     return loss
 
 
-

@@ -15,7 +15,12 @@ from architectures.blocks import ConvBlock3d
 
 # Define Unet encoder
 class UnetEncoder3d(nn.Module):
-    def __init__(self, in_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, 
+        in_channels, n_features=16, 
+        n_blocks=5, n_layers_per_block=4,
+        scale=1, use_dropout=True,
+        conv_block=None,
+    ):
         super(UnetEncoder3d, self).__init__()
         
         # Set attributes
@@ -24,18 +29,23 @@ class UnetEncoder3d(nn.Module):
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
+        self.use_dropout = use_dropout
 
         # Get number of features per depth
         self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
 
+        # Set up conv_block
+        if conv_block is None:
+            conv_block = ConvBlock3d
+
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            nn.Conv3d(in_channels, n_features, kernel_size=1) if in_channels != n_features else nn.Identity(),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
+            conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+            *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
         )
 
         # Define downsample blocks
@@ -43,13 +53,13 @@ class UnetEncoder3d(nn.Module):
         for depth in range(n_blocks):
             n_in = self.n_features_per_depth[depth]
             n_out = self.n_features_per_depth[depth+1]
-            dropout = min(.3, .1*depth)
+            dropout = min(.3, .1*depth) * use_dropout
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    ConvBlock3d(n_in, n_out, groups=n_features, scale=1/2),
+                    conv_block(n_in, n_out, groups=n_features, scale=1/2),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
+                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )
             )
         
@@ -73,7 +83,12 @@ class UnetEncoder3d(nn.Module):
 
 # Define Unet decoder
 class UnetDecoder3d(nn.Module):
-    def __init__(self, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, 
+        out_channels, n_features=16, 
+        n_blocks=5, n_layers_per_block=4, 
+        scale=1, use_dropout=True,
+        conv_block=None,
+    ):
         super(UnetDecoder3d, self).__init__()
         
         # Set attributes
@@ -82,9 +97,14 @@ class UnetDecoder3d(nn.Module):
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
+        self.use_dropout = use_dropout
 
         # Get number of features per depth
         self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+
+        # Set up conv_block
+        if conv_block is None:
+            conv_block = ConvBlock3d
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -92,24 +112,24 @@ class UnetDecoder3d(nn.Module):
             depth = self.n_blocks - 1 - i
             n_in = self.n_features_per_depth[depth+1]
             n_out = self.n_features_per_depth[depth]
-            dropout = min(.3, .1*depth)
+            dropout = min(.3, .1*depth) * use_dropout
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    ConvBlock3d(n_in, n_out, groups=n_features, scale=2),
+                    conv_block(n_in, n_out, groups=n_features, scale=2),
                     # Additional convolutional layers
-                    *[ConvBlock3d(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
+                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
+            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
+            conv_block(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Merge features to output channels
-            nn.Conv3d(n_features, out_channels, kernel_size=1),
+            nn.Conv3d(n_features, out_channels, kernel_size=1) if out_channels != n_features else nn.Identity(),
         )
         
     def forward(self, feats):
@@ -134,7 +154,12 @@ class UnetDecoder3d(nn.Module):
 
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
-    def __init__(self, in_channels, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4, scale=1):
+    def __init__(self, 
+        in_channels, out_channels, n_features=16, 
+        n_blocks=5, n_layers_per_block=4, 
+        scale=1, use_dropout=True,
+        conv_block=None,
+    ):
         super(Unet3d, self).__init__()
         
         # Set attributes
@@ -144,6 +169,7 @@ class Unet3d(nn.Module):
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
+        self.use_dropout = use_dropout
 
         # Define encoder
         self.encoder = UnetEncoder3d(
@@ -152,6 +178,8 @@ class Unet3d(nn.Module):
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale,
+            use_dropout=use_dropout,
+            conv_block=conv_block,
         )
 
         # Define decoder
@@ -161,6 +189,8 @@ class Unet3d(nn.Module):
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale,
+            use_dropout=use_dropout,
+            conv_block=conv_block,
         )
 
         # Get attributes from encoder and decoder
@@ -174,6 +204,7 @@ class Unet3d(nn.Module):
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
             'scale': self.scale,
+            'use_dropout': self.use_dropout,
         }
         
     def forward(self, x):

@@ -191,14 +191,14 @@ class GDPDataset(Dataset):
             dose = data_dict['dose']
             # Get dose parameters
             dose_scale = data_dict['dose_scale']
-            dose_ptvhigh_opt = self.dose_dict[PatientID]['PTV_High']['OPTName']
-            dose_ptvhigh_dose = self.dose_dict[PatientID]['PTV_High']['PDose']
-            dose_ptvhigh_mask = data_dict[dose_ptvhigh_opt].astype('bool')
+            dose_ptvhigh = self.dose_dict[PatientID]['PTV_High']['PDose']
+            dose_ptvhigh_name = self.dose_dict[PatientID]['PTV_High']['OPTName']
+            dose_ptvhigh_mask = data_dict[dose_ptvhigh_name].astype('bool')
             # Normalize using D97 of PTV_High
             dose = dose * dose_scale
-            norm_scale = dose_ptvhigh_dose / (np.percentile(dose[dose_ptvhigh_mask], 3) + 1e-5)
+            norm_scale = dose_ptvhigh / (np.percentile(dose[dose_ptvhigh_mask], 3) + 1e-5)
             dose = dose * norm_scale
-            dose = np.clip(dose, 0, dose_ptvhigh_dose * 1.2)
+            dose = np.clip(dose, 0, dose_ptvhigh * 1.2)
             # Add channel dimension
             dose = np.expand_dims(dose, axis=0)
 

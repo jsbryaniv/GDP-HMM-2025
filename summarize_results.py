@@ -41,6 +41,13 @@ def plot_model_results(
     dvh_pred_val_list = []
     dvh_pred_bin_list = []
 
+    # # TODO: DEBUG STORE diffs for batches missing context
+    # diffs_no_scan = []
+    # diffs_no_beam = []
+    # diffs_no_ptvs = []
+    # diffs_no_oars = []
+    # diffs_no_body = []
+
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
     for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_test):
@@ -52,13 +59,30 @@ def plot_model_results(
             x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
         ]
 
-
         # Forward pass
         with torch.no_grad():
             pred = model(scan, beam, ptvs, oars, body)
 
         # Ignore voxels outside body
         pred = body*pred
+
+        # # TODO: Debugging: test forward pass with no context
+        # with torch.no_grad():
+        #     pred_no_scan = model(0*scan, beam, ptvs, oars, body) * body
+        #     pred_no_beam = model(scan, 0*beam, ptvs, oars, body) * body
+        #     pred_no_ptvs = model(scan, beam, 0*ptvs, oars, body) * body
+        #     pred_no_oars = model(scan, beam, ptvs, 0*oars, body) * body
+        #     pred_no_body = model(scan, beam, ptvs, oars, 0*body) * body
+        #     diff_no_scan = (pred - pred_no_scan).abs().mean().item()
+        #     diff_no_beam = (pred - pred_no_beam).abs().mean().item()
+        #     diff_no_ptvs = (pred - pred_no_ptvs).abs().mean().item()
+        #     diff_no_oars = (pred - pred_no_oars).abs().mean().item()
+        #     diff_no_body = (pred - pred_no_body).abs().mean().item()
+        #     diffs_no_scan.append(diff_no_scan)
+        #     diffs_no_beam.append(diff_no_beam)
+        #     diffs_no_ptvs.append(diff_no_ptvs)
+        #     diffs_no_oars.append(diff_no_oars)
+        #     diffs_no_body.append(diff_no_body)
 
         # Get plot data
         slice_index = scan.shape[-3] // 2
@@ -133,6 +157,13 @@ def plot_model_results(
     # Finalize plot
     plt.tight_layout()
     plt.pause(1)
+
+    # # TODO DEBUGGING: PRINT diffs
+    # print('Diffs no scan:', sum(diffs_no_scan)/len(diffs_no_scan))
+    # print('Diffs no beam:', sum(diffs_no_beam)/len(diffs_no_beam))
+    # print('Diffs no ptvs:', sum(diffs_no_ptvs)/len(diffs_no_ptvs))
+    # print('Diffs no oars:', sum(diffs_no_oars)/len(diffs_no_oars))
+    # print('Diffs no body:', sum(diffs_no_body)/len(diffs_no_body))
     
     # Return figure
     return fig, ax
@@ -247,4 +278,46 @@ if __name__ == '__main__':
     
     # Done
     print('Done.')
+
+# model_All_unet_shape=128
+# Testing model with 8426609 parameters on cpu.
+# Diffs no scan: 0.2170286551117897
+# Diffs no beam: 3.8687278032302856
+# Diffs no ptvs: 5.266098308563232
+# Diffs no oars: 0.3077113628387451
+# Diffs no body: 3.1919901371002197
+# Diffs = [0.21, 3.87, 5.27, 0.31, 3.19]
+# model_All_crossunet_shape=128
+# Testing model with 31910993 parameters on cpu.
+# Diffs no scan: 0.13073593974113465
+# Diffs no beam: 3.9272434234619142
+# Diffs no ptvs: 5.054604005813599
+# Diffs no oars: 0.2627746343612671
+# Diffs no body: 3.3164731740951536
+# Diffs = [0.13, 3.93, 5.05, 0.26, 3.32]
+# model_All_crossunetlight_shape=128
+# Testing model with 21688305 parameters on cpu.
+# Diffs no scan: 0.13891480267047882
+# Diffs no beam: 4.135825133323669
+# Diffs no ptvs: 5.176051998138428
+# Diffs no oars: 0.28319683074951174
+# Diffs no body: 2.9308955669403076
+# Diffs = [0.14, 4.14, 5.18, 0.28, 2.93]
+# model_All_diffunet_shape=128
+# Testing model with 12495609 parameters on cpu.
+# Diffs no scan: 0.23688508272171022
+# Diffs no beam: 3.930987596511841
+# Diffs no ptvs: 5.298275136947632
+# Diffs no oars: 0.34942726194858553
+# Diffs no body: 3.8548170804977415
+# Diffs = [0.24, 3.93, 5.30, 0.35, 3.85]
+# model_All_diffunetlight_shape=128
+# Testing model with 7975433 parameters on cpu.
+# Diffs no scan: 0.21529966294765474
+# Diffs no beam: 3.705374813079834
+# Diffs no ptvs: 5.51466383934021
+# Diffs no oars: 0.29556864202022554
+# Diffs no body: 3.5580764055252074
+# Diffs = [0.22, 3.71, 5.51, 0.30, 3.56]
+
 

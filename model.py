@@ -6,13 +6,13 @@ import torch.nn.functional as F
 
 # Import custom libraries
 from losses import competition_loss, dvh_loss
-from utils import resize_image_3d, reverse_resize_3d, block_mask_3d
+from utils import resize_image_3d, reverse_resize_3d, norm_d97
 
 
 # Create dose prediction model
 class DosePredictionModel(nn.Module):
     """Dose prediction model."""
-    def __init__(self, architecture, n_channels, shape=None, **kwargs):
+    def __init__(self, architecture, n_channels, shape=None, scale_dose=False, **kwargs):
         super(DosePredictionModel, self).__init__()
 
         # Check inputs
@@ -24,6 +24,7 @@ class DosePredictionModel(nn.Module):
         self.architecture = architecture
         self.n_channels = n_channels
         self.shape = shape
+        self.scale_dose = scale_dose
         self.kwargs = kwargs
 
         # Initialize model
@@ -156,6 +157,7 @@ class DosePredictionModel(nn.Module):
             'architecture': self.architecture,
             'n_channels': self.n_channels,
             'shape': self.shape,
+            'scale_dose': self.scale_dose,
             **self.model.get_config(),
         }
     
@@ -188,10 +190,15 @@ class DosePredictionModel(nn.Module):
             'original_shape': scan.shape[2:],
         }
 
+        # If eval mode, save ptvs to transform params for d97 normalization
+        if self.training == False:
+            transform_params['ptvs'] = ptvs.clone().detach()
+
         # Rescale doses
-        dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1
-        ptvs = ptvs / dose_scale
-        transform_params['dose_scale'] = dose_scale
+        if self.scale_dose:
+            dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1
+            ptvs = ptvs / dose_scale
+            transform_params['dose_scale'] = dose_scale
 
         # Reshape inputs
         if self.shape is not None:
@@ -249,8 +256,14 @@ class DosePredictionModel(nn.Module):
             x = reverse_resize_3d(x, resize_params)
 
         # Rescale prediction
-        dose_scale = transform_params['dose_scale']
-        x = x * dose_scale
+        if self.scale_dose:
+            dose_scale = transform_params['dose_scale']
+            x = x * dose_scale
+
+        # If eval mode normalize using D97 of PTV_High
+        if self.training == False:
+            transform_params['ptvs'] = transform_params['ptvs']
+            x = norm_d97(x, ptvs)
 
         # Return prediction
         return x
@@ -283,7 +296,7 @@ class DosePredictionModel(nn.Module):
                 prior += (param + .1).pow(2).sum()  # Bias relu threholds at -0.1 to prevent dead neurons
             else:
                 prior += param.pow(2).sum()
-        prior = prior * max(1/n_parameters, 1e-6)
+        prior = prior / n_parameters
 
         # Get prediction
         pred = self(scan, beam, ptvs, oars, body)
@@ -293,12 +306,21 @@ class DosePredictionModel(nn.Module):
 
         # Add diffusion loss
         if self.architecture.lower() in ["diffunet", "diffvit"]:
-            inputs = self.format_inputs(scan, beam, ptvs, oars, body)[0]             # Format inputs
-            dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1                  # Get dose scale
-            dose_for_diff = resize_image_3d(dose, self.shape)[0]                     # Resize dose
-            dose_for_diff = dose_for_diff / dose_scale                               # Rescale dose
-            loss_diff = self.model.calculate_diffusion_loss(dose_for_diff, *inputs)  # Calculate diffusion loss
-            likelihood += dose_scale * loss_diff                                     # Add diffusion loss (scaled by dose)
+            # Format inputs
+            inputs = self.format_inputs(scan, beam, ptvs, oars, body)[0]
+            # Resize dose
+            dose_for_diff = resize_image_3d(dose, self.shape)[0]
+            # Get dose scale
+            if self.scale_dose:
+                dose_scale = ptvs.max().item() if ptvs.max() > 0 else 1
+            else:
+                dose_scale = 1
+            # Rescale dose
+            dose_for_diff = dose_for_diff / dose_scale
+            # Calculate diffusion loss
+            loss_diff = self.model.calculate_diffusion_loss(dose_for_diff, *inputs)
+            # Add diffusion loss (scaled by dose scale)
+            likelihood += dose_scale * loss_diff
 
         # Compute competition loss
         loss_competition = competition_loss(pred, dose, body)
@@ -319,6 +341,16 @@ class DosePredictionModel(nn.Module):
 
         # Check for NaN and Inf
         if torch.isnan(loss) or torch.isinf(loss):
+            print(f"Nans or Infs in Loss!!!")
+            print(f"--NaNs in Prediction: {torch.isnan(pred).sum()}")
+            print(f"--Infs in Prediction: {torch.isinf(pred).sum()}")
+            print(f"--NaNs in Dose: {torch.isnan(dose).sum()}")
+            print(f"--Infs in Dose: {torch.isinf(dose).sum()}")
+            print(f"--Loss MSE = {F.mse_loss(pred, dose)}")
+            print(f"--Loss Likelihood = {likelihood}")
+            print(f"--Loss Prior = {prior}")
+            print(f"--Loss Competition = {loss_competition}")
+            print(f"--Loss DVH = {loss_dvh}")
             raise ValueError('Loss is NaN or Inf.')
 
         # Return loss

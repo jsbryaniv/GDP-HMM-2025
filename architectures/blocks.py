@@ -10,13 +10,26 @@ from torch.utils.checkpoint import checkpoint
 ### ACTIVATION LAYERS ###
 
 # Dynamic Tanh
-class DyTanh(nn.Module): # TODO: Explicitly encode backpropagation through this layer
+class DyTanh(nn.Module):
     """Dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
     def __init__(self, n_features, init_alpha=1.0):
         super(DyTanh, self).__init__()
-        self.alpha = nn.Parameter(init_alpha)
+        self.alpha = nn.Parameter(torch.ones(n_features)*init_alpha)
         self.beta = nn.Parameter(torch.zeros(n_features))
         self.gamma = nn.Parameter(torch.ones(n_features))
+
+    def forward(self, x):
+        x = torch.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
+    
+# Dynamic Tanh 3d
+class DyTanh3d(nn.Module):
+    """Dynamic tanh activation. DyT(x) = gamma * tanh(alpha*x) + beta."""
+    def __init__(self, n_features, init_alpha=1.0):
+        super(DyTanh3d, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(n_features, 1, 1, 1)*init_alpha)
+        self.beta = nn.Parameter(torch.zeros(n_features, 1, 1, 1))
+        self.gamma = nn.Parameter(torch.ones(n_features, 1, 1, 1))
 
     def forward(self, x):
         x = torch.tanh(self.alpha * x)
@@ -49,10 +62,10 @@ class FiLM(nn.Module):
     def forward(self, x, t):
 
         # Get modulation parameters
-        scale, shift = self.scale_shift(t.view(-1, 1, 1)).chunk(2, dim=-1)
+        scale, shift = self.scale_shift(t.view(-1, 1, 1).float()).chunk(2, dim=-1)
 
         # Apply modulation
-        x = x * (1 + scale) + shift
+        x = x * (1 + torch.tanh(scale)) + shift
 
         # Return output
         return x
@@ -60,7 +73,7 @@ class FiLM(nn.Module):
 # FiLM Layer, for time embeddings in diffusion models, volume version
 class FiLM3d(nn.Module):
     """Feature-wise Linear Modulation layer for 3D volumes."""
-    def __init__(self, n_features, expansion=4):
+    def __init__(self, n_features, expansion=2):
         super(FiLM3d, self).__init__()
 
         # Set attributes
@@ -71,7 +84,7 @@ class FiLM3d(nn.Module):
         self.scale_shift = nn.Sequential(
             nn.Conv3d(1, expansion*n_features, kernel_size=1),
             nn.ReLU(inplace=True),
-            nn.Conv3d(expansion*n_features, 2*n_features, kernel_size=1, groups=expansion),
+            nn.Conv3d(expansion*n_features, 2*n_features, kernel_size=1),
         )
 
         # Initialize final weights to zero
@@ -81,10 +94,10 @@ class FiLM3d(nn.Module):
     def forward(self, x, t):
 
         # Get modulation parameters
-        scale, shift = self.scale_shift(t.view(-1, 1, 1, 1, 1)).chunk(2, dim=1)
+        scale, shift = self.scale_shift(t.view(-1, 1, 1, 1, 1).float()).chunk(2, dim=1)
 
         # Apply modulation
-        x = x * (1 + scale) + shift
+        x = x * (1 + torch.tanh(scale)) + shift
 
         # Return output
         return x
@@ -226,7 +239,9 @@ class ConvBlock3d(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
+        self.groups = groups
         self.scale = scale
+        self.dropout = dropout
 
         # Reshaping
         if scale > 1:
@@ -272,7 +287,7 @@ class ConvBlock3d(nn.Module):
         self.mixing = nn.Conv3d(out_channels, out_channels, kernel_size=1)
 
         # Define dropout
-        self.dropout = nn.Dropout3d(dropout)
+        self.drop = nn.Dropout3d(dropout)
 
     def forward(self, x):
 
@@ -284,13 +299,53 @@ class ConvBlock3d(nn.Module):
         x = self.norm(x)
         x = self.activation(x)
         x = self.mixing(x)
-        x = self.dropout(x)
+        x = self.drop(x)
 
         # Combine with residual
         x = x0 + x
 
         # Return output
         return x
+
+# ConvBlock3d with time FiLM
+class ConvBlockFiLM3d(ConvBlock3d):
+    def __init__(self, 
+        in_channels, out_channels, 
+        kernel_size=5, groups=1, scale=1, dropout=0.0,
+    ):
+        super(ConvBlockFiLM3d, self).__init__(
+            in_channels, out_channels, 
+            kernel_size=kernel_size, groups=groups, scale=scale, dropout=dropout,
+        )
+
+        # Set up FiLM layer
+        self.film = FiLM3d(out_channels)
+
+    def forward(self, inputs):
+
+        # Extract inputs
+        x, t = inputs
+
+        # Residual connection
+        x0 = self.residual(x)
+
+        # Convolutional block
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.mixing(x)
+        x = self.drop(x)
+
+        # Apply FiLM
+        x = self.film(x, t)
+
+        # Combine with residual
+        x = x0 + x
+
+        # Return output and time
+        return (x, t)
+
+
 
 
 ### TRANSFORMER BLOCKS ###
@@ -304,6 +359,7 @@ class TransformerBlock(nn.Module):
         self.n_features = n_features
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
         
         # Calculate constants
         n_features_inner = int(n_features * expansion)
@@ -346,6 +402,7 @@ class CrossTransformerBlock(nn.Module):
         self.n_features = n_features
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
         
         # Calculate constants
         n_features_inner = int(n_features * expansion)
@@ -520,13 +577,14 @@ class MultiheadConvAttn3d(nn.Module):
 
 # Define Convformer block
 class ConvformerBlock3d(nn.Module):
-    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1):
+    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1, dropout=0.2):
         super(ConvformerBlock3d, self).__init__()
 
         # Set up attributes
         self.n_features = n_features
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
         
         # Calculate constants
         n_features_inner = int(n_features * expansion)
@@ -539,6 +597,7 @@ class ConvformerBlock3d(nn.Module):
         self.mlp = nn.Sequential(
             nn.Conv3d(n_features, n_features_inner, kernel_size=1),
             nn.ReLU(inplace=True),
+            nn.Dropout3d(dropout),
             nn.Conv3d(n_features_inner, n_features, kernel_size=1),
         )
 
@@ -562,13 +621,14 @@ class ConvformerBlock3d(nn.Module):
 
 # Define convolutional cross-attention transformer block
 class ConvformerCrossBlock3d(nn.Module):
-    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1):
+    def __init__(self, n_features, kernel_size=3, n_heads=1, expansion=1, dropout=0.2):
         super(ConvformerCrossBlock3d, self).__init__()
 
         # Set up attributes
         self.n_features = n_features
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
 
         # Calculate constants
         n_features_inner = int(n_features * expansion)
@@ -582,6 +642,7 @@ class ConvformerCrossBlock3d(nn.Module):
         self.mlp = nn.Sequential(
             nn.Conv3d(n_features, n_features_inner, kernel_size=1),
             nn.ReLU(inplace=True),
+            nn.Dropout3d(dropout),
             nn.Conv3d(n_features_inner, n_features, kernel_size=1),
         )
 
@@ -617,7 +678,7 @@ class ConvformerCrossBlock3d(nn.Module):
 # Define convformer encoder
 class ConvformerEncoder3d(nn.Module):
     """Stack of ConvformerBlock3d layers acting as an encoder."""
-    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1):
+    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1, dropout=0.2):
         super(ConvformerEncoder3d, self).__init__()
 
         # Set attributes
@@ -626,6 +687,7 @@ class ConvformerEncoder3d(nn.Module):
         self.kernel_size = kernel_size
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
 
         # Create a list of Convformer layers
         self.layers = nn.ModuleList([
@@ -634,6 +696,7 @@ class ConvformerEncoder3d(nn.Module):
                 kernel_size=kernel_size,
                 n_heads=n_heads,
                 expansion=expansion,
+                dropout=dropout,
             ) 
             for _ in range(n_layers)
         ])
@@ -649,7 +712,7 @@ class ConvformerEncoder3d(nn.Module):
 # Define convformer decoder
 class ConvformerDecoder3d(nn.Module):
     """Stack of ConvformerCrossBlock3d layers acting as a decoder."""
-    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1):
+    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=1, expansion=1, dropout=0.2):
         super(ConvformerDecoder3d, self).__init__()
 
         # Set attributes
@@ -658,6 +721,7 @@ class ConvformerDecoder3d(nn.Module):
         self.kernel_size = kernel_size
         self.n_heads = n_heads
         self.expansion = expansion
+        self.dropout = dropout
 
         # Create a list of Convformer cross-attention layers
         self.layers = nn.ModuleList([
@@ -666,6 +730,7 @@ class ConvformerDecoder3d(nn.Module):
                 kernel_size=kernel_size,
                 n_heads=n_heads,
                 expansion=expansion,
+                dropout=dropout,
             ) 
             for _ in range(n_layers)
         ])

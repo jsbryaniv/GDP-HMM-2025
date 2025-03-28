@@ -13,7 +13,26 @@ from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d, UnetEncoder3d
-from architectures.blocks import ConvBlock3d, ConvformerDecoder3d, FiLM3d
+from architectures.blocks import ConvBlock3d, ConvBlockFiLM3d, ConvformerDecoder3d, FiLM3d, DyTanh3d
+
+
+# Make time aware Unet
+class TimeAwareUnet3d(Unet3d):
+    def __init__(self, in_channels, out_channels, n_features=16, n_blocks=5, n_layers_per_block=4):
+        super().__init__(
+            in_channels, out_channels, 
+            n_features=n_features, 
+            n_blocks=n_blocks, 
+            n_layers_per_block=n_layers_per_block, 
+            scale=1,                                # No scaling in autoencoder
+            use_dropout=False,                      # No dropout in diffusion model
+            conv_block=ConvBlockFiLM3d,             # Use FiLM block for autoencoder
+        )
+        self.encoder.input_block[0] = ConvBlockFiLM3d(in_channels, n_features)
+        self.decoder.output_block[-1] = ConvBlockFiLM3d(n_features, out_channels)
+
+    def forward(self, x, t):  # We only use the encoder and decoder
+        pass
 
 
 # Define Diffusion Model Unet
@@ -23,6 +42,7 @@ class DiffUnet3d(nn.Module):
         n_features=8, n_blocks=5, 
         n_layers_per_block=2, n_mixing_blocks=2,
         scale=2, n_steps=16, eta=.1,
+        use_self_conditioning=True,
         use_checkpoint=True,
     ):
         super(DiffUnet3d, self).__init__()
@@ -37,6 +57,7 @@ class DiffUnet3d(nn.Module):
         self.scale = scale
         self.n_steps = n_steps
         self.eta = eta
+        self.use_self_conditioning = use_self_conditioning
         self.use_checkpoint = use_checkpoint
 
         # Get constants
@@ -54,7 +75,7 @@ class DiffUnet3d(nn.Module):
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            nn.Conv3d(in_channels, n_features, kernel_size=1) if in_channels != n_features else nn.Identity(),
             # Shrink volume
             ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
@@ -80,15 +101,17 @@ class DiffUnet3d(nn.Module):
             # Expand volume
             ConvBlock3d(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Merge features to output channels
-            nn.Conv3d(n_features, in_channels, kernel_size=1),
+            nn.Conv3d(n_features, in_channels, kernel_size=1) if in_channels != n_features else nn.Identity(),
         )
 
         # Create main autoencoder
-        self.autoencoder = Unet3d(
-            n_features, n_features, 
-            n_features=n_features, n_blocks=n_blocks,
+        n_in = 2 * n_features if use_self_conditioning else n_features
+        n_out = n_features
+        self.autoencoder = TimeAwareUnet3d(
+            n_in, n_out,
+            n_features=n_features, 
+            n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
-            scale=1,
         )
         
         # Create context encoders
@@ -100,6 +123,7 @@ class DiffUnet3d(nn.Module):
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
                     scale=1,
+                    use_dropout=False,  # No dropout in diffusion model
                 )
             )
 
@@ -113,8 +137,13 @@ class DiffUnet3d(nn.Module):
                 ConvformerDecoder3d(
                     n_features_per_depth[depth],
                     n_layers=n_mixing_blocks,
+                    dropout=0,  # No dropout in diffusion model
                 )
             )
+
+        # Define self conditioning block regularization
+        if use_self_conditioning:
+            self.self_conditioning_reg = DyTanh3d(n_features=n_features, init_alpha=0.1)
 
         # Define time embedding layers
         self.time_embedding_blocks = nn.ModuleList()
@@ -132,8 +161,8 @@ class DiffUnet3d(nn.Module):
                 nn.init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
                 m.weight.data *= 0.5  # reduce scale
 
-        # Special case: zero the final conv that predicts noise
-        final_layer = self.autoencoder.decoder.output_block[-1]
+        # Zero the final conv that predicts noise
+        final_layer = self.autoencoder.decoder.output_block[-1].conv
         nn.init.zeros_(final_layer.weight)
         if final_layer.bias is not None:
             nn.init.zeros_(final_layer.bias)
@@ -176,55 +205,48 @@ class DiffUnet3d(nn.Module):
         # Return
         return latent_context, feats_context
     
-    def step(self, t, x, feats_context):
+    def step(self, t, x, feats_context, x0=None):
         if self.use_checkpoint:
             x = x.requires_grad_()
             feats_context = [f.requires_grad_() for f in feats_context]
-            return checkpoint(self._step, t, x, *feats_context, use_reentrant=False)
+            return checkpoint(self._step, t, x, feats_context, x0=x0, use_reentrant=False)
         else:
             # Regular step
-            return self._step(t, x, *feats_context)
+            return self._step(t, x, feats_context, x0=x0)
     
-    def _step(self, t, x, *feats_context):
-        
-        # # Encode x
-        # feats = self.autoencoder.encoder(x)
+    def _step(self, t, x, feats_context, x0=None):
 
-        # # Add time embedding
-        # feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
-
-        # # Apply context
-        # feats = [block(fx, fy) for block, fx, fy in zip(self.cross_attn_blocks, feats, feats_context)]
-
-        # # Decode features
-        # noise_pred = self.autoencoder.decoder(feats)
+        # Merge x and x0
+        if self.use_self_conditioning:
+            x0 = self.self_conditioning_reg(x0)  # Regularize self conditioning block
+            x = torch.cat([x, x0], dim=1)        # Concatenate along channel dimension
 
         # Encode x
-        feats = self.autoencoder.encoder(x)
+        feats = self.autoencoder.encoder((x, t))
 
-        # Add time embedding
-        feats = [block(f, t.float()) for (f, block) in zip(feats, self.time_embedding_blocks)]
+        # Apply time embedding to context
+        feats_context = [block(f, t) for block, f in zip(self.time_embedding_blocks, feats_context)]
 
         # Apply context
         depth = self.n_blocks
         fcon = feats_context[-1]
-        x = feats.pop()
+        x, _ = feats.pop()
         x = self.cross_attn_blocks[depth](x, fcon)
 
         # Upsample blocks
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.decoder.up_blocks[i](x)
+            x, _ = self.autoencoder.decoder.up_blocks[i]((x, t))
             # Merge with skip
-            x_skip = feats[depth]
+            x_skip, _ = feats[depth]
             x = x + x_skip
             # Apply cross attention
             fcon = feats_context[depth]
             x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
-        noise_pred = self.autoencoder.decoder.output_block(x)
+        noise_pred, _ = self.autoencoder.decoder.output_block((x, t))
         
         # Return noise prediction
         return noise_pred
@@ -237,17 +259,31 @@ class DiffUnet3d(nn.Module):
         # Initialize x
         x = torch.randn_like(latent_context[0], device=context[0].device)
 
+        # Initialize x0
+        if self.use_self_conditioning:
+            x0 = torch.zeros_like(x, device=x.device)
+        else:
+            x0 = None
+
         # Diffusion steps
         for t in reversed(range(1, self.n_steps)):
 
+            # Randomly drop self-conditioning
+            if self.training and random.random() < 0.5:
+                x0 = torch.zeros_like(x0, device=x.device)
+
             # Predict noise 
             t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
-            noise_pred = self.step(t_step, x, feats_context)
+            noise_pred = self.step(t_step, x, feats_context, x0=x0)
 
             # Get constants 
             a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
             a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
             sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
+
+            # Update self-conditioning with predicted x0
+            if self.use_self_conditioning:
+                x0 = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()  # Detach is important
 
             # Update position 
             x = (
@@ -288,14 +324,21 @@ class DiffUnet3d(nn.Module):
 
             # Sample time step and corrupted target
             t = torch.randint(0, self.n_steps, (target.shape[0],), device=target.device)
-            alpha_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
-            latent_target_corrupted = torch.sqrt(alpha_t) * latent_target + torch.sqrt(1 - alpha_t) * noise
+            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            x = torch.sqrt(a_t) * latent_target + torch.sqrt(1 - a_t) * noise
 
-            # Step forward
-            noise_pred = self.step(t, latent_target_corrupted, feats_context)
+            # Initialize x0
+            x0 = torch.zeros_like(x, device=x.device) if self.use_self_conditioning else None
 
-            # Calculate loss
+            # Predict noise without self-conditioning
+            noise_pred = self.step(t, x, feats_context, x0=x0)
             loss += F.mse_loss(noise_pred, noise) / n_samples
+
+            # Predict noise with self-conditioning
+            if self.use_self_conditioning:
+                x0 = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()
+                noise_pred = self.step(t, x, feats_context, x0=x0)
+                loss += F.mse_loss(noise_pred, noise) / n_samples
 
         # Return
         return loss
@@ -331,8 +374,8 @@ if __name__ == '__main__':
 
     # Forward pass
     with torch.no_grad():
-        loss = model.calculate_diffusion_loss(x, *y_list)
         pred = model(*y_list)
+        loss = model.calculate_diffusion_loss(x, *y_list)
 
     # Estimate memory usage
     estimate_memory_usage(model, *y_list, print_stats=True)
