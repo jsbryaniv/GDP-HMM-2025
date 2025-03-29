@@ -144,7 +144,7 @@ class DiffUnet3d(nn.Module):
 
         # Define self conditioning block regularization
         if use_self_conditioning:
-            self.self_conditioning_reg = DyTanh3d(n_features=n_features, init_alpha=0.1)
+            self.self_conditioning_reg = DyTanh3d(n_features=n_features, init_alpha=1.0)
 
         # Define time embedding layers
         self.time_embedding_blocks = nn.ModuleList()
