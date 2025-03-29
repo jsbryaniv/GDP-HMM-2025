@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from losses import competition_loss, dvh_loss
+from losses import competition_loss, dvh_loss, structure_dose_loss
 from utils import resize_image_3d, reverse_resize_3d, norm_d97
 
 
@@ -262,7 +262,7 @@ class DosePredictionModel(nn.Module):
 
         # If eval mode normalize using D97 of PTV_High
         if self.training == False:
-            transform_params['ptvs'] = transform_params['ptvs']
+            ptvs = transform_params['ptvs']
             x = norm_d97(x, ptvs)
 
         # Return prediction
@@ -305,7 +305,7 @@ class DosePredictionModel(nn.Module):
         likelihood = F.mse_loss(pred, dose)
 
         # Add diffusion loss
-        if self.architecture.lower() in ["diffunet", "diffvit"]:
+        if self.architecture.lower() in ["diffunet", "diffvit", "diffunetlight", "diffvitlight"]:
             # Format inputs
             inputs = self.format_inputs(scan, beam, ptvs, oars, body)[0]
             # Resize dose
@@ -320,7 +320,8 @@ class DosePredictionModel(nn.Module):
             # Calculate diffusion loss
             loss_diff = self.model.calculate_diffusion_loss(dose_for_diff, *inputs)
             # Add diffusion loss (scaled by dose scale)
-            likelihood += dose_scale * loss_diff
+            loss_diffusion = dose_scale * loss_diff
+            likelihood += loss_diffusion
 
         # Compute competition loss
         loss_competition = competition_loss(pred, dose, body)
@@ -331,12 +332,19 @@ class DosePredictionModel(nn.Module):
             structures=torch.cat([(ptvs!=0), oars, body], dim=1)
         )
 
+        # Compute structure dose loss
+        loss_structure = structure_dose_loss(
+            pred, dose, 
+            structures=torch.cat([(ptvs!=0), oars, body], dim=1)
+        )
+
         # Compute total loss
         loss = (
             likelihood 
             + prior 
             + loss_competition 
             + loss_dvh
+            + loss_structure
         )
 
         # Check for NaN and Inf
@@ -344,13 +352,14 @@ class DosePredictionModel(nn.Module):
             print(f"Nans or Infs in Loss!!!")
             print(f"--NaNs in Prediction: {torch.isnan(pred).sum()}")
             print(f"--Infs in Prediction: {torch.isinf(pred).sum()}")
-            print(f"--NaNs in Dose: {torch.isnan(dose).sum()}")
-            print(f"--Infs in Dose: {torch.isinf(dose).sum()}")
-            print(f"--Loss MSE = {F.mse_loss(pred, dose)}")
-            print(f"--Loss Likelihood = {likelihood}")
-            print(f"--Loss Prior = {prior}")
-            print(f"--Loss Competition = {loss_competition}")
-            print(f"--Loss DVH = {loss_dvh}")
+            print(f"--NaNs in Dose:       {torch.isnan(dose).sum()}")
+            print(f"--Infs in Dose:       {torch.isinf(dose).sum()}")
+            print(f"--Loss MSE =          {F.mse_loss(pred, dose)}")
+            print(f"--Loss Likelihood =   {likelihood}")
+            print(f"--Loss Prior =        {prior}")
+            print(f"--Loss Competition =  {loss_competition}")
+            print(f"--Loss DVH =          {loss_dvh}")
+            print(f"--Loss Structure =    {loss_structure}")
             raise ValueError('Loss is NaN or Inf.')
 
         # Return loss

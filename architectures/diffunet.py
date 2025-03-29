@@ -137,6 +137,7 @@ class DiffUnet3d(nn.Module):
                 ConvformerDecoder3d(
                     n_features_per_depth[depth],
                     n_layers=n_mixing_blocks,
+                    n_heads=max(1, min(n_features_per_depth[depth] // 8, 4)),
                     dropout=0,  # No dropout in diffusion model
                 )
             )
@@ -181,6 +182,7 @@ class DiffUnet3d(nn.Module):
             'scale': self.scale,
             'n_steps': self.n_steps,
             'eta': self.eta,
+            'use_self_conditioning': self.use_self_conditioning,
             'use_checkpoint': self.use_checkpoint,
         }
     
@@ -198,9 +200,7 @@ class DiffUnet3d(nn.Module):
         
         # Encode features
         feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
-
-        # Sum features at each block
-        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+        feats_context = [sum([f for f in row]) / len(row) for row in zip(*feats_context)]
 
         # Return
         return latent_context, feats_context
@@ -269,8 +269,9 @@ class DiffUnet3d(nn.Module):
         for t in reversed(range(1, self.n_steps)):
 
             # Randomly drop self-conditioning
-            if self.training and random.random() < 0.5:
-                x0 = torch.zeros_like(x0, device=x.device)
+            if self.use_self_conditioning:
+                if self.training and random.random() < 0.5:
+                    x0 = torch.zeros_like(x0, device=x.device)
 
             # Predict noise 
             t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
@@ -310,7 +311,7 @@ class DiffUnet3d(nn.Module):
         
         # Encode features
         feats_context = [block(y) for block, y in zip(self.context_encoders, latent_context)]
-        feats_context = [sum([f for f in row]) for row in zip(*feats_context)]
+        feats_context = [sum([f for f in row]) / len(row) for row in zip(*feats_context)]
 
         # Calculate reconstruction loss
         target_reconstructed = self.output_block(latent_target)

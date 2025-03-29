@@ -21,6 +21,15 @@ from config import *
 
 # D97 normalization function
 def norm_d97(dose, ptvs):
+    
+    # Convert to numpy if tensor
+    using_torch = isinstance(dose, torch.Tensor)
+    if using_torch:
+        dtype = dose.dtype
+        device = dose.device
+        dose = dose.cpu().detach().numpy()
+    if isinstance(ptvs, torch.Tensor):
+        ptvs = ptvs.cpu().detach().numpy()
 
     # Get PTV high dose and mask
     dose_ptvhigh = ptvs.max()
@@ -32,6 +41,10 @@ def norm_d97(dose, ptvs):
 
     # Clip dose to 0 and 1.2 * PTV_High
     dose = np.clip(dose, 0, dose_ptvhigh * 1.2)
+
+    # Convert to tensor if using torch
+    if using_torch:
+        dose = torch.tensor(dose, dtype=dtype, device=device)
 
     # Return normalized dose
     return dose
@@ -297,8 +310,9 @@ def get_savename(dataID, modelID, **kwargs):
     # Add kwargs to savename
     kwargs_sorted = sorted(kwargs.items())
     for key, value in kwargs_sorted:
-        if value:
-            savename += f'_{key}={value}'
+        # if value:
+        #     savename += f'_{key}={value}'
+        savename += f'_{key}={value}'
 
     # Return savename
     return savename

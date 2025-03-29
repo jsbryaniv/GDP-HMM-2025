@@ -137,8 +137,8 @@ if __name__ == '__main__':
         ('crossunetlight', {'batch_size': 2, 'shape': 128}),
         ('diffunet',       {'batch_size': 2, 'shape': 128}),
         ('diffunetlight',  {'batch_size': 2, 'shape': 128}),
-        ('diffunet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_blocks': 6}),
-        ('diffunetlight',  {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_blocks': 6}),
+        ('diffunet',       {'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('diffunetlight',  {'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
         # Debug main function
         for ID in range(len(all_jobs)):
-            for ITER in [1]:  # [0, 1]:  # DEBUG add back 0
+            for ITER in [0, 1]:
                 job_args = copy.deepcopy(all_jobs[ID])
                 if 'shape' in job_args:  # Make shape smaller for debugging
                     job_args['shape'] = job_args['shape'] // 2

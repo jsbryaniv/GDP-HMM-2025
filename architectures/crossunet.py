@@ -72,6 +72,7 @@ class CrossUnetModel(nn.Module):
                     n_features_per_depth[depth], 
                     kernel_size=attn_kernel_size,
                     n_layers=n_attn_repeats,
+                    n_heads=max(1, min(n_features_per_depth[depth] // 8, 4)),
                 )
             )
     
@@ -101,7 +102,7 @@ class CrossUnetModel(nn.Module):
 
         # Encode y_list and sum features at each depth
         f_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
-        f_context = [sum([f for f in row]) for row in zip(*f_context)]
+        f_context = [sum([f for f in row]) / len(row) for row in zip(*f_context)]
 
         # Apply context
         depth = self.n_blocks

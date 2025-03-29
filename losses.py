@@ -1,7 +1,7 @@
 
 # Import libraries
 import os
-import json
+import math
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -74,7 +74,7 @@ def dvh_loss(pred_dose, target_dose, structures, max_dose=None, bins=100):
         # Loop over structures
         for i in range(structures.shape[1]):
             structure = structures[B, i]
-            if torch.sum(structure) == 0:
+            if torch.sum(structure) == 0:  # Skip empty structures
                 continue
 
             # Get dose values
@@ -101,4 +101,33 @@ def dvh_loss(pred_dose, target_dose, structures, max_dose=None, bins=100):
     # Return loss
     return loss
 
+# Define loss for dose to structures
+def structure_dose_loss(pred_dose, target_dose, structures):
+    """
+    Calculate the dose to structures loss between the predicted dose and the target dose given the structures.
+    """
 
+    # Initialize loss
+    loss = 0
+
+    # Loop over batch
+    for B in range(pred_dose.shape[0]):
+        
+        # Loop over structures
+        for i in range(structures.shape[1]):
+            structure = structures[B, i]
+            if torch.sum(structure) == 0:  # Skip empty structures
+                continue
+
+            # Get dose values
+            val_pred = pred_dose[B, 0, structure.bool()].mean()
+            val_target = target_dose[B, 0, structure.bool()].mean()
+
+            # Calculate loss
+            loss += ((val_pred - val_target) / (val_target.abs() + 1e-5)) ** 2
+
+    # Normalize loss
+    loss = loss / math.prod(pred_dose.shape[:2])
+
+    # Return loss
+    return loss
