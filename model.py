@@ -12,7 +12,7 @@ from utils import resize_image_3d, reverse_resize_3d, norm_d97
 # Create dose prediction model
 class DosePredictionModel(nn.Module):
     """Dose prediction model."""
-    def __init__(self, architecture, n_channels, shape=None, scale_dose=False, **kwargs):
+    def __init__(self, architecture, n_channels, shape=None, scale_dose=False, eval_d97=False, **kwargs):
         super(DosePredictionModel, self).__init__()
 
         # Check inputs
@@ -25,6 +25,7 @@ class DosePredictionModel(nn.Module):
         self.n_channels = n_channels
         self.shape = shape
         self.scale_dose = scale_dose
+        self.eval_d97 = eval_d97
         self.kwargs = kwargs
 
         # Initialize model
@@ -261,9 +262,10 @@ class DosePredictionModel(nn.Module):
             x = x * dose_scale
 
         # If eval mode normalize using D97 of PTV_High
-        if self.training == False:
-            ptvs = transform_params['ptvs']
-            x = norm_d97(x, ptvs)
+        if self.eval_d97:
+            if self.training == False:
+                ptvs = transform_params['ptvs']
+                x = norm_d97(x, ptvs)
 
         # Return prediction
         return x

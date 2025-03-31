@@ -90,10 +90,11 @@ class CrossUnetModel(nn.Module):
             'scale': self.scale,
         }
 
-    def forward(self, x, *y_list):
+    def forward(self, x, *y_list, f_context=None):
         """
         x is the input tensor
         y_list is a list of context tensors
+        f_context is the context features (optional for pre-computed context)
         """
 
         # Encode x
@@ -101,8 +102,9 @@ class CrossUnetModel(nn.Module):
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
-        f_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
-        f_context = [sum([f for f in row]) / len(row) for row in zip(*f_context)]
+        if f_context is None:
+            f_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
+            f_context = [sum([f for f in row]) / len(row) for row in zip(*f_context)]
 
         # Apply context
         depth = self.n_blocks
