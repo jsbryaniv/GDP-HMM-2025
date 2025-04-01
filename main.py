@@ -136,8 +136,8 @@ if __name__ == '__main__':
         ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': False}),
         ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'exponential'}),
         ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'linear'}),
-        ('crossunet',       {'batch_size': 2, 'shape': 64}),
-        ('crossunetlight',  {'batch_size': 2, 'shape': 64}),
+        ('crossunet',       {'batch_size': 4, 'shape': 64}),
+        ('crossunetlight',  {'batch_size': 4, 'shape': 64}),
         # ('diffunet',        {'batch_size': 2, 'shape': 128}),
         # ('diffunetlight',   {'batch_size': 2, 'shape': 128}),
     ]

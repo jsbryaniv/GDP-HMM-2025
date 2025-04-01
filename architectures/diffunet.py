@@ -34,7 +34,7 @@ class TimeAwareUnet3d(CrossUnetModel):
         )
 
         # Input regularization
-        self.input_reg = DyTanh3d(2*n_features, init_alpha=1.0)
+        self.input_reg = DyTanh3d(in_channels, init_alpha=1.0)
 
         # Define time embedding layers
         self.context_time_embedding_blocks = nn.ModuleList()
@@ -291,10 +291,13 @@ class DiffUnet3d(nn.Module):
 
             # Predict noise with self-conditioning
             if self.use_self_conditioning:
+                # Add self-conditioning
                 x = x[:, :self.n_features]
                 x0 = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()
                 x = torch.cat([x, x0], dim=1)
+                # Predict noise
                 noise_pred = self.main_unet(t, x, feats_context)
+                # Calculate loss
                 loss += F.mse_loss(noise_pred, noise) / n_samples
 
         # Return
