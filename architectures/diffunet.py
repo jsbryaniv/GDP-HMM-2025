@@ -120,7 +120,7 @@ class DiffUnet3d(nn.Module):
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            ConvBlock3d(in_channels, n_features, kernel_size=1) if in_channels != n_features else nn.Identity(),
+            ConvBlock3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
             ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
@@ -146,7 +146,7 @@ class DiffUnet3d(nn.Module):
             # Convolutional layers
             *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Merge features to output channels
-            ConvBlock3d(n_features, in_channels, kernel_size=1) if in_channels != n_features else nn.Identity(),
+            ConvBlock3d(n_features, in_channels, kernel_size=1),
         )
 
         # Create main unet

@@ -136,8 +136,8 @@ if __name__ == '__main__':
         ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': False}),
         ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'exponential'}),
         ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'linear'}),
-        # ('crossunet',       {'batch_size': 2, 'shape': 128}),
-        # ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
+        ('crossunet',       {'batch_size': 2, 'shape': 64}),
+        ('crossunetlight',  {'batch_size': 2, 'shape': 64}),
         # ('diffunet',        {'batch_size': 2, 'shape': 128}),
         # ('diffunetlight',   {'batch_size': 2, 'shape': 128}),
     ]
@@ -160,6 +160,8 @@ if __name__ == '__main__':
                 job_args = copy.deepcopy(all_jobs[ID])
                 if 'shape' in job_args:  # Make shape smaller for debugging
                     job_args['shape'] = job_args['shape'] // 2
+                    if 'unet' in job_args['modelID']:
+                        job_args['n_blocks'] = 4  # Make unet smaller for debugging
                 model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
                 print('\n'*5)
 
