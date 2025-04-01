@@ -132,11 +132,8 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': True}),
-        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': True}),
-        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': False}),
-        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': False}),
-        ('unet',            {'batch_size': 2, 'shape': 128}),
+        ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': True}),
+        ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': False}),
         # ('crossunet',       {'batch_size': 2, 'shape': 128}),
         # ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
         # ('diffunet',        {'batch_size': 2, 'shape': 128}),
@@ -161,8 +158,6 @@ if __name__ == '__main__':
                 job_args = copy.deepcopy(all_jobs[ID])
                 if 'shape' in job_args:  # Make shape smaller for debugging
                     job_args['shape'] = job_args['shape'] // 2
-                if 'batch_size' in job_args:  # Make batch size smaller for debugging
-                    job_args['batch_size'] = min(2, job_args['batch_size'])  
                 model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), debug=True)
                 print('\n'*5)
 

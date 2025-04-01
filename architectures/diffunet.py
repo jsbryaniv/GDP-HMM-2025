@@ -222,6 +222,11 @@ class DiffUnet3d(nn.Module):
         # Diffusion steps
         for t in reversed(range(1, self.n_steps)):
 
+            # Get constants 
+            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
+            a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
+            sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
+
             # Merge with self-conditioning
             if self.use_self_conditioning:
                 if self.training and random.random() < 0.5:  # Randomly drop self-conditioning
@@ -231,11 +236,6 @@ class DiffUnet3d(nn.Module):
             # Predict noise 
             t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
             noise_pred = self.main_unet(t_step, x, feats_context)
-
-            # Get constants 
-            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
-            a_t1 = self.alpha_cumprod[t-1].view(-1, 1, 1, 1, 1)
-            sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
 
             # Update self-conditioning with predicted x0
             if self.use_self_conditioning:

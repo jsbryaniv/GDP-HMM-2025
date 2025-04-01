@@ -6,7 +6,6 @@ import time
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
 
 # Import local
 from config import *
@@ -41,16 +40,12 @@ def train_model(
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
     loader_train = DataLoader(
         dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-        # pin_memory=True, n_workers=4, prefetch_factor=2,
+        # pin_memory=True, num_workers=4, prefetch_factor=2,
     )
 
     # Set up optimizer
     if optimizer is None:
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
-    # Set up autocast and scaler for mixed precision training
-    use_amp = device.type == 'cuda' and torch.cuda.is_available()
-    scaler = torch.amp.GradScaler(device, enabled=use_amp)
 
     # Set up training statistics
     if model_state_dict_best is None:
@@ -101,21 +96,20 @@ def train_model(
             optimizer.zero_grad()
 
             # Get loss
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
-                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+            loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Backward pass and optimization
-            with torch.autograd.set_detect_anomaly(True):
-                scaler.scale(loss).backward()
-            flag = inspect_parameters(model)  # Inspect parameters
-            if flag:
-                inspect_activations(model, scan, beam, ptvs, oars, body)  # Inspect activations
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)    # Gradient clipping
-            scaler.step(optimizer)
-            scaler.update()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)
+            optimizer.step()
 
             # Update average loss
             loss_train_avg += loss.item() / len(loader_train)
+
+            # Inspect parameters and activations
+            flag = inspect_parameters(model)
+            if flag:
+                inspect_activations(model, scan, beam, ptvs, oars, body)
 
             # Get memory usage
             if device.type != "cpu":
