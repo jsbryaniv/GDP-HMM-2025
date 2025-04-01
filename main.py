@@ -134,6 +134,8 @@ if __name__ == '__main__':
     modelID_list = [
         ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': True}),
         ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': False}),
+        ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'exponential'}),
+        ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'linear'}),
         # ('crossunet',       {'batch_size': 2, 'shape': 128}),
         # ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
         # ('diffunet',        {'batch_size': 2, 'shape': 128}),

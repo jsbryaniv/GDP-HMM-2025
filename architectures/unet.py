@@ -19,7 +19,7 @@ class UnetEncoder3d(nn.Module):
         in_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4,
         scale=1, use_dropout=True,
-        conv_block=None,
+        conv_block=None, feature_scale=None,
     ):
         super(UnetEncoder3d, self).__init__()
         
@@ -30,9 +30,13 @@ class UnetEncoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.feature_scale = feature_scale
 
         # Get number of features per depth
-        self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+        if (feature_scale is None) or (feature_scale == 'exponential'):
+            self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+        elif feature_scale == 'linear':
+            self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
 
         # Set up conv_block
         if conv_block is None:
@@ -87,7 +91,7 @@ class UnetDecoder3d(nn.Module):
         out_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4, 
         scale=1, use_dropout=True,
-        conv_block=None,
+        conv_block=None, feature_scale=None,
     ):
         super(UnetDecoder3d, self).__init__()
         
@@ -98,9 +102,13 @@ class UnetDecoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.feature_scale = feature_scale
 
         # Get number of features per depth
-        self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+        if (feature_scale is None) or (feature_scale == 'exponential'):
+            self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
+        elif feature_scale == 'linear':
+            self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
 
         # Set up conv_block
         if conv_block is None:
@@ -158,7 +166,7 @@ class Unet3d(nn.Module):
         in_channels, out_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4, 
         scale=1, use_dropout=True,
-        conv_block=None,
+        conv_block=None, feature_scale=None,
     ):
         super(Unet3d, self).__init__()
         
@@ -170,6 +178,7 @@ class Unet3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.feature_scale = feature_scale
 
         # Define encoder
         self.encoder = UnetEncoder3d(
@@ -180,6 +189,7 @@ class Unet3d(nn.Module):
             scale=scale,
             use_dropout=use_dropout,
             conv_block=conv_block,
+            feature_scale=feature_scale,
         )
 
         # Define decoder
@@ -191,6 +201,7 @@ class Unet3d(nn.Module):
             scale=scale,
             use_dropout=use_dropout,
             conv_block=conv_block,
+            feature_scale=feature_scale,
         )
 
         # Get attributes from encoder and decoder
@@ -205,6 +216,7 @@ class Unet3d(nn.Module):
             'n_layers_per_block': self.n_layers_per_block,
             'scale': self.scale,
             'use_dropout': self.use_dropout,
+            'feature_scale': self.feature_scale,
         }
         
     def forward(self, x):
