@@ -40,7 +40,7 @@ def train_model(
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
     loader_train = DataLoader(
         dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-        # pin_memory=True, num_workers=4, prefetch_factor=2,
+        pin_memory=True, num_workers=-1, prefetch_factor=2,
     )
 
     # Set up optimizer

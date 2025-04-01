@@ -132,19 +132,22 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': True}),
-        ('unet',            {'batch_size': 4, 'shape': 64, 'use_dropout': False}),
-        ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'exponential'}),
-        ('unet',            {'batch_size': 4, 'shape': 64, 'feature_scale': 'linear'}),
-        ('crossunet',       {'batch_size': 4, 'shape': 64}),
-        ('crossunetlight',  {'batch_size': 4, 'shape': 64}),
-        # ('diffunet',        {'batch_size': 2, 'shape': 128}),
-        # ('diffunetlight',   {'batch_size': 2, 'shape': 128}),
+        ('unet',            {'batch_size': 8, 'shape': 64, 'use_dropout': True, 'feature_scale': 'exponential'}),
+        ('unet',            {'batch_size': 8, 'shape': 64, 'use_dropout': False, 'feature_scale': 'linear'}),
+        ('diffunet',        {'batch_size': 8, 'shape': 64, 'use_self_conditioning': False, 'feature_scale': 'exponential'}),
+        ('diffunet',        {'batch_size': 8, 'shape': 64, 'use_self_conditioning': False, 'feature_scale': 'linear'}),
+        ('crossunet',       {'batch_size': 8, 'shape': 64}),
+        ('crossunetlight',  {'batch_size': 8, 'shape': 64}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
         for (modelID, kwargs) in modelID_list:
             all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
+
+    # outfiles/logs/out_job0.txt:-- Average loss on test dataset: 6.9736 Use Dropout=True
+    # outfiles/logs/out_job1.txt:-- Average loss on test dataset: 7.1268 use Dropout=False
+    # outfiles/logs/out_job2.txt:-- Average loss on test dataset: 6.8513 scale=exponential
+    # outfiles/logs/out_job3.txt:-- Average loss on test dataset: 6.7889 scale=linear
     
     # Get training IDs from system arguments
     ID = int(sys.argv[1]) if len(sys.argv) > 1 else 0
@@ -158,6 +161,8 @@ if __name__ == '__main__':
         for ID in range(len(all_jobs)):
             for ITER in [0, 1]:
                 job_args = copy.deepcopy(all_jobs[ID])
+                if 'batch_size' in job_args:  # Make batch size smaller for debugging
+                    job_args['batch_size'] = 1
                 if 'shape' in job_args:  # Make shape smaller for debugging
                     job_args['shape'] = job_args['shape'] // 2
                     if 'unet' in job_args['modelID']:

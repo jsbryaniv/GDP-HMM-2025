@@ -289,6 +289,9 @@ class ConvBlock3d(nn.Module):
         # Define dropout
         self.drop = nn.Dropout3d(dropout)
 
+        # Define gamma
+        self.gamma = nn.Parameter(torch.zeros(1))
+
     def forward(self, x):
 
         # Residual connection
@@ -302,7 +305,7 @@ class ConvBlock3d(nn.Module):
         x = self.drop(x)
 
         # Combine with residual
-        x = x0 + x
+        x = x0 + x * self.gamma
 
         # Return output
         return x
@@ -311,7 +314,7 @@ class ConvBlock3d(nn.Module):
 class ConvBlockFiLM3d(ConvBlock3d):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=5, groups=1, scale=1, dropout=0.0,
+        kernel_size=5, groups=1, scale=1, dropout=0.0
     ):
         super(ConvBlockFiLM3d, self).__init__(
             in_channels, out_channels, 
@@ -320,6 +323,9 @@ class ConvBlockFiLM3d(ConvBlock3d):
 
         # Set up FiLM layer
         self.film = FiLM3d(out_channels)
+
+        # Set up output scale
+        self.gamma = nn.Parameter(torch.zeros(1))
 
     def forward(self, inputs):
 
@@ -340,7 +346,7 @@ class ConvBlockFiLM3d(ConvBlock3d):
         x = self.film(x, t)
 
         # Combine with residual
-        x = x0 + x
+        x = x0 + x * self.gamma
 
         # Return output and time
         return (x, t)
@@ -603,15 +609,18 @@ class ConvformerBlock3d(nn.Module):
         self.norm1 = VoxelNorm3d(n_features)
         self.norm2 = VoxelNorm3d(n_features)
 
+        # Set up gamma
+        self.gamma = nn.Parameter(torch.zeros(1))
+
     def forward(self, x):
 
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output
+        x = x + attn_output * self.gamma
 
         # Feedforward layer
-        x = x + self.mlp(self.norm2(x))
+        x = x + self.mlp(self.norm2(x)) * self.gamma
 
         # Return output
         return x
@@ -650,6 +659,9 @@ class ConvformerCrossBlock3d(nn.Module):
         self.norm3 = VoxelNorm3d(n_features)
         self.norm4 = VoxelNorm3d(n_features)
 
+        # Set up gamma
+        self.gamma = nn.Parameter(torch.zeros(1))
+
     def forward(self, x, y):
         """
         x is the query tensor
@@ -659,16 +671,16 @@ class ConvformerCrossBlock3d(nn.Module):
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output
+        x = x + attn_output * self.gamma
 
         # Apply cross-attention
         x_normed = self.norm2(x)
         y_normed = self.norm3(y)  # Normalize context separately
         attn_output = self.cross_attn(x_normed, y_normed, y_normed)
-        x = x + attn_output
+        x = x + attn_output * self.gamma
 
         # Feedforward layer
-        x = x + self.mlp(self.norm4(x))
+        x = x + self.mlp(self.norm4(x)) * self.gamma
 
         return x
 

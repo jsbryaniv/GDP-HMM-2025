@@ -21,6 +21,7 @@ class CrossUnetModel(nn.Module):
         n_features=16, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=4, attn_kernel_size=5,
         scale=2, conv_block=None, use_dropout=True,
+        feature_scale=None,
     ):
         super(CrossUnetModel, self).__init__()
         
@@ -35,6 +36,7 @@ class CrossUnetModel(nn.Module):
         self.attn_kernel_size = attn_kernel_size
         self.scale = scale
         self.use_dropout = use_dropout
+        self.feature_scale = feature_scale
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -46,6 +48,7 @@ class CrossUnetModel(nn.Module):
             n_features=n_features, n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale, conv_block=conv_block, use_dropout=use_dropout,
+            feature_scale=feature_scale,
         )
         
         # Create context encoders
@@ -57,6 +60,7 @@ class CrossUnetModel(nn.Module):
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
                     scale=scale, use_dropout=use_dropout,
+                    feature_scale=feature_scale,
                 )
             )
 
@@ -88,6 +92,8 @@ class CrossUnetModel(nn.Module):
             'n_attn_repeats': self.n_attn_repeats,
             'attn_kernel_size': self.attn_kernel_size,
             'scale': self.scale,
+            'use_dropout': self.use_dropout,
+            'feature_scale': self.feature_scale,
         }
 
     def forward(self, x, *y_list, f_context=None):

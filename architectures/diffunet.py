@@ -21,13 +21,15 @@ from architectures.blocks import ConvBlock3d, ConvBlockFiLM3d, FiLM3d, DyTanh3d
 class TimeAwareUnet3d(CrossUnetModel):
     def __init__(self, 
         in_channels, out_channels, n_cross_channels_list, 
-        n_features=16, n_blocks=5, n_layers_per_block=4
+        n_features=16, n_blocks=5, n_layers_per_block=4,
+        feature_scale=None,
     ):
         super().__init__(
             in_channels, out_channels, n_cross_channels_list,
             n_features=n_features, 
             n_blocks=n_blocks, 
             n_layers_per_block=n_layers_per_block, 
+            feature_scale=feature_scale,
             scale=1,
             use_dropout=False,                      # No dropout in diffusion model
             conv_block=ConvBlockFiLM3d,             # Use FiLM block
@@ -90,6 +92,7 @@ class DiffUnet3d(nn.Module):
         n_layers_per_block=2, n_mixing_blocks=2,
         scale=2, n_steps=16, eta=.1,
         use_self_conditioning=True,
+        conv_block=None, feature_scale=None,
     ):
         super(DiffUnet3d, self).__init__()
         
@@ -104,6 +107,7 @@ class DiffUnet3d(nn.Module):
         self.n_steps = n_steps
         self.eta = eta
         self.use_self_conditioning = use_self_conditioning
+        self.feature_scale = feature_scale
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -117,36 +121,40 @@ class DiffUnet3d(nn.Module):
         self.alpha = alpha
         self.register_buffer('alpha_cumprod', alpha_cumprod)
 
+        # Set up convolutional blocks
+        if conv_block is None:
+            conv_block = ConvBlock3d
+
         # Define input blocks
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            ConvBlock3d(in_channels, n_features, kernel_size=1),
+            conv_block(in_channels, n_features, kernel_size=1),
             # Shrink volume
-            ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
+            conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
-            *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+            *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
         )
         self.context_input_blocks = nn.ModuleList()
         for n_channels in n_cross_channels_list:
             self.context_input_blocks.append(
                 nn.Sequential(
                     # Merge input channels to n_features
-                    ConvBlock3d(n_channels, n_features, kernel_size=1),
+                    conv_block(n_channels, n_features, kernel_size=1),
                     # Shrink volume
-                    ConvBlock3d(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
+                    conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
                     # Additional convolutional layers
-                    *(ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+                    *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
                 )
             )
 
         # Define output block
         self.output_block = nn.Sequential(
             # Expand volume
-            ConvBlock3d(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
+            conv_block(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Convolutional layers
-            *[ConvBlock3d(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
+            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Merge features to output channels
-            ConvBlock3d(n_features, in_channels, kernel_size=1),
+            conv_block(n_features, in_channels, kernel_size=1),
         )
 
         # Create main unet
@@ -157,23 +165,24 @@ class DiffUnet3d(nn.Module):
             n_features=n_features, 
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
+            feature_scale=feature_scale,
         )
 
-        # Initialize weights
-        self._init_weights()
+    #     # Initialize weights
+    #     self._init_weights()
 
-    def _init_weights(self):
+    # def _init_weights(self):
         
-        # Set all convs to small weights
-        for module in self.modules():
-            if isinstance(module, (nn.Conv3d, nn.ConvTranspose3d)):
-                if module.weight is not None:
-                    nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+    #     # Set all convs to small weights
+    #     for module in self.modules():
+    #         if isinstance(module, (nn.Conv3d, nn.ConvTranspose3d)):
+    #             if module.weight is not None:
+    #                 nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+    #             if module.bias is not None:
+    #                 nn.init.zeros_(module.bias)
 
-        # Done
-        return
+    #     # Done
+    #     return
 
     def get_config(self):
         return {
@@ -187,6 +196,7 @@ class DiffUnet3d(nn.Module):
             'n_steps': self.n_steps,
             'eta': self.eta,
             'use_self_conditioning': self.use_self_conditioning,
+            'feature_scale': self.feature_scale,
         }
     
     def encode_context(self, *context):
