@@ -71,7 +71,7 @@ def main(
     print("Starting training.")
 
     # Get training progress
-    epoch_start = metadata.get('epoch', 0)
+    epoch_start = metadata.get('epoch', -1) + 1  # Start from next epoch
     loss_val_best = metadata.get('loss_val_best', float('inf'))
     model_state_dict_best = metadata.get('model_state_dict_best', None)
 
@@ -132,10 +132,15 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': True}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': True}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': False}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': False}),
+        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': True}),
+        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': True}),
+        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': False}),
+        # ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': False}),
+        ('unet',            {'batch_size': 2, 'shape': 128}),
+        # ('crossunet',       {'batch_size': 2, 'shape': 128}),
+        # ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
+        # ('diffunet',        {'batch_size': 2, 'shape': 128}),
+        # ('diffunetlight',   {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

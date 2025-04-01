@@ -346,8 +346,6 @@ class ConvBlockFiLM3d(ConvBlock3d):
         return (x, t)
 
 
-
-
 ### TRANSFORMER BLOCKS ###
 
 # Define transformer block

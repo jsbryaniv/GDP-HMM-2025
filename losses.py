@@ -86,12 +86,6 @@ def dvh_loss(pred_dose, target_dose, structures, max_dose=None, bins=100):
             if max_dose_i is None:
                 with torch.no_grad():
                     max_dose_i = max(val_pred.max().item(), val_target.max().item())
-                # Check that max_dose_i is not zero, inf, or nan
-                if np.isnan(max_dose_i) or np.isinf(max_dose_i):
-                    print(f"Error: max dose is not finite in dhv_loss.")
-                    print(f"val_pred.max(): {val_pred.max().item()}")
-                    print(f"val_target.max(): {val_target.max().item()}")
-                    raise ValueError("max_dose_i is not finite.")
 
             # Get DVH
             dvh_pred = torch.histc(val_pred, bins=bins, min=0, max=max_dose_i)      # Histogram prediction

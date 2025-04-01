@@ -6,13 +6,13 @@ import torch.nn.functional as F
 
 # Import custom libraries
 from losses import competition_loss, dvh_loss, structure_dose_loss
-from utils import resize_image_3d, reverse_resize_3d, norm_d97
+from utils import resize_image_3d, reverse_resize_3d, norm_d97, inspect_parameters, inspect_activations
 
 
 # Create dose prediction model
 class DosePredictionModel(nn.Module):
     """Dose prediction model."""
-    def __init__(self, architecture, n_channels, shape=None, scale_dose=False, eval_d97=False, **kwargs):
+    def __init__(self, architecture, n_channels, shape=None, scale_dose=False, eval_d97=True, **kwargs):
         super(DosePredictionModel, self).__init__()
 
         # Check inputs
@@ -280,6 +280,12 @@ class DosePredictionModel(nn.Module):
 
         # Format outputs
         pred = self.format_outputs(pred, transform_params)
+
+        # Check for NaN and Inf
+        if torch.isnan(pred).any() or torch.isinf(pred).any():
+            inspect_parameters(self.model)
+            inspect_activations(self.model, inputs)
+            raise ValueError('Prediction is NaN or Inf.')
 
         # Return prediction
         return pred

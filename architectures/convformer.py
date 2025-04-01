@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvformerEncoder3d, ConvBlock3d, VolumeExpand3d
+from architectures.blocks import ConvformerEncoder3d, ConvBlock3d
 
 
 # Define full convolutional transformer model
@@ -36,7 +36,7 @@ class ConvformerModel(nn.Module):
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            nn.Conv3d(in_channels, n_features, kernel_size=1),
+            ConvBlock3d(in_channels, n_features, kernel_size=1),
             # Shrink volume
             ConvBlock3d(n_features, n_features, scale=1/scale)
         )
@@ -53,9 +53,9 @@ class ConvformerModel(nn.Module):
         # Define output block
         self.output_block = nn.Sequential(
             # Expand volume
-            VolumeExpand3d(n_features=n_features, scale=scale),
+            ConvBlock3d(n_features=n_features, scale=scale),
             # Merge features to output channels
-            nn.Conv3d(n_features, out_channels, kernel_size=1),
+            ConvBlock3d(n_features, out_channels, kernel_size=1),
         )
 
     def get_config(self):

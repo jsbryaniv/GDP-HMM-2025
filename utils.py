@@ -296,6 +296,7 @@ def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=F
     # Return augmented data
     return inputs + targets
 
+
 ### SAVING AND LOADING ###
 
 # Get savename function
@@ -474,3 +475,118 @@ def estimate_memory_usage(model, *inputs, print_stats=True):
     # Return total memory
     return mem_total
 
+
+### DEBUGGING FUNCTIONS ###
+
+# Inspect parameters function
+@torch.no_grad()
+def inspect_parameters(model, threshold=1e5):
+
+    # Initialize flag
+    flag = False
+
+    # Check if any parameters are above the threshold
+    for name, param in model.named_parameters():
+        p_size = param.numel()
+        p_max = param.max().item()
+        p_min = param.min().item()
+        p_mean = param.mean().item()
+        p_std = param.std().item() if p_size > 1 else 0.0
+        if (
+            (np.abs(p_mean) > threshold) or np.isnan(p_mean) or np.isinf(p_mean)
+            or (np.abs(p_std) > threshold) or np.isnan(p_std) or np.isinf(p_std)
+            or (np.abs(p_max) > threshold) or np.isnan(p_max) or np.isinf(p_max)
+            or (np.abs(p_min) > threshold) or np.isnan(p_min) or np.isinf(p_min)
+        ):
+            print(f"WARNING: {name} mean={p_mean:.3f} std={p_std:.3f} max={p_max:.3f} min={p_min:.3f} size={p_size:,}")
+            flag = True
+
+    # Check gradients
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            g_size = param.grad.numel()
+            g_max = param.grad.max().item()
+            g_min = param.grad.min().item()
+            g_mean = param.grad.mean().item()
+            g_std = param.grad.std().item() if g_size > 1 else 0.0
+            if (
+                (np.abs(g_mean) > threshold) or np.isnan(g_mean) or np.isinf(g_mean)
+                or (np.abs(g_std) > threshold) or np.isnan(g_std) or np.isinf(g_std)
+                or (np.abs(g_max) > threshold) or np.isnan(g_max) or np.isinf(g_max)
+                or (np.abs(g_min) > threshold) or np.isnan(g_min) or np.isinf(g_min)
+            ):
+                print(f"WARNING: {name} grad mean={g_mean:.3f} std={g_std:.3f} max={g_max:.3f} min={g_min:.3f} size={g_size:,}")
+                flag = True
+    
+    # Done
+    return flag
+
+# Inspect activations function
+def inspect_activations(model, *inputs, threhold=1e5):
+    """
+    Inspect activations of a model by printing the shape and size of each layer's output.
+    """
+
+    # Print status
+    print("Debugging forward pass with hooks and anomaly detection...")
+
+    # Define hook function
+    def create_hook(name):
+        def hook(module, x, y):
+            # Loop over inputs and print stats
+            for i, x in enumerate(x):
+                if isinstance(x, torch.Tensor):
+                    x_stats = f"{name} - input[{i}]: type={type(x)}"
+                    x_stats += " | " + " | ".join([
+                        f"shape={x.shape}",
+                        f"dtype={x.dtype}",
+                        f"max={x.max().item():.2f}",
+                        f"min={x.min().item():.2f}",
+                    ])
+                    if x.abs().max() > threhold:
+                        print(x_stats)
+            # Print stats
+            if isinstance(y, torch.Tensor):
+                y_stats = f"{name} - output: type={type(y)}"
+                y_stats += " | " + " | ".join([
+                    f"shape={y.shape}",
+                    f"dtype={y.dtype}",
+                    f"max={y.max().item():.2f}",
+                    f"min={y.min().item():.2f}",
+                ])
+                # if y.abs().max() > threhold:
+                #     print(y_stats)
+                print(y_stats)
+        return hook
+
+    # Track hook handles
+    hook_handles = []
+
+    # Register hooks on layers of interest
+    for name, module in model.named_modules():
+        handle = module.register_forward_hook(create_hook(name))
+        hook_handles.append(handle)
+
+    # Enable anomaly detection
+    torch.autograd.set_detect_anomaly(True)
+
+    # Forward and backward pass
+    pred = model(*inputs)
+
+    # Compute loss and backward pass
+    loss = pred.sum()
+    loss.backward()
+
+
+    # Remove hooks
+    for h in hook_handles:
+        h.remove()
+
+    # Disable anomaly detection
+    torch.autograd.set_detect_anomaly(False)
+
+    # Done
+    print("Done debugging.")
+    return pred
+
+    

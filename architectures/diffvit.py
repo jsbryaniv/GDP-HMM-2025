@@ -60,8 +60,8 @@ class DiffViT3d(nn.Module):
         # Define time embedding layers
         self.time_embedding_block = FiLM(n_features)
 
-        # Create main autoencoder
-        self.autoencoder = ViT3d(
+        # Create main vit
+        self.main_vit = ViT3d(
             in_channels, in_channels,
             shape=shape, scale=scale, ratio_shape_patch=ratio_shape_patch,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers,
@@ -166,13 +166,9 @@ class DiffViT3d(nn.Module):
                 + sigma * torch.randn_like(x, device=x.device)
             )
 
-            # Check for nans and infs
-            if torch.isnan(x).any() or torch.isinf(x).any():
-                raise ValueError('NaNs or Infs detected in the diffusion model.')
-
 
         # Output block
-        x = self.autoencoder.decoder(x)
+        x = self.main_vit.decoder(x)
 
         # Return
         return x
@@ -180,13 +176,13 @@ class DiffViT3d(nn.Module):
     def calculate_diffusion_loss(self, target, *context, n_samples=4):
 
         # Input blocks
-        latent_target = self.autoencoder.encoder(target)
+        latent_target = self.main_vit.encoder(target)
         
         # Encode features
         feats_context = sum(block(y) for block, y in zip(self.context_encoders, context))
 
         # Calculate reconstruction loss
-        target_reconstructed = self.autoencoder.decoder(latent_target)
+        target_reconstructed = self.main_vit.decoder(latent_target)
         loss = F.mse_loss(target_reconstructed, target)
 
         # Loop over samples

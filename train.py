@@ -11,6 +11,7 @@ from torch.cuda.amp import autocast, GradScaler
 # Import local
 from config import *
 from dataset import collate_gdp
+from utils import inspect_parameters, inspect_activations
 
 
 # Set up training function
@@ -99,21 +100,17 @@ def train_model(
             # Zero gradients
             optimizer.zero_grad()
 
-            # # Get loss
-            # loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
-
-            # # Backward pass and optimization
-            # loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
-            # optimizer.step()
-
             # Get loss
             with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
                 loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Backward pass and optimization
-            scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)  # Gradient clipping
+            with torch.autograd.set_detect_anomaly(True):
+                scaler.scale(loss).backward()
+            flag = inspect_parameters(model)  # Inspect parameters
+            if flag:
+                inspect_activations(model, scan, beam, ptvs, oars, body)  # Inspect activations
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad)    # Gradient clipping
             scaler.step(optimizer)
             scaler.update()
 

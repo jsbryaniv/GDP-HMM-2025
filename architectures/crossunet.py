@@ -20,7 +20,7 @@ class CrossUnetModel(nn.Module):
         in_channels, out_channels, n_cross_channels_list,
         n_features=16, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=4, attn_kernel_size=5,
-        scale=2,
+        scale=2, conv_block=None, use_dropout=True,
     ):
         super(CrossUnetModel, self).__init__()
         
@@ -34,19 +34,18 @@ class CrossUnetModel(nn.Module):
         self.n_attn_repeats = n_attn_repeats
         self.attn_kernel_size = attn_kernel_size
         self.scale = scale
+        self.use_dropout = use_dropout
 
         # Get constants
         n_context = len(n_cross_channels_list)
         self.n_context = n_context
 
-
-        ### AUTOENCODERS ###
-        # Create main autoencoder
-        self.autoencoder = Unet3d(
+        # Create main unet
+        self.main_unet = Unet3d(
             in_channels, out_channels, 
             n_features=n_features, n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
-            scale=scale,
+            scale=scale, conv_block=conv_block, use_dropout=use_dropout,
         )
         
         # Create context encoders
@@ -57,22 +56,23 @@ class CrossUnetModel(nn.Module):
                     n_channels, 
                     n_features=n_features, n_blocks=n_blocks,
                     n_layers_per_block=n_layers_per_block,
-                    scale=scale,
+                    scale=scale, use_dropout=use_dropout,
                 )
             )
 
         # Get features per depth
-        n_features_per_depth = self.autoencoder.n_features_per_depth
+        self.n_features_per_depth = self.main_unet.n_features_per_depth
 
         # Create cross attention blocks
         self.cross_attn_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
             self.cross_attn_blocks.append(
                 ConvformerDecoder3d(
-                    n_features_per_depth[depth], 
+                    self.n_features_per_depth[depth], 
                     kernel_size=attn_kernel_size,
                     n_layers=n_attn_repeats,
-                    n_heads=max(1, min(n_features_per_depth[depth] // 8, 4)),
+                    n_heads=max(1, min(self.n_features_per_depth[depth] // 8, 4)),
+                    dropout=.2 if use_dropout else 0,
                 )
             )
     
@@ -98,7 +98,7 @@ class CrossUnetModel(nn.Module):
         """
 
         # Encode x
-        feats = self.autoencoder.encoder(x)
+        feats = self.main_unet.encoder(x)
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
@@ -115,7 +115,7 @@ class CrossUnetModel(nn.Module):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             # Upsample
-            x = self.autoencoder.decoder.up_blocks[i](x)
+            x = self.main_unet.decoder.up_blocks[i](x)
             # Merge with skip
             x_skip = feats[depth]
             x = x + x_skip
@@ -124,7 +124,7 @@ class CrossUnetModel(nn.Module):
             x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
-        x = self.autoencoder.decoder.output_block(x)
+        x = self.main_unet.decoder.output_block(x)
 
         # Return the output
         return x

@@ -35,14 +35,14 @@ class CrossViT3d(nn.Module):
         self.n_layers = n_layers
         self.n_layers_mixing = n_layers_mixing
 
-        # Create main autoencoder
-        self.autoencoder = ViT3d(
+        # Create main vit
+        self.main_vit = ViT3d(
             in_channels, out_channels,
             shape=shape, scale=scale, ratio_shape_patch=ratio_shape_patch,
             n_features=n_features, n_heads=n_heads, n_layers=n_layers,
         )
 
-        # Create context autoencoders
+        # Create context encoders
         self.context_encoders = nn.ModuleList()
         for n_channels in n_cross_channels_list:
             self.context_encoders.append(
@@ -85,14 +85,14 @@ class CrossViT3d(nn.Module):
         """
 
         # Encode input
-        x = self.autoencoder.encoder(x)
+        x = self.main_vit.encoder(x)
         context = sum(block(y) for block, y in zip(self.context_encoders, y_list))
 
         # Add positional embeddings
         pos_embedding = (
-            self.autoencoder.encoder.pos_embedding_0 
-            + self.autoencoder.encoder.pos_embedding_1 
-            + self.autoencoder.encoder.pos_embedding_2
+            self.main_vit.encoder.pos_embedding_0 
+            + self.main_vit.encoder.pos_embedding_1 
+            + self.main_vit.encoder.pos_embedding_2
         )
         pos_embedding = pos_embedding.flatten(2).transpose(1, 2).expand(x.shape[0], -1, -1)
         x = x + pos_embedding 
@@ -103,7 +103,7 @@ class CrossViT3d(nn.Module):
             x = block(x, context)
 
         # Decode
-        x = self.autoencoder.decoder(x)
+        x = self.main_vit.decoder(x)
         
         # Return
         return x
