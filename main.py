@@ -173,9 +173,13 @@ if __name__ == '__main__':
     else:
         """Other machines are for running."""
 
+        # Get number of workers
+        num_workers = os.cpu_count()
+        print(f"Using {num_workers} workers.")
+
         # Run main function
         job_args = all_jobs[ID]
-        model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0))
+        model, metadata = main(**job_args, from_checkpoint=bool(ITER > 0), num_workers=num_workers)
 
     # Done
     print('Done!')

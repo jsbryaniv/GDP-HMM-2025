@@ -18,7 +18,7 @@ def train_model(
     model, datasets, optimizer=None,
     batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=2, 
     epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
-    jobname=None, print_every=100, debug=False,
+    jobname=None, print_every=100, debug=False, num_workers=0,
 ): 
     # Set up constants
     if jobname is None:
@@ -40,7 +40,7 @@ def train_model(
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
     loader_train = DataLoader(
         dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-        pin_memory=True, num_workers=-1, prefetch_factor=2,
+        pin_memory=True, num_workers=num_workers, prefetch_factor=2,
     )
 
     # Set up optimizer
