@@ -17,7 +17,7 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 # Define main function
 def main(
     dataID, modelID, batch_size=None,
-    from_checkpoint=False, debug=False, device=None,
+    from_checkpoint=False, debug=False, device=None, num_workers=0,
     **model_kwargs
 ):
     """
@@ -82,6 +82,7 @@ def main(
         optimizer=optimizer,
         batch_size=batch_size,
         jobname=savename, debug=debug,
+        num_workers=num_workers,
         # Continue training parameters
         epoch_start=epoch_start, 
         loss_val_best=loss_val_best,
