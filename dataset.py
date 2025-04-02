@@ -149,7 +149,7 @@ class GDPDataset(Dataset):
         PatientID = ID.split('+')[0]
 
         # Load data dictionary
-        data_npz = np.load(file, allow_pickle=True)
+        data_npz = np.load(file, allow_pickle=True, mmap_mode='r')
         data_dict = dict(data_npz)['arr_0'].item()
 
         # Load CT scan
@@ -231,51 +231,49 @@ def collate_gdp(batch):
     Works for 3D tensors of arbitrary size.
     """
 
-    # # Add batch dimension to each tensor
-    # batch = [[x.unsqueeze(0) if x is not None else None for x in tensors] for tensors in batch]
+    # Get shape from first element
+    batch_size = len(batch)
+    scan0, beam0, ptvs0, oars0, body0, dose0 = batch[0]
+    has_dose = dose0 is not None
+    n_channels_scan = scan0.shape[0]
+    n_channels_beam = beam0.shape[0]
+    n_channels_ptvs = ptvs0.shape[0]
+    n_channels_oars = oars0.shape[0]
+    n_channels_body = body0.shape[0]
+    n_channels_dose = dose0.shape[0] if has_dose else 0
 
-    # Find max shape along each dimension
-    max_shape = list(batch[0][0].shape[-3:])
-    for (scan, *args) in batch:
-        max_shape = [max(max_shape[i], scan.shape[-3+i]) for i in range(len(max_shape))]
+    # Determine max spatial size
+    D, H, W = zip(*[x[0].shape[-3:] for x in batch])
+    max_D, max_H, max_W = max(D), max(H), max(W)
 
-    # Pad tensors to max shape
-    padded_scan = []
-    padded_beam = []
-    padded_ptvs = []
-    padded_oars = []
-    padded_body = []
-    padded_dose = []
-    for (scan, beam, ptvs, oars, body, dose) in batch:
-        # Get shape info
-        shape_target = max_shape
-        shape_origin = scan.shape[-3:]
-        # Get pad info
-        padding = [shape_target[i] - shape_origin[i] for i in range(3)]
-        padding = [(p//2, p-p//2) for p in padding]
-        padding = tuple(sum(padding[::-1], ()))  # Flatten and reverse order
-        # Pad tensors
-        padded_scan.append(F.pad(scan, padding, mode='constant', value=scan.min()))
-        padded_beam.append(F.pad(beam, padding, mode='constant', value=0))
-        padded_ptvs.append(F.pad(ptvs, padding, mode='constant', value=0))
-        padded_oars.append(F.pad(oars, padding, mode='constant', value=False))
-        padded_body.append(F.pad(body, padding, mode='constant', value=False))
-        if dose is not None:
-            padded_dose.append(F.pad(dose, padding, mode='constant', value=0))
-            
-    # Stack padded tensors
-    collated_scan = torch.stack(padded_scan, dim=0)
-    collated_beam = torch.stack(padded_beam, dim=0)
-    collated_ptvs = torch.stack(padded_ptvs, dim=0)
-    collated_oars = torch.stack(padded_oars, dim=0)
-    collated_body = torch.stack(padded_body, dim=0)
-    if len(padded_dose) > 0:
-        collated_dose = torch.stack(padded_dose, dim=0)
+    # Preallocate tensors
+    scan_batch = torch.empty((batch_size, n_channels_scan, max_D, max_H, max_W), dtype=torch.float32)
+    beam_batch = torch.empty((batch_size, n_channels_beam, max_D, max_H, max_W), dtype=torch.float32)
+    ptvs_batch = torch.empty((batch_size, n_channels_ptvs, max_D, max_H, max_W), dtype=torch.float32)
+    oars_batch = torch.empty((batch_size, n_channels_oars, max_D, max_H, max_W), dtype=torch.bool)
+    body_batch = torch.empty((batch_size, n_channels_body, max_D, max_H, max_W), dtype=torch.bool)
+    if has_dose:
+        dose_batch = torch.empty((batch_size, n_channels_dose, max_D, max_H, max_W), dtype=torch.float32)
     else:
-        collated_dose = None
+        dose_batch = None
+
+    # Fill batches
+    for i, (scan, beam, ptvs, oars, body, dose) in enumerate(batch):
+        d, h, w = scan.shape[-3:]
+        d_pad = (max_D - d) // 2
+        h_pad = (max_H - h) // 2
+        w_pad = (max_W - w) // 2
+
+        scan_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = scan
+        beam_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = beam
+        ptvs_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = ptvs
+        oars_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = oars
+        body_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = body
+        if has_dose:
+            dose_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = dose
     
     # Return output
-    return collated_scan, collated_beam, collated_ptvs, collated_oars, collated_body, collated_dose
+    return scan_batch, beam_batch, ptvs_batch, oars_batch, body_batch, dose_batch
 
 
 
@@ -287,6 +285,7 @@ if __name__ == "__main__":
 
     # Import libraries
     import matplotlib.pyplot as plt
+    from torch.utils.data import DataLoader
 
     # Create dataset
     dataset = GDPDataset(
@@ -294,22 +293,30 @@ if __name__ == "__main__":
         validation_set=False,
     )
 
-    # Loop over dataset
-    outputs = []
-    for i in range(len(dataset)):
-        scan, beam, ptvs, oars, body, dose = dataset[i]
-        
+    # Create dataloader
+    batch_size = 4
+    num_workers = 1
+    loader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
+        pin_memory=True, num_workers=num_workers, prefetch_factor=2,
+    )
+
+    # Loop over dataloader
+    for i, (scan, beam, ptvs, oars, body, dose) in enumerate(loader):
+        if i % 100 == 0:
+            print(f'--{i}/{len(loader)}')
+
         # Plot
         fig, ax = plt.subplots(1, 6)
         plt.ion()
         plt.show()
-        d_slice = scan.shape[1] // 2
+        d_slice = scan.shape[2] // 2
         for i, x in enumerate([scan, beam, ptvs, oars, body, dose]):
-            ax[i].imshow(x[0, d_slice], cmap='gray')
+            ax[i].imshow(x[0, 0, d_slice], cmap='gray')
             ax[i].axis('off')
         plt.tight_layout()
         plt.pause(0.1)
-        plt.savefig('_image.png')
+        plt.savefig('_image.png', dpi=900)
         plt.close()
 
     # Done

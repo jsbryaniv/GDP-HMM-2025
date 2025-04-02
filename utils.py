@@ -280,18 +280,25 @@ def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=F
     # Noise
     if noise:
         """Apply different noise to each input."""
-        inputs = [
-            x + torch.randn_like(x, device=device) * 0.1 * x.std()  # Add noise to tensor
-            if x.dtype in [torch.float32, torch.float64] else x     # if tensor is float
-            for x in inputs                                         # for each input
-        ]
+        # inputs = [
+        #     x + torch.randn_like(x, device=device) * 0.1 * x.std()  # Add noise to tensor
+        #     if x.dtype in [torch.float32, torch.float64] else x     # if tensor is float
+        #     for x in inputs                                         # for each input
+        # ]
+        # Same as ^^^ but in-place (memory efficient)
+        for i, x in enumerate(inputs):
+            if x.dtype in [torch.float32, torch.float64]:
+                inputs[i] = x.add_(torch.randn_like(x) * 0.1 * x.std())
 
     # Block mask
     if block_mask:
         """Apply the same block mask to all inputs."""
-        mask = torch.ones_like(inputs[0], device=device)       # Initialize mask
-        mask = block_mask_3d(mask, block_size=8, p=0.2)        # Apply random block masking
-        inputs = [(x * mask).astype(x.dtype) for x in inputs]  # Apply mask to inputs
+        mask = torch.ones_like(inputs[0], device=device)   # Initialize mask
+        mask = block_mask_3d(mask, block_size=8, p=0.2)    # Apply random block masking
+        # inputs = [(x * mask).to(x.dtype) for x in inputs]  # Apply mask to inputs
+        # Same as ^^^ but in-place (memory efficient)
+        for i, x in enumerate(inputs):
+            inputs[i].mul_(mask)
 
     # Return augmented data
     return inputs + targets
