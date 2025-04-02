@@ -17,13 +17,17 @@ from utils import inspect_parameters, inspect_activations
 # Set up training function
 def train_model(
     model, datasets, optimizer=None,
-    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=1, 
-    epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
-    jobname=None, print_every=100, debug=False, num_workers=0,
+    batch_size=1, max_batches=None, learning_rate=0.001, max_grad=1, n_epochs=2, 
+    epoch_start=0, loss_val_best=None, model_state_dict_best=None,
+    jobname=None, print_every=100, debug=False,
 ): 
     # Set up constants
     if jobname is None:
          jobname = ''
+    if max_batches is None:
+        max_batches = float('inf')
+    if loss_val_best is None:
+        loss_val_best = float('inf')
     device = next(model.parameters()).device
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     n_epochs = n_epochs + epoch_start  # Start counting epochs from epoch_start
@@ -39,13 +43,10 @@ def train_model(
     # Set up data loaders
     dataset_train, dataset_val = datasets
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
-    if num_workers == 0:
-        loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp)
-    else:
-        loader_train = DataLoader(
-            dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-            num_workers=num_workers, prefetch_factor=2, pin_memory=False, 
-        )
+    loader_train = DataLoader(
+        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
+        generator=torch.Generator().manual_seed(epoch_start),
+    )
 
     # Set up optimizer
     if optimizer is None:
@@ -89,10 +90,13 @@ def train_model(
             if debug and batch_idx > 2:
                 print('DEBUG MODE: Breaking early.')
                 break
+            if batch_idx >= max_batches:
+                print('Max batches reached. Breaking early.')
+                break
 
             # Status update
             if (batch_idx % print_every == 0) or ((epoch == epoch_start) and (batch_idx < 10)):
-                print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{len(loader_train)} {jobname}')
+                print(f'---- E{epoch}/{n_epochs} Batch {batch_idx}/{min(max_batches, len(loader_train))} {jobname}')
 
             # Send to device
             scan, beam, ptvs, oars, body, dose = [
@@ -159,8 +163,15 @@ def train_model(
         # Loop over validation batches
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_val):
             if debug and batch_idx > 2:
-                    print('DEBUG MODE: Breaking early.')
-                    break
+                print('DEBUG MODE: Breaking early.')
+                break
+            if batch_idx >= max_batches:
+                print('Max batches reached. Breaking early.')
+                break
+
+            # Status update
+            if batch_idx % print_every == 0:
+                print(f'---- E{epoch}/{n_epochs} Val Batch {batch_idx}/{min(max_batches, len(loader_val))}')
 
             # Send to device
             scan, beam, ptvs, oars, body, dose = [
@@ -174,10 +185,6 @@ def train_model(
             # Update average loss
             loss_val_avg += loss.item()
             loss_val_counter += 1
-
-            # Status update
-            if batch_idx % print_every == 0:
-                print(f'---- E{epoch}/{n_epochs} Val Batch {batch_idx}/{len(loader_val)}')
 
 
         ### Finalize training statistics ###

@@ -295,11 +295,7 @@ if __name__ == "__main__":
 
     # Create dataloader
     batch_size = 4
-    num_workers = 1
-    loader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-        pin_memory=True, num_workers=num_workers, prefetch_factor=2,
-    )
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp)
 
     # Loop over dataloader
     for i, (scan, beam, ptvs, oars, body, dose) in enumerate(loader):

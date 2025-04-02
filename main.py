@@ -16,7 +16,7 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 
 # Define main function
 def main(
-    dataID, modelID, batch_size=None,
+    dataID, modelID, batch_size=None, max_batches=None,
     from_checkpoint=False, debug=False, device=None,
     **model_kwargs
 ):
@@ -80,7 +80,7 @@ def main(
         model, 
         datasets=(dataset_train, dataset_val), 
         optimizer=optimizer,
-        batch_size=batch_size,
+        batch_size=batch_size, max_batches=max_batches,
         jobname=savename, debug=debug,
         # Continue training parameters
         epoch_start=epoch_start, 
@@ -132,10 +132,10 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',        {'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunetlight',   {'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunet',        {'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
-        ('diffunetlight',   {'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
+        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
+        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
         ('unet',            {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []

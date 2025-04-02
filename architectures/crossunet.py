@@ -79,7 +79,7 @@ class CrossUnetModel(nn.Module):
                 ConvformerDecoder3d(
                     self.n_features_per_depth[depth], 
                     kernel_size=attn_kernel_size,
-                    n_layers=n_attn_repeats,
+                    n_layers=n_attn_repeats+depth,  # +depth to increase number of layers
                     n_heads=max(1, min(self.n_features_per_depth[depth] // 8, 4)),
                     dropout=.2 if use_dropout else 0,
                 )
