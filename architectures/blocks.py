@@ -351,6 +351,15 @@ class ConvBlockFiLM3d(ConvBlock3d):
         # Return output and time
         return (x, t)
 
+# Define function to select convolutional block
+def conv_block_selector(conv_block_type):
+    if conv_block_type == 'ConvBlock3d':
+        return ConvBlock3d
+    elif conv_block_type == 'ConvBlockFiLM3d':
+        return ConvBlockFiLM3d
+    else:
+        raise ValueError(f"Unknown conv_block_type: {conv_block_type}.")
+
 
 ### TRANSFORMER BLOCKS ###
 

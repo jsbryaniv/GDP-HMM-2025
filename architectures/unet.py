@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from architectures.blocks import ConvBlock3d
+from architectures.blocks import conv_block_selector
 
 
 # Define Unet encoder
@@ -18,10 +18,16 @@ class UnetEncoder3d(nn.Module):
     def __init__(self, 
         in_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4,
-        scale=1, use_dropout=True,
-        conv_block=None, feature_scale=None,
+        scale=1, use_dropout=False,
+        conv_block_type=None, feature_scale=None,
     ):
         super(UnetEncoder3d, self).__init__()
+
+        # Set default values
+        if conv_block_type is None:
+            conv_block_type = 'ConvBlock3d'
+        if feature_scale is None:
+            feature_scale = 'linear'
         
         # Set attributes
         self.in_channels = in_channels
@@ -30,17 +36,15 @@ class UnetEncoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
-        # Get number of features per depth
-        if (feature_scale is None) or (feature_scale == 'exponential'):
+        # Set constants
+        conv_block = conv_block_selector(conv_block_type)
+        if feature_scale == 'exponential':
             self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
         elif feature_scale == 'linear':
             self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
-
-        # Set up conv_block
-        if conv_block is None:
-            conv_block = ConvBlock3d
 
         # Define input block
         self.input_block = nn.Sequential(
@@ -90,10 +94,16 @@ class UnetDecoder3d(nn.Module):
     def __init__(self, 
         out_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4, 
-        scale=1, use_dropout=True,
-        conv_block=None, feature_scale=None,
+        scale=1, use_dropout=False,
+        conv_block_type=None, feature_scale=None,
     ):
         super(UnetDecoder3d, self).__init__()
+
+        # Set default values
+        if conv_block_type is None:
+            conv_block_type = 'ConvBlock3d'
+        if feature_scale is None:
+            feature_scale = 'linear'
         
         # Set attributes
         self.out_channels = out_channels
@@ -102,17 +112,15 @@ class UnetDecoder3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
-        # Get number of features per depth
-        if (feature_scale is None) or (feature_scale == 'exponential'):
+        # Get constants
+        conv_block = conv_block_selector(conv_block_type)
+        if feature_scale == 'exponential':
             self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
         elif feature_scale == 'linear':
             self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
-
-        # Set up conv_block
-        if conv_block is None:
-            conv_block = ConvBlock3d
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -165,10 +173,16 @@ class Unet3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4, 
-        scale=1, use_dropout=True,
-        conv_block=None, feature_scale=None,
+        scale=1, use_dropout=False,
+        conv_block_type=None, feature_scale=None,
     ):
         super(Unet3d, self).__init__()
+
+        # Set default values
+        if conv_block_type is None:
+            conv_block_type = 'ConvBlock3d'
+        if feature_scale is None:
+            feature_scale = 'linear'
         
         # Set attributes
         self.in_channels = in_channels
@@ -178,6 +192,7 @@ class Unet3d(nn.Module):
         self.n_layers_per_block = n_layers_per_block
         self.scale = scale
         self.use_dropout = use_dropout
+        self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
         # Define encoder
@@ -188,7 +203,7 @@ class Unet3d(nn.Module):
             n_layers_per_block=n_layers_per_block,
             scale=scale,
             use_dropout=use_dropout,
-            conv_block=conv_block,
+            conv_block_type=conv_block_type,
             feature_scale=feature_scale,
         )
 
@@ -200,7 +215,7 @@ class Unet3d(nn.Module):
             n_layers_per_block=n_layers_per_block,
             scale=scale,
             use_dropout=use_dropout,
-            conv_block=conv_block,
+            conv_block_type=conv_block_type,
             feature_scale=feature_scale,
         )
 
@@ -216,6 +231,7 @@ class Unet3d(nn.Module):
             'n_layers_per_block': self.n_layers_per_block,
             'scale': self.scale,
             'use_dropout': self.use_dropout,
+            'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
         }
         

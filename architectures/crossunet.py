@@ -20,10 +20,14 @@ class CrossUnetModel(nn.Module):
         in_channels, out_channels, n_cross_channels_list,
         n_features=16, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=4, attn_kernel_size=5,
-        scale=2, conv_block=None, use_dropout=True,
+        scale=2, conv_block_type=None, use_dropout=False,
         feature_scale=None,
     ):
         super(CrossUnetModel, self).__init__()
+
+        # Set default values
+        if conv_block_type is None:
+            conv_block_type = 'ConvBlock3d'
         
         # Set attributes
         self.in_channels = in_channels
@@ -36,6 +40,7 @@ class CrossUnetModel(nn.Module):
         self.attn_kernel_size = attn_kernel_size
         self.scale = scale
         self.use_dropout = use_dropout
+        self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
         # Get constants
@@ -47,7 +52,7 @@ class CrossUnetModel(nn.Module):
             in_channels, out_channels, 
             n_features=n_features, n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
-            scale=scale, conv_block=conv_block, use_dropout=use_dropout,
+            scale=scale, conv_block_type=conv_block_type, use_dropout=use_dropout,
             feature_scale=feature_scale,
         )
         
@@ -93,6 +98,7 @@ class CrossUnetModel(nn.Module):
             'attn_kernel_size': self.attn_kernel_size,
             'scale': self.scale,
             'use_dropout': self.use_dropout,
+            'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
         }
 

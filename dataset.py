@@ -149,7 +149,7 @@ class GDPDataset(Dataset):
         PatientID = ID.split('+')[0]
 
         # Load data dictionary
-        data_npz = np.load(file, allow_pickle=True, mmap_mode='r')
+        data_npz = np.load(file, allow_pickle=True)
         data_dict = dict(data_npz)['arr_0'].item()
 
         # Load CT scan
@@ -247,13 +247,13 @@ def collate_gdp(batch):
     max_D, max_H, max_W = max(D), max(H), max(W)
 
     # Preallocate tensors
-    scan_batch = torch.empty((batch_size, n_channels_scan, max_D, max_H, max_W), dtype=torch.float32)
-    beam_batch = torch.empty((batch_size, n_channels_beam, max_D, max_H, max_W), dtype=torch.float32)
-    ptvs_batch = torch.empty((batch_size, n_channels_ptvs, max_D, max_H, max_W), dtype=torch.float32)
-    oars_batch = torch.empty((batch_size, n_channels_oars, max_D, max_H, max_W), dtype=torch.bool)
-    body_batch = torch.empty((batch_size, n_channels_body, max_D, max_H, max_W), dtype=torch.bool)
+    scan_batch = torch.ones((batch_size, n_channels_scan, max_D, max_H, max_W), dtype=torch.float32) * scan0.min().item()
+    beam_batch = torch.zeros((batch_size, n_channels_beam, max_D, max_H, max_W), dtype=torch.float32)
+    ptvs_batch = torch.zeros((batch_size, n_channels_ptvs, max_D, max_H, max_W), dtype=torch.float32)
+    oars_batch = torch.zeros((batch_size, n_channels_oars, max_D, max_H, max_W), dtype=torch.bool)
+    body_batch = torch.zeros((batch_size, n_channels_body, max_D, max_H, max_W), dtype=torch.bool)
     if has_dose:
-        dose_batch = torch.empty((batch_size, n_channels_dose, max_D, max_H, max_W), dtype=torch.float32)
+        dose_batch = torch.zeros((batch_size, n_channels_dose, max_D, max_H, max_W), dtype=torch.float32)
     else:
         dose_batch = None
 

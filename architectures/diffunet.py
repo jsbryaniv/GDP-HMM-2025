@@ -12,9 +12,8 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.unet import UnetEncoder3d
 from architectures.crossunet import CrossUnetModel
-from architectures.blocks import ConvBlock3d, ConvBlockFiLM3d, FiLM3d, DyTanh3d
+from architectures.blocks import conv_block_selector, FiLM3d, DyTanh3d
 
 
 # Make time aware Unet
@@ -32,7 +31,7 @@ class TimeAwareUnet3d(CrossUnetModel):
             feature_scale=feature_scale,
             scale=1,
             use_dropout=False,                      # No dropout in diffusion model
-            conv_block=ConvBlockFiLM3d,             # Use FiLM block
+            conv_block_type='ConvBlockFiLM3d',           # Use FiLM block
         )
 
         # Input regularization
@@ -92,9 +91,13 @@ class DiffUnet3d(nn.Module):
         n_layers_per_block=2, n_mixing_blocks=2,
         scale=2, n_steps=16, eta=.1,
         use_self_conditioning=True,
-        conv_block=None, feature_scale=None,
+        conv_block_type=None, feature_scale=None,
     ):
         super(DiffUnet3d, self).__init__()
+
+        # Set default values
+        if conv_block_type is None:
+            conv_block_type = 'ConvBlock3d'
         
         # Set attributes
         self.in_channels = in_channels
@@ -107,6 +110,7 @@ class DiffUnet3d(nn.Module):
         self.n_steps = n_steps
         self.eta = eta
         self.use_self_conditioning = use_self_conditioning
+        self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
         # Get constants
@@ -122,8 +126,7 @@ class DiffUnet3d(nn.Module):
         self.register_buffer('alpha_cumprod', alpha_cumprod)
 
         # Set up convolutional blocks
-        if conv_block is None:
-            conv_block = ConvBlock3d
+        conv_block = conv_block_selector(conv_block_type)
 
         # Define input blocks
         self.input_block = nn.Sequential(
@@ -168,22 +171,6 @@ class DiffUnet3d(nn.Module):
             feature_scale=feature_scale,
         )
 
-    #     # Initialize weights
-    #     self._init_weights()
-
-    # def _init_weights(self):
-        
-    #     # Set all convs to small weights
-    #     for module in self.modules():
-    #         if isinstance(module, (nn.Conv3d, nn.ConvTranspose3d)):
-    #             if module.weight is not None:
-    #                 nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
-    #             if module.bias is not None:
-    #                 nn.init.zeros_(module.bias)
-
-    #     # Done
-    #     return
-
     def get_config(self):
         return {
             'in_channels': self.in_channels,
@@ -196,6 +183,7 @@ class DiffUnet3d(nn.Module):
             'n_steps': self.n_steps,
             'eta': self.eta,
             'use_self_conditioning': self.use_self_conditioning,
+            'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
         }
     

@@ -189,6 +189,7 @@ class DosePredictionModel(nn.Module):
         # Initialize transform params
         transform_params = {
             'original_shape': scan.shape[2:],
+            'body_mask': body.clone().detach(),
         }
 
         # If eval mode, save ptvs to transform params for d97 normalization
@@ -260,6 +261,10 @@ class DosePredictionModel(nn.Module):
         if self.scale_dose:
             dose_scale = transform_params['dose_scale']
             x = x * dose_scale
+            
+        # Apply body mask
+        body = transform_params['body_mask']
+        x = x * body
 
         # If eval mode normalize using D97 of PTV_High
         if self.eval_d97:

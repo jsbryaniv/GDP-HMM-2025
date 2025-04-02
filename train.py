@@ -4,6 +4,7 @@ import os
 import copy
 import time
 import torch
+import tracemalloc
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
@@ -38,10 +39,13 @@ def train_model(
     # Set up data loaders
     dataset_train, dataset_val = datasets
     loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
-    loader_train = DataLoader(
-        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
-        pin_memory=True, num_workers=num_workers, prefetch_factor=2,
-    )
+    if num_workers == 0:
+        loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp)
+    else:
+        loader_train = DataLoader(
+            dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
+            num_workers=num_workers, prefetch_factor=2, pin_memory=False, 
+        )
 
     # Set up optimizer
     if optimizer is None:
@@ -53,7 +57,8 @@ def train_model(
     losses_train = []
     losses_val = []
     time_stats = []
-    mem_stats = []
+    mem_GPU_stats = []
+    mem_CPU_stats = []
 
     # Training loop
     for epoch in range(epoch_start, n_epochs):
@@ -73,11 +78,13 @@ def train_model(
 
         # Initialize average loss
         loss_train_avg = 0
+        loss_train_counter = 0
 
         # Loop over training batches
         t_batch = time.time()                           # Start timer
+        tracemalloc.start()                             # Start CPU memory tracker
         if device.type != "cpu":
-            torch.cuda.reset_peak_memory_stats(device)  # Start memory tracker
+            torch.cuda.reset_peak_memory_stats(device)  # Start GPU memory tracker
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_train):
             if debug and batch_idx > 2:
                 print('DEBUG MODE: Breaking early.')
@@ -104,7 +111,8 @@ def train_model(
             optimizer.step()
 
             # Update average loss
-            loss_train_avg += loss.item() / len(loader_train)
+            loss_train_avg += loss.item()
+            loss_train_counter += 1
 
             # Inspect parameters and activations
             flag = inspect_parameters(model)
@@ -112,12 +120,16 @@ def train_model(
                 inspect_activations(model, scan, beam, ptvs, oars, body)
 
             # Get memory usage
+            mem_CPU = tracemalloc.get_traced_memory()[1] / 1024**3
+            tracemalloc.stop()
+            tracemalloc.start()
             if device.type != "cpu":
-                mem = torch.cuda.max_memory_allocated(device) / 1024**3
+                mem_GPU = torch.cuda.max_memory_allocated(device) / 1024**3
                 torch.cuda.reset_peak_memory_stats(device)
             else:
-                mem = 0
-            mem_stats.append(mem)
+                mem_GPU = 0
+            mem_CPU_stats.append(mem_CPU)
+            mem_GPU_stats.append(mem_GPU)
 
             # Update time statistics
             t_elapsed = time.time() - t_batch
@@ -126,7 +138,13 @@ def train_model(
 
             # Status update
             if (batch_idx % print_every == 0) or ((epoch == epoch_start) and (batch_idx < 10)):
-                print(f'------ Time: {t_elapsed:.2f} s / batch | Mem: {mem:.2f} GB | Loss: {loss.item():.4f}')
+                print(' | '.join([
+                    f'------ Time: {t_elapsed:.2f} s / batch',
+                    f'GPU: {mem_GPU:.2f} GB',
+                    f'CPU: {mem_CPU:.2f} GB',
+                    f'Loss: {loss.item():.4f}',
+                ]))
+        
 
         ### Validation ###
         print('--Validation')
@@ -136,6 +154,7 @@ def train_model(
 
         # Initialize average loss
         loss_val_avg = 0
+        loss_val_counter = 0
 
         # Loop over validation batches
         for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_val):
@@ -153,7 +172,8 @@ def train_model(
                 loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
 
             # Update average loss
-            loss_val_avg += loss.item() / len(loader_val)
+            loss_val_avg += loss.item()
+            loss_val_counter += 1
 
             # Status update
             if batch_idx % print_every == 0:
@@ -164,6 +184,8 @@ def train_model(
         print('--Finalizing training statistics')
 
         # Update training statistics
+        loss_train_avg /= loss_train_counter
+        loss_val_avg /= loss_val_counter
         losses_train.append(loss_train_avg)
         losses_val.append(loss_val_avg)
         if loss_val_avg < loss_val_best:
@@ -183,7 +205,7 @@ def train_model(
     # Finalize training statistics
     training_statistics = {
         'epoch': epoch,
-        'mem_stats': mem_stats,
+        'mem_stats': mem_GPU_stats,
         'time_stats': time_stats,
         'losses_train': losses_train,
         'losses_val': losses_val,
