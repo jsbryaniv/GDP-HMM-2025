@@ -17,7 +17,7 @@ from utils import inspect_parameters, inspect_activations
 # Set up training function
 def train_model(
     model, datasets, optimizer=None,
-    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=2, 
+    batch_size=1, learning_rate=0.001, max_grad=1, n_epochs=1, 
     epoch_start=0, loss_val_best=float('inf'), model_state_dict_best=None,
     jobname=None, print_every=100, debug=False, num_workers=0,
 ): 

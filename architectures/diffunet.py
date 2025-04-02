@@ -87,9 +87,9 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=8, n_blocks=5, 
-        n_layers_per_block=2, n_mixing_blocks=2,
-        scale=2, n_steps=16, eta=.1,
+        n_features=8, n_blocks=4, 
+        n_layers_per_block=4, n_mixing_blocks=4,
+        scale=2, n_steps=8, eta=.1,
         use_self_conditioning=True,
         conv_block_type=None, feature_scale=None,
     ):
