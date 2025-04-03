@@ -138,6 +138,7 @@ if __name__ == '__main__':
         ('crossunet',       {'batch_size': 2, 'shape': 128}),
         ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
         ('unet',            {'batch_size': 2, 'shape': 128}),
+        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'n_features': 16, 'n_steps': 10}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
