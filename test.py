@@ -36,6 +36,8 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
 
     # Initialize loss
     losses_test = []
+    losses_test_d97 = []
+    test_counter = 0
 
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
@@ -48,10 +50,6 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
         scan, beam, ptvs, oars, body, dose = [
             x.to(device) for x in (scan, beam, ptvs, oars, body, dose)
         ]
-
-        # Forward pass
-        pred = model(scan, beam, ptvs, oars, body)
-        pred = pred.squeeze().cpu().numpy()
 
         # Get reference dose
         idx = dataset_test.indices[batch_idx]
@@ -68,28 +66,45 @@ def test_model(model, dataset_test, jobname=None, print_every=100, debug=False):
         norm_scale = ptv_highdose / (np.percentile(ref_dose[data_dict[PTVHighname].astype('bool')], 3) + 1e-5)
         ref_dose = ref_dose * norm_scale
 
+        # Forward pass
+        pred = model(scan, beam, ptvs, oars, body, d97=False)
+        pred = pred.squeeze().cpu().numpy()
+
         # Calculate error
         isodose_5Gy_mask = ((ref_dose > 5) | (pred > 5)) & (data_dict['Body'] > 0) 
         isodose_ref_5Gy_mask = (ref_dose > 5) & (data_dict['Body'] > 0) 
         diff = ref_dose - pred
         error = np.sum(np.abs(diff)[isodose_5Gy_mask > 0]) / np.sum(isodose_ref_5Gy_mask)
 
-        # Update loss
+        # Forward pass d97
+        pred_d97 = model(scan, beam, ptvs, oars, body, d97=True)
+        pred_d97 = pred_d97.squeeze().cpu().numpy()
+
+        # Calculate error d97
+        isodose_5Gy_mask_d97 = ((ref_dose > 5) | (pred_d97 > 5)) & (data_dict['Body'] > 0)
+        isodose_ref_5Gy_mask_d97 = (ref_dose > 5) & (data_dict['Body'] > 0)
+        diff_d97 = ref_dose - pred_d97
+        error_d97 = np.sum(np.abs(diff_d97)[isodose_5Gy_mask_d97 > 0]) / np.sum(isodose_ref_5Gy_mask_d97)
+
+        # Update loss lists
         losses_test.append(error)
+        losses_test_d97.append(error_d97)
+        test_counter += 1
         
         # Status update
         if batch_idx % print_every == 0:
             print(f'-- Batch {batch_idx}/{len(loader_test)} error={error:.4f}')
 
-
-    # Normalize loss
-    loss_test = np.mean(losses_test)
+    # Average loss
+    loss_test = sum(losses_test) / test_counter
+    loss_test_d97 = sum(losses_test_d97) / test_counter
 
     # Print loss
-    print(f'-- Average loss on test dataset: {loss_test:.4f} {jobname}') 
+    print(f'-- Average loss on test dataset: {loss_test:.4f} {jobname}')
+    print(f'-- Average loss on test dataset (d97): {loss_test_d97:.4f} {jobname}')
     
     # Return total loss
-    return loss_test, losses_test
+    return loss_test, losses_test, losses_test_d97
 
 
 # Plot worst predictions
@@ -103,7 +118,7 @@ def show_worst(model, dataset_test, losses_test=None, n_show=5):
 
     # Get worst indices
     if losses_test is None:
-        _, losses_test = test_model(model, dataset_test)
+        _, losses_test, _ = test_model(model, dataset_test)
     worst_indices = np.argsort(losses_test)[::-1]
     worst_indices = worst_indices[:n_show]
 
@@ -137,20 +152,16 @@ def show_worst(model, dataset_test, losses_test=None, n_show=5):
         pred = pred.squeeze().detach().cpu().numpy()
         
         # Calculate error
-        # isodose_5Gy_mask = ((ref_dose > 5) | (pred > 5)) & (data_dict['Body'] > 0) 
-        # isodose_ref_5Gy_mask = (ref_dose > 5) & (data_dict['Body'] > 0) 
-        # diff = ref_dose - pred
         isodose_5Gy_mask = ((dose > 5) | (pred > 5)) & (body > 0)
         isodose_ref_5Gy_mask = (dose > 5) & (body > 0)
         diff = dose - pred
         error = np.sum(np.abs(diff)[isodose_5Gy_mask > 0]) / np.sum(isodose_ref_5Gy_mask)
 
         # Find worst slices
+        worst_diff = np.abs((dose - pred)*body).max()
         worst_ijk = np.unravel_index(np.abs((dose - pred)*body).argmax(), dose.shape)
         vmin = min(dose.min(), pred.min())
         vmax = max(dose.max(), pred.max())
-        # dose[worst_ijk] = 0
-        # pred[worst_ijk] = 0
 
         # Plot axial
         ax[ax_idx, 0].set_title('Axial GT')
@@ -177,7 +188,7 @@ def show_worst(model, dataset_test, losses_test=None, n_show=5):
         ax[ax_idx, 5].plot(worst_ijk[1], worst_ijk[0], 'ro')
 
         # Set up y-label
-        ax[ax_idx, 0].set_ylabel(f'Patient {data_idx}\nloss={losses_test[data_idx]:.4f}')
+        ax[ax_idx, 0].set_ylabel(f'Patient {data_idx}\nloss={losses_test[data_idx]:.4f}\nerror={error:.4f}\nworst_diff={worst_diff:.4f}')
 
     # Finalize figure
     plt.tight_layout()
@@ -199,20 +210,20 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Load model and dataset
-    savename = 'model_All_diffunet_shape=128'
+    savename = 'model_All_unet_shape=128'
     checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model, datasets, _, metadata = load_checkpoint(checkpoint_path, load_best=True)
-    dataset_val, dataset_test, dataset_train = datasets
+    dataset_train, dataset_val, dataset_test = datasets
     losses_test = metadata['losses_test']
+
+    # Prepare model
     model.to(device)
+    model.eval()
 
     # Show worst predictions
     fig, ax = show_worst(model, dataset_test, losses_test=losses_test)
     plt.savefig('_image.png')
     plt.close()
-
-    # # Test model
-    # loss_test = test_model(model, datasets[-1], print_every=1)
     
     # Done
     print('Done.')

@@ -87,10 +87,10 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=8, n_blocks=4, 
-        n_layers_per_block=2, n_mixing_blocks=2,
+        n_features=16, n_blocks=5, 
+        n_layers_per_block=4 , n_mixing_blocks=4,
         scale=2, n_steps=10, eta=.1,
-        use_self_conditioning=True,
+        reuse_prediction=True,
         conv_block_type=None, feature_scale=None,
     ):
         super(DiffUnet3d, self).__init__()
@@ -109,7 +109,7 @@ class DiffUnet3d(nn.Module):
         self.scale = scale
         self.n_steps = n_steps
         self.eta = eta
-        self.use_self_conditioning = use_self_conditioning
+        self.reuse_prediction = reuse_prediction
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
@@ -161,7 +161,7 @@ class DiffUnet3d(nn.Module):
         )
 
         # Create main unet
-        n_in = 2 * n_features if use_self_conditioning else n_features
+        n_in = 2 * n_features if reuse_prediction else n_features
         n_out = n_features
         self.main_unet = TimeAwareUnet3d(
             n_in, n_out, [n_features]*n_context,
@@ -182,7 +182,7 @@ class DiffUnet3d(nn.Module):
             'scale': self.scale,
             'n_steps': self.n_steps,
             'eta': self.eta,
-            'use_self_conditioning': self.use_self_conditioning,
+            'reuse_prediction': self.reuse_prediction,
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
         }
@@ -203,7 +203,18 @@ class DiffUnet3d(nn.Module):
         # Return
         return latent_context, feats_context
     
-    def forward(self, *context):
+    def forward(self, *context, target=None, return_loss=False):
+
+        # Check argmuents
+        if return_loss and target is None:
+            raise ValueError("If return_loss is True, target must be provided.")
+
+        # If returning loss, embed target and initialize loss
+        if return_loss:
+            latent_target = self.input_block(target)                 # Embed target
+            target_reconstructed = self.output_block(latent_target)  # Reconstruct target
+            loss = F.mse_loss(target_reconstructed, target)          # Calculate loss
+            loss = loss * 5  # Weight dose reconstruction loss, since it is very important
 
         # Encode context
         latent_context, feats_context = self.encode_context(*context)
@@ -211,11 +222,11 @@ class DiffUnet3d(nn.Module):
         # Initialize x
         x = torch.randn_like(latent_context[0], device=context[0].device)
 
-        # Initialize x0
-        if self.use_self_conditioning:
-            x0 = torch.zeros_like(x, device=x.device)
+        # Initialize x0_guess
+        if self.reuse_prediction:
+            x0_guess = torch.zeros_like(x, device=x.device)
         else:
-            x0 = None
+            x0_guess = None
 
         # Diffusion steps
         for t in reversed(range(1, self.n_steps)):
@@ -226,19 +237,22 @@ class DiffUnet3d(nn.Module):
             sigma = self.eta * torch.sqrt( (1 - a_t/a_t1) * (1 - a_t) / (1 - a_t1) )
 
             # Merge with self-conditioning
-            if self.use_self_conditioning:
-                if self.training and random.random() < 0.5:  # Randomly drop self-conditioning
-                    x0 = torch.zeros_like(x0, device=x.device)
-                x = torch.cat([x, x0], dim=1)  # Concatenate along channel dimension
+            if self.reuse_prediction:
+                x = torch.cat([x, x0_guess], dim=1)  # Concatenate along channel dimension
 
             # Predict noise 
             t_step = t * torch.ones(x.shape[0], device=x.device, dtype=torch.long)
             noise_pred = self.main_unet(t_step, x, feats_context)
 
-            # Update self-conditioning with predicted x0
-            if self.use_self_conditioning:
+            # Update self-conditioning with predicted x0_guess
+            if self.reuse_prediction:
                 x = x[:, :self.n_features]  # Remove self-conditioning
-                x0 = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()  # Detach is important
+                x0_guess = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()  # Detach is important
+
+            # Calculate loss
+            if return_loss:
+                noise = ((x - torch.sqrt(a_t) * latent_target) / torch.sqrt(1 - a_t)).detach()  # Detach is important
+                loss += F.mse_loss(noise_pred, noise) / (self.n_steps - 1)
 
             # Update position 
             x = (
@@ -250,57 +264,13 @@ class DiffUnet3d(nn.Module):
         # Output block
         x = self.output_block(x)
 
-        # Return
-        return x
+        # Return output
+        if return_loss:
+            return x, loss
+        else:
+            return x
     
-    def calculate_diffusion_loss(self, target, *context, n_samples=2):
 
-        # Input blocks
-        latent_target = self.input_block(target)
-        latent_context = [block(y) for block, y in zip(self.context_input_blocks, context)]
-        
-        # Encode features
-        feats_context = [block(y) for block, y in zip(self.main_unet.context_encoders, latent_context)]
-        feats_context = [sum([f for f in row]) / len(row) for row in zip(*feats_context)]
-
-        # Calculate reconstruction loss
-        target_reconstructed = self.output_block(latent_target)
-        loss = F.mse_loss(target_reconstructed, target)
-
-        # Loop over samples
-        for _ in range(n_samples):
-
-            # Sample noise
-            noise = torch.randn_like(latent_target, device=target.device)
-
-            # Sample time step and corrupted target
-            t = torch.randint(0, self.n_steps, (target.shape[0],), device=target.device)
-            a_t = self.alpha_cumprod[t].view(-1, 1, 1, 1, 1)
-            x = torch.sqrt(a_t) * latent_target + torch.sqrt(1 - a_t) * noise
-
-            # Initialize x0
-            if self.use_self_conditioning:
-                x0 = torch.zeros_like(x, device=x.device)
-                x = torch.cat([x, x0], dim=1)
-
-            # Predict noise without self-conditioning
-            noise_pred = self.main_unet(t, x, feats_context)
-            loss += F.mse_loss(noise_pred, noise) / n_samples
-
-            # Predict noise with self-conditioning
-            if self.use_self_conditioning:
-                # Add self-conditioning
-                x = x[:, :self.n_features]
-                x0 = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()
-                x = torch.cat([x, x0], dim=1)
-                # Predict noise
-                noise_pred = self.main_unet(t, x, feats_context)
-                # Calculate loss
-                loss += F.mse_loss(noise_pred, noise) / n_samples
-
-        # Return
-        return loss
-        
 
 # Test the model
 if __name__ == '__main__':

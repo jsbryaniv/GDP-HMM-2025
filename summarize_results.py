@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader
 
 # Import local
 from config import *
-from test import test_model
 from utils import get_dvh, get_savename, load_checkpoint
 from losses import competition_loss
 from plotting import plot_losses, copy_axis
@@ -227,20 +226,24 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': True}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': True}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': True, 'eval_d97': False}),
-        ('unet',  {'batch_size': 8, 'shape': 64, 'scale_dose': False, 'eval_d97': False}),
+        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
+        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
+        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('unet',            {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
         for (modelID, kwargs) in modelID_list:
-            kwargs = {k: v for k, v in kwargs.items() if not k in ['batch_size']}  # Remove batch size
+            kwargs = {k: v for k, v in kwargs.items() if not k in ['batch_size', 'max_batches']}  # Remove training args
             all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
 
     # Convert to savenames
     all_savenames = [get_savename(**args) for args in all_jobs]
     all_savenames = [j for j in all_savenames if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
+
+    # Get device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Plot each job separately
     data_list = []
@@ -253,6 +256,9 @@ if __name__ == '__main__':
         loss_test = metadata['loss_test']
         losses_train = metadata['losses_train']
         losses_val = metadata['losses_val']
+
+        # Send model to device
+        model.to(device)
 
         # Plot losses
         fig, ax = plot_losses(losses_train, losses_val)

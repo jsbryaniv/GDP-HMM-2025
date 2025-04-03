@@ -140,10 +140,10 @@ class UnetDecoder3d(nn.Module):
 
         # Define output block
         self.output_block = nn.Sequential(
-            # Convolutional layers
-            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Expand volume
             conv_block(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
+            # Convolutional layers
+            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Merge features to output channels
             conv_block(n_features, out_channels, kernel_size=1),
         )

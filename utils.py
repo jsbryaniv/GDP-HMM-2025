@@ -200,7 +200,11 @@ def reverse_resize_3d(image, transform_params):
     return restored_image
 
 # Data augmentor
-def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=False):
+def augment_data_3d(
+    *inputs, targets=None, 
+    affine=True, noise=False, block_mask=False,
+    fill_values=None,
+):
     """
     Apply the same augmentation to all inputs and targets. Avoid noise and block mask for targets.
     """
@@ -215,6 +219,8 @@ def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=F
     # Get constants
     device = inputs[0].device
     D, H, W = inputs[0].shape[-3:]
+    if fill_values is None:
+        fill_values = [0] * len(inputs) + [0] * len(targets)
 
     # Affine transformation
     if affine:
@@ -258,24 +264,32 @@ def augment_data_3d(*inputs, targets=None, affine=True, noise=True, block_mask=F
         grid = F.affine_grid(theta.unsqueeze(0), size=(1, 1, D, H, W), align_corners=False)
 
         # Create warp function
-        def warp(x):
+        def warp(x, fill):
             # Add batch dimension
             x = x.unsqueeze(0)
             # Check if input dtype
             if x.dtype in [torch.float32, torch.float64]:
                 # Apply bilinear interpolation for floats
-                x = F.grid_sample(x, grid, mode='bilinear', align_corners=False)
+                x = F.grid_sample(
+                    x - fill, grid, 
+                    mode='bilinear', padding_mode='zeros', align_corners=False,
+                )
+                x += fill
             else:
                 # Apply nearest-neighbor interpolation for bools
-                x = F.grid_sample(x.float(), grid, mode='nearest', align_corners=False).to(x.dtype)
+                x = F.grid_sample(
+                    x.float() - float(fill), grid, 
+                    mode='nearest', padding_mode='zeros', align_corners=False,
+                ).to(x.dtype)
+                x = (x + fill).to(x.dtype)
             # Remove batch dimension
             x = x.squeeze(0)
             # Return warped tensor
             return x 
         
         # Apply affine transformation to all inputs and targets
-        inputs = [warp(x) for x in inputs]
-        targets = [warp(x) for x in targets]
+        inputs = [warp(x, fill) for x, fill in zip(inputs, fill_values[:len(inputs)])]
+        targets = [warp(x, fill) for x, fill in zip(targets, fill_values[len(inputs):])]
 
     # Noise
     if noise:
@@ -342,18 +356,12 @@ def initialize_datasets(dataID, validation_set=False):
     indices_train = indices[2*test_size:]
 
     # Create subsets
-    dataset_train = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_train)
-    dataset_val = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_val)
-    dataset_test = Subset(GDPDataset(treatment=dataID, validation_set=validation_set), indices_test)
-
-    # dataset_val, dataset_test, dataset_train = torch.utils.data.random_split(
-    #     dataset,
-    #     [test_size, test_size, len(dataset) - 2*test_size],
-    #     generator=torch.Generator().manual_seed(42),  # Set seed for reproducibility
-    # )
+    dataset_train = Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=True),  indices_train)
+    dataset_val =   Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=True),  indices_val)
+    dataset_test =  Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=False), indices_test)
 
     # Return dataset
-    return dataset_val, dataset_test, dataset_train
+    return dataset_train, dataset_val, dataset_test
 
 # Initialize model
 def initialize_model(modelID, in_channels, **kwargs):
@@ -370,8 +378,8 @@ def save_checkpoint(checkpoint_path, model, datasets, optimizer, metadata):
             'data_config': datasets[0].dataset.get_config(),
             'data_indices': {
                 'train': datasets[0].indices,
-                'val': datasets[1].indices,
-                'test': datasets[2].indices,
+                'val':   datasets[1].indices,
+                'test':  datasets[2].indices,
             },
             'optimizer_state_dict': optimizer.state_dict(),
             'metadata': metadata,
@@ -397,9 +405,9 @@ def load_checkpoint(checkpoint_path, load_best=False):
     from dataset import GDPDataset
     data_config = checkpoint['data_config']
     data_indices = checkpoint['data_indices']
-    dataset_train = Subset(GDPDataset(**{**data_config, 'augment': True}), data_indices['train'])
-    dataset_val = Subset(GDPDataset(**{**data_config, 'augment': True}), data_indices['val'])
-    dataset_test = Subset(GDPDataset(**{**data_config, 'augment': False}), data_indices['test'])
+    dataset_train = Subset(GDPDataset(**{**data_config, 'augment': True}),  data_indices['train'])
+    dataset_val =   Subset(GDPDataset(**{**data_config, 'augment': True}),  data_indices['val'])
+    dataset_test =  Subset(GDPDataset(**{**data_config, 'augment': False}), data_indices['test'])
     datasets = (dataset_train, dataset_val, dataset_test)
 
     # Load optimizer

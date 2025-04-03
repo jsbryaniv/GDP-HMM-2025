@@ -156,7 +156,7 @@ class GDPDataset(Dataset):
         scan = data_dict['img']
         scan = np.clip(scan, self.scan_min, self.scan_max) / self.scan_norm  # Clip and normalize HU values
         scan = np.expand_dims(scan, axis=0)  # Add channel dimension
-
+        
         # Load beam plate
         beam = data_dict['beam_plate']
         beam = (beam - beam.min()) / (beam.max() - beam.min())  # Normalize beam plate
@@ -218,6 +218,7 @@ class GDPDataset(Dataset):
             scan, beam, ptvs, oars, body, dose = self.augmentor(
                 scan, beam, ptvs, oars, body, 
                 targets=dose,
+                fill_values=[scan.min()]+[0]*5,
             )
 
         # Return data
@@ -247,7 +248,7 @@ def collate_gdp(batch):
     max_D, max_H, max_W = max(D), max(H), max(W)
 
     # Preallocate tensors
-    scan_batch = torch.ones((batch_size, n_channels_scan, max_D, max_H, max_W), dtype=torch.float32) * scan0.min().item()
+    scan_batch = torch.ones((batch_size, n_channels_scan, max_D, max_H, max_W), dtype=torch.float32)
     beam_batch = torch.zeros((batch_size, n_channels_beam, max_D, max_H, max_W), dtype=torch.float32)
     ptvs_batch = torch.zeros((batch_size, n_channels_ptvs, max_D, max_H, max_W), dtype=torch.float32)
     oars_batch = torch.zeros((batch_size, n_channels_oars, max_D, max_H, max_W), dtype=torch.bool)
@@ -264,6 +265,7 @@ def collate_gdp(batch):
         h_pad = (max_H - h) // 2
         w_pad = (max_W - w) // 2
 
+        scan_batch[i] *= scan.min()  # Set outside values to min
         scan_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = scan
         beam_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = beam
         ptvs_batch[i, :, d_pad:d_pad+d, h_pad:h_pad+h, w_pad:w_pad+w] = ptvs

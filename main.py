@@ -41,12 +41,12 @@ def main(
             print("WARNING: Be aware job is running with from_checkpoint=True.")  # Print warning message
         print("Loading checkpoint.")
         model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path)  # Load model, datasets, and metadata
-        dataset_val, dataset_test, dataset_train = datasets                      # Unpack datasets
+        dataset_train, dataset_val, dataset_test = datasets                      # Unpack datasets
     else:
         # Initialize datasets and model
         print("Initializing datasets and model.")
         datasets = initialize_datasets(dataID)                         # Initialize datasets
-        dataset_val, dataset_test, dataset_train = datasets            # Unpack datasets
+        dataset_train, dataset_val, dataset_test = datasets            # Unpack datasets
         n_channels = dataset_train.dataset.n_channels                  # Get number of channels
         model = initialize_model(modelID, n_channels, **model_kwargs)  # Initialize model
         optimizer = None                                               # Initialize optimizer
@@ -101,9 +101,10 @@ def main(
     # Test model
     model_best = copy.deepcopy(model)
     model_best.load_state_dict(metadata['model_state_dict_best'])
-    loss_test, losses_test = test_model(model_best, dataset_test, debug=debug)
+    loss_test, losses_test, losses_test_d97 = test_model(model_best, dataset_test, debug=debug)
     metadata['loss_test'] = loss_test
     metadata['losses_test'] = losses_test
+    metadata['losses_test_d97'] = losses_test_d97
 
 
     ### SAVE RESULTS ###
@@ -132,10 +133,10 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
-        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
+        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'reuse_prediction': True}),
+        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'reuse_prediction': False}),
+        ('crossunet',       {'batch_size': 2, 'shape': 128}),
+        ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
         ('unet',            {'batch_size': 2, 'shape': 128}),
     ]
     all_jobs = []
