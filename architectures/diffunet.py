@@ -87,9 +87,9 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=5, 
+        n_features=8, n_blocks=5, 
         n_layers_per_block=4 , n_mixing_blocks=4,
-        scale=2, n_steps=10, eta=.1,
+        scale=2, n_steps=16, eta=.1,
         reuse_prediction=True,
         conv_block_type=None, feature_scale=None,
     ):
@@ -251,8 +251,10 @@ class DiffUnet3d(nn.Module):
 
             # Calculate loss
             if return_loss:
+                # w_t = (self.n_steps - t) / self.n_steps
+                w_t = 1 / (self.n_steps - 1)  # Evenly weight all steps
                 noise = ((x - torch.sqrt(a_t) * latent_target) / torch.sqrt(1 - a_t)).detach()  # Detach is important
-                loss += F.mse_loss(noise_pred, noise) / (self.n_steps - 1)
+                loss += w_t * F.mse_loss(noise_pred, noise)
 
             # Update position 
             x = (

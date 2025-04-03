@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from config import *
 from dataset import collate_gdp
 from utils import inspect_parameters, inspect_activations
+from losses import competition_loss
 
 
 # Set up training function
@@ -180,7 +181,9 @@ def train_model(
 
             # Get loss
             with torch.no_grad():
-                loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+                # loss = model.calculate_loss(scan, beam, ptvs, oars, body, dose)
+                pred = model(scan, beam, ptvs, oars, body)
+                loss = competition_loss(pred, dose, body)
 
             # Update average loss
             loss_val_avg += loss.item()
