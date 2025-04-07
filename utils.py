@@ -411,9 +411,11 @@ def load_checkpoint(checkpoint_path, load_best=False):
     datasets = (dataset_train, dataset_val, dataset_test)
 
     # Load optimizer
-    optimizer = torch.optim.Adam(model.parameters())
     if 'optimizer_state_dict' in checkpoint:
+        optimizer = torch.optim.Adam(model.parameters())
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    else:
+        optimizer = None
 
     # Load metadata
     metadata = checkpoint['metadata']

@@ -42,6 +42,9 @@ class TimeAwareUnet3d(CrossUnetModel):
         for f in self.n_features_per_depth:
             self.context_time_embedding_blocks.append(FiLM3d(f))
 
+        # Define betas
+        self.beta_list = nn.ParameterList([nn.Parameter(torch.tensor(0.0)) for _ in range(n_blocks)])
+
     def forward(self, t, x, feats_context):
         x = x.requires_grad_()
         feats_context = [f.requires_grad_() for f in feats_context]
@@ -67,14 +70,31 @@ class TimeAwareUnet3d(CrossUnetModel):
         # Upsample blocks
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
+            upblock = self.main_unet.decoder.up_blocks[i]
+            catblock = self.main_unet.decoder.cat_blocks[i]
+            beta = self.beta_list[i]
             # Upsample
-            x, _ = self.main_unet.decoder.up_blocks[i]((x, t))
+            x, _= upblock((x, t))
             # Merge with skip
-            x_skip, _ = feats[depth]
-            x = x + x_skip
+            x_skip, _ = feats[depth]               # Get skip connection
+            x_cat = torch.cat([x, x_skip], dim=1)  # Concatenate features
+            x_cat, _ = catblock((x_cat, t))        # Apply convolutional layers
+            x = x_skip + beta * x_cat              # Merge with skip connection USE x_skip OVER X FOR DIFFUSION
             # Apply cross attention
             fcon = feats_context[depth]
             x = self.cross_attn_blocks[depth](x, fcon)
+
+        # # Upsample blocks
+        # for i in range(self.n_blocks):
+        #     depth = self.n_blocks - 1 - i
+        #     # Upsample
+        #     x, _ = self.main_unet.decoder.up_blocks[i]((x, t))
+        #     # Merge with skip
+        #     x_skip, _ = feats[depth]
+        #     x = x + x_skip
+        #     # Apply cross attention
+        #     fcon = feats_context[depth]
+        #     x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
         noise_pred, _ = self.main_unet.decoder.output_block((x, t))
@@ -87,10 +107,10 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=8, n_blocks=5, 
-        n_layers_per_block=4 , n_mixing_blocks=4,
-        scale=2, n_steps=16, eta=.1,
-        reuse_prediction=True,
+        n_features=4, n_blocks=5, 
+        n_layers_per_block=2, n_mixing_blocks=2,
+        scale=1, n_steps=10, eta=.1,
+        reuse_prediction=True, latent_diffusion=False,
         conv_block_type=None, feature_scale=None,
     ):
         super(DiffUnet3d, self).__init__()
@@ -110,6 +130,7 @@ class DiffUnet3d(nn.Module):
         self.n_steps = n_steps
         self.eta = eta
         self.reuse_prediction = reuse_prediction
+        self.latent_diffusion = latent_diffusion
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
 
@@ -128,48 +149,66 @@ class DiffUnet3d(nn.Module):
         # Set up convolutional blocks
         conv_block = conv_block_selector(conv_block_type)
 
-        # Define input blocks
-        self.input_block = nn.Sequential(
-            # Merge input channels to n_features
-            conv_block(in_channels, n_features, kernel_size=1),
-            # Shrink volume
-            conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
-            # Additional convolutional layers
-            *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
-        )
-        self.context_input_blocks = nn.ModuleList()
-        for n_channels in n_cross_channels_list:
-            self.context_input_blocks.append(
-                nn.Sequential(
-                    # Merge input channels to n_features
-                    conv_block(n_channels, n_features, kernel_size=1),
-                    # Shrink volume
-                    conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
-                    # Additional convolutional layers
-                    *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+        # Set up latent encoding blocks
+        if not latent_diffusion:
+            """No latent diffusion"""
+            self.input_block = nn.Identity()
+            self.output_block = nn.Identity()
+            self.context_input_blocks = nn.ModuleList([nn.Identity() for _ in range(n_context)])
+            n_in = 2 * in_channels if reuse_prediction else in_channels
+            n_out = in_channels
+            self.main_unet = TimeAwareUnet3d(
+                n_in, n_out, n_cross_channels_list,
+                n_features=n_features, 
+                n_blocks=n_blocks,
+                n_layers_per_block=n_layers_per_block,
+                feature_scale=feature_scale,
+            )
+        else:
+            """Latent diffusion"""
+
+            # Define input blocks
+            self.input_block = nn.Sequential(
+                # Merge input channels to n_features
+                conv_block(in_channels, n_features, kernel_size=1),
+                # Shrink volume
+                conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
+                # Additional convolutional layers
+                *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+            )
+            self.context_input_blocks = nn.ModuleList()
+            for n_channels in n_cross_channels_list:
+                self.context_input_blocks.append(
+                    nn.Sequential(
+                        # Merge input channels to n_features
+                        conv_block(n_channels, n_features, kernel_size=1),
+                        # Shrink volume
+                        conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
+                        # Additional convolutional layers
+                        *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+                    )
                 )
+
+            # Define output block
+            self.output_block = nn.Sequential(
+                # Expand volume
+                conv_block(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
+                # Convolutional layers
+                *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
+                # Merge features to output channels
+                conv_block(n_features, in_channels, kernel_size=1),
             )
 
-        # Define output block
-        self.output_block = nn.Sequential(
-            # Expand volume
-            conv_block(n_features, n_features, scale=scale),  # Dense (not depthwise, groups=1) convolution for scaling
-            # Convolutional layers
-            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
-            # Merge features to output channels
-            conv_block(n_features, in_channels, kernel_size=1),
-        )
-
-        # Create main unet
-        n_in = 2 * n_features if reuse_prediction else n_features
-        n_out = n_features
-        self.main_unet = TimeAwareUnet3d(
-            n_in, n_out, [n_features]*n_context,
-            n_features=n_features, 
-            n_blocks=n_blocks,
-            n_layers_per_block=n_layers_per_block,
-            feature_scale=feature_scale,
-        )
+            # Create main unet
+            n_in = 2 * n_features if reuse_prediction else n_features
+            n_out = n_features
+            self.main_unet = TimeAwareUnet3d(
+                n_in, n_out, [n_features]*n_context,
+                n_features=n_features, 
+                n_blocks=n_blocks,
+                n_layers_per_block=n_layers_per_block,
+                feature_scale=feature_scale,
+            )
 
     def get_config(self):
         return {
@@ -183,6 +222,7 @@ class DiffUnet3d(nn.Module):
             'n_steps': self.n_steps,
             'eta': self.eta,
             'reuse_prediction': self.reuse_prediction,
+            'latent_diffusion': self.latent_diffusion,
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
         }
@@ -220,7 +260,11 @@ class DiffUnet3d(nn.Module):
         latent_context, feats_context = self.encode_context(*context)
 
         # Initialize x
-        x = torch.randn_like(latent_context[0], device=context[0].device)
+        if self.latent_diffusion:
+            x = torch.randn_like(latent_context[0], device=context[0].device)
+        else:
+            B, _, D, H, W = latent_context[0].shape
+            x = torch.randn((B, self.in_channels, D, H, W), device=context[0].device)
 
         # Initialize x0_guess
         if self.reuse_prediction:
@@ -246,7 +290,7 @@ class DiffUnet3d(nn.Module):
 
             # Update self-conditioning with predicted x0_guess
             if self.reuse_prediction:
-                x = x[:, :self.n_features]  # Remove self-conditioning
+                x = x[:, :-x0_guess.shape[1]]  # Remove self-conditioning
                 x0_guess = ((x - torch.sqrt(1 - a_t) * noise_pred) / torch.sqrt(a_t)).detach()  # Detach is important
 
             # Calculate loss
@@ -305,7 +349,6 @@ if __name__ == '__main__':
     # Forward pass
     with torch.no_grad():
         pred = model(*y_list)
-        loss = model.calculate_diffusion_loss(x, *y_list)
 
     # Estimate memory usage
     estimate_memory_usage(model, *y_list, print_stats=True)

@@ -18,9 +18,9 @@ class CrossUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=16, n_blocks=5, n_layers_per_block=4,
-        n_attn_repeats=4, attn_kernel_size=5,
-        scale=2, conv_block_type=None, use_dropout=False,
+        n_features=8, n_blocks=5, n_layers_per_block=2,
+        n_attn_repeats=2, attn_kernel_size=5,
+        scale=1, conv_block_type=None, use_dropout=False,
         feature_scale=None,
     ):
         super(CrossUnetModel, self).__init__()
@@ -126,14 +126,29 @@ class CrossUnetModel(nn.Module):
         # Upsample blocks
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
+            upblock = self.main_unet.decoder.up_blocks[i]
+            catblock = self.main_unet.decoder.cat_blocks[i]
             # Upsample
-            x = self.main_unet.decoder.up_blocks[i](x)
+            x = upblock(x)
             # Merge with skip
-            x_skip = feats[depth]
-            x = x + x_skip
+            x_skip = feats[depth]              # Get skip connection
+            x = torch.cat([x, x_skip], dim=1)  # Concatenate features
+            x = catblock(x)                    # Apply convolutional layers
             # Apply cross attention
             fcon = f_context[depth]
             x = self.cross_attn_blocks[depth](x, fcon)
+
+        # # Upsample blocks
+        # for i in range(self.n_blocks):
+        #     depth = self.n_blocks - 1 - i
+        #     # Upsample
+        #     x = self.main_unet.decoder.up_blocks[i](x)
+        #     # Merge with skip
+        #     x_skip = feats[depth]
+        #     x = x + x_skip
+        #     # Apply cross attention
+        #     fcon = f_context[depth]
+        #     x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
         x = self.main_unet.decoder.output_block(x)

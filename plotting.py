@@ -93,7 +93,7 @@ def plot_losses(losses_train, losses_val):
     ax.plot(losses_val, label='Validation')
 
     # Finalize plot
-    ax.set_ylim([0, max(losses_val)])
+    ax.set_yscale('log')
     ax.legend()
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')

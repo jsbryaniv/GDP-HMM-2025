@@ -86,6 +86,8 @@ def main(
         epoch_start=epoch_start, 
         loss_val_best=loss_val_best,
         model_state_dict_best=model_state_dict_best,
+        # Options
+        print_every=1 if debug else 100,
     )
 
     # Merge training statistics
@@ -131,14 +133,14 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All']
+    dataIDs_list = ['All']    
     modelID_list = [
-        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'reuse_prediction': True}),
-        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'reuse_prediction': False}),
-        ('crossunet',       {'batch_size': 2, 'shape': 128}),
-        ('crossunetlight',  {'batch_size': 2, 'shape': 128}),
-        ('unet',            {'batch_size': 2, 'shape': 128}),
-        ('diffunet',        {'batch_size': 2, 'max_batches': 100, 'shape': 128, 'n_features': 16, 'n_steps': 10}),
+        ('unet',            {'batch_size': 1, 'shape': 128}),
+        ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}),
+        ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
+        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': False}),
+        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': True, 'scale': 1, 'n_features': 4}),
+        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': True, 'scale': 2, 'n_features': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

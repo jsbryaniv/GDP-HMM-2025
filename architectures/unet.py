@@ -16,8 +16,8 @@ from architectures.blocks import conv_block_selector
 # Define Unet encoder
 class UnetEncoder3d(nn.Module):
     def __init__(self, 
-        in_channels, n_features=16, 
-        n_blocks=5, n_layers_per_block=4,
+        in_channels, n_features=8, 
+        n_blocks=5, n_layers_per_block=2,
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
     ):
@@ -53,7 +53,7 @@ class UnetEncoder3d(nn.Module):
             # Shrink volume
             conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
-            *(conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1))
+            *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
         )
 
         # Define downsample blocks
@@ -65,9 +65,9 @@ class UnetEncoder3d(nn.Module):
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    conv_block(n_in, n_out, groups=n_features, scale=1/2),
+                    conv_block(n_in, n_out, scale=1/2),
                     # Additional convolutional layers
-                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
+                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
                 )
             )
         
@@ -124,6 +124,7 @@ class UnetDecoder3d(nn.Module):
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
+        self.cat_blocks = nn.ModuleList()
         for i in range(n_blocks):
             depth = self.n_blocks - 1 - i
             n_in = self.n_features_per_depth[depth+1]
@@ -132,9 +133,17 @@ class UnetDecoder3d(nn.Module):
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    conv_block(n_in, n_out, groups=n_features, scale=2),
+                    conv_block(n_in, n_out, scale=2),  # Dense (not depthwise, groups=1) convolution for scaling
                     # Additional convolutional layers
                     *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
+                )
+            )
+            self.cat_blocks.append(
+                nn.Sequential(
+                    # Merge features to output channels
+                    conv_block(2*n_out, n_out, kernel_size=1),
+                    # Additional convolutional layers
+                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
                 )
             )
 
@@ -154,12 +163,13 @@ class UnetDecoder3d(nn.Module):
         x = feats.pop()
 
         # Upsample blocks
-        for i, block in enumerate(self.up_blocks):
+        for i, (upblock, catblock) in enumerate(zip(self.up_blocks, self.cat_blocks)):
             # Upsample
-            x = block(x)
+            x = upblock(x)
             # Merge with skip
-            x_skip = feats.pop()
-            x = x + x_skip
+            x_skip = feats.pop()               # Get skip connection
+            x = torch.cat([x, x_skip], dim=1)  # Concatenate features
+            x = catblock(x)                    # Apply convolutional layers
 
         # Output block
         x = self.output_block(x)
@@ -247,6 +257,7 @@ if __name__ == '__main__':
     # Import custom libraries
     from config import *  # Import config to restrict memory usage (resource restriction script in config.py)
     from utils import estimate_memory_usage
+
 
     # Set constants
     shape = (64, 64, 64)
