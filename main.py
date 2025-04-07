@@ -16,7 +16,7 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 
 # Define main function
 def main(
-    dataID, modelID, batch_size=None, max_batches=None,
+    dataID, modelID, batch_size=None, max_batches=100,
     from_checkpoint=False, debug=False, device=None,
     **model_kwargs
 ):
@@ -138,9 +138,9 @@ if __name__ == '__main__':
         ('unet',            {'batch_size': 1, 'shape': 128}),
         ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}),
         ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
-        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': False}),
-        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': True, 'scale': 1, 'n_features': 4}),
-        ('diffunet',        {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'latent_diffusion': True, 'scale': 2, 'n_features': 16}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': False}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': True, 'scale': 1, 'n_features': 4}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': True, 'scale': 2, 'n_features': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
