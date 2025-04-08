@@ -16,7 +16,7 @@ from architectures.blocks import conv_block_selector
 # Define Unet encoder
 class UnetEncoder3d(nn.Module):
     def __init__(self, 
-        in_channels, n_features=8, 
+        in_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=2,
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
@@ -65,7 +65,7 @@ class UnetEncoder3d(nn.Module):
             self.down_blocks.append(
                 nn.Sequential(
                     # Downsample layer
-                    conv_block(n_in, n_out, scale=1/2),
+                    conv_block(n_in, n_out, groups=n_features, scale=1/2),
                     # Additional convolutional layers
                     *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
                 )
@@ -133,7 +133,7 @@ class UnetDecoder3d(nn.Module):
             self.up_blocks.append(
                 nn.Sequential(
                     # Upsample layer
-                    conv_block(n_in, n_out, scale=2),  # Dense (not depthwise, groups=1) convolution for scaling
+                    conv_block(n_in, n_out, groups=n_features, scale=2),
                     # Additional convolutional layers
                     *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )

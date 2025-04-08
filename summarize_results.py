@@ -60,7 +60,7 @@ def plot_model_results(
 
         # Forward pass
         with torch.no_grad():
-            pred = model(scan, beam, ptvs, oars, body)
+            pred = model(scan, beam, ptvs, oars, body).detach()
 
         # Ignore voxels outside body
         pred = body*pred
@@ -209,7 +209,8 @@ def plot_results_summary(fig_ax_list):
         # Plot predicted DVH for each job
         for job in range(len(all_savenames)):
             ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-            ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
+            # ax[i, n_jobs+3+job].set_title(f'DVH { '_'.join(all_savenames[job].split("_")[2:]) }')
+            ax[i, n_jobs+3+job].set_title(f'DVH {"_".join(all_savenames[job].split("_")[2:])}')
             ax[i, n_jobs+3+job].set_xlim([0, 80])
 
     # Finalize plot
@@ -226,11 +227,12 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': True}),
-        ('diffunet',        {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
-        ('diffunetlight',   {'max_batches': 100, 'batch_size': 2, 'shape': 128, 'use_self_conditioning': False}),
-        ('unet',            {'batch_size': 2, 'shape': 128}),
+        ('unet',            {'batch_size': 1, 'shape': 128}),
+        ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}),
+        ('crossunet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': False}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': True, 'scale': 1, 'n_features': 4}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'latent_diffusion': True, 'scale': 2, 'n_features': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -243,7 +245,8 @@ if __name__ == '__main__':
     all_savenames = [j for j in all_savenames if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
 
     # Get device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')  # Force CPU for testing
 
     # Plot each job separately
     data_list = []

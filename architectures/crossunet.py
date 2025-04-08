@@ -7,6 +7,7 @@ if __name__ == "__main__":
 # Import libraries
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
 from architectures.unet import Unet3d, UnetEncoder3d
@@ -102,11 +103,20 @@ class CrossUnetModel(nn.Module):
             'feature_scale': self.feature_scale,
         }
 
-    def forward(self, x, *y_list, f_context=None):
+    def encode_context(self, *y_list):
+        y_list = [y.requires_grad_() for y in y_list]
+        return checkpoint(self._encode_context, *y_list, use_reentrant=False)
+    
+    def _encode_context(self, *y_list):
+        feats_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
+        feats_context = [sum([f for f in row]) / len(row) for row in zip(*feats_context)]
+        return feats_context
+
+    def forward(self, x, *y_list, feats_context=None):
         """
         x is the input tensor
         y_list is a list of context tensors
-        f_context is the context features (optional for pre-computed context)
+        feats_context is the context features (optional for pre-computed context)
         """
 
         # Encode x
@@ -114,13 +124,12 @@ class CrossUnetModel(nn.Module):
         x = feats.pop()
 
         # Encode y_list and sum features at each depth
-        if f_context is None:
-            f_context = [block(y.float()) for block, y in zip(self.context_encoders, y_list)]
-            f_context = [sum([f for f in row]) / len(row) for row in zip(*f_context)]
+        if feats_context is None:
+            feats_context = self.encode_context(*y_list)
 
         # Apply context
         depth = self.n_blocks
-        fcon = f_context[-1]
+        fcon = feats_context.pop()
         x = self.cross_attn_blocks[depth](x, fcon)
 
         # Upsample blocks
@@ -131,24 +140,12 @@ class CrossUnetModel(nn.Module):
             # Upsample
             x = upblock(x)
             # Merge with skip
-            x_skip = feats[depth]              # Get skip connection
+            x_skip = feats.pop()               # Get skip connection
             x = torch.cat([x, x_skip], dim=1)  # Concatenate features
             x = catblock(x)                    # Apply convolutional layers
             # Apply cross attention
-            fcon = f_context[depth]
+            fcon = feats_context.pop()
             x = self.cross_attn_blocks[depth](x, fcon)
-
-        # # Upsample blocks
-        # for i in range(self.n_blocks):
-        #     depth = self.n_blocks - 1 - i
-        #     # Upsample
-        #     x = self.main_unet.decoder.up_blocks[i](x)
-        #     # Merge with skip
-        #     x_skip = feats[depth]
-        #     x = x + x_skip
-        #     # Apply cross attention
-        #     fcon = f_context[depth]
-        #     x = self.cross_attn_blocks[depth](x, fcon)
 
         # Output block
         x = self.main_unet.decoder.output_block(x)
