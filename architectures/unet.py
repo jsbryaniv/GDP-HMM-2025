@@ -17,7 +17,7 @@ from architectures.blocks import conv_block_selector
 class UnetEncoder3d(nn.Module):
     def __init__(self, 
         in_channels, n_features=16, 
-        n_blocks=5, n_layers_per_block=2,
+        n_blocks=5, n_layers_per_block=4,
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
     ):
@@ -182,7 +182,7 @@ class UnetDecoder3d(nn.Module):
 class Unet3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, n_features=16, 
-        n_blocks=5, n_layers_per_block=4, 
+        n_blocks=6, n_layers_per_block=4, 
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
     ):

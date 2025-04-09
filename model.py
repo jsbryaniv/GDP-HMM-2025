@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # Import custom libraries
-from losses import competition_loss, dvh_loss, structure_dose_loss
-from utils import resize_image_3d, reverse_resize_3d, norm_d97, inspect_parameters, inspect_activations
+from losses import competition_loss, dvh_loss, structure_dose_loss, gradient_loss
+from utils import resize_image_3d, reverse_resize_3d, norm_d97
 
 
 # Create dose prediction model
@@ -332,6 +332,9 @@ class DosePredictionModel(nn.Module):
             structures=torch.cat([(ptvs!=0), oars, body], dim=1)
         )
 
+        # Compute gradient loss
+        loss_gradient = gradient_loss(pred, dose)
+
         # import matplotlib.pyplot as plt
         # from plotting import plot_images
         # pred_d97 = self(scan, beam, ptvs, oars, body, d97=True)
@@ -345,6 +348,7 @@ class DosePredictionModel(nn.Module):
             + loss_competition 
             + loss_dvh
             + loss_structure
+            + loss_gradient
             + loss_diffusion
         )
 
@@ -361,6 +365,7 @@ class DosePredictionModel(nn.Module):
             print(f"--Loss Competition =  {loss_competition}")
             print(f"--Loss DVH =          {loss_dvh}")
             print(f"--Loss Structure =    {loss_structure}")
+            print(f"--Loss Gradient =      {loss_gradient}")
             print(f"--Loss Diffusion =    {loss_diffusion}")
             raise ValueError('Loss is NaN or Inf.')
 

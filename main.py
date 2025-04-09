@@ -87,7 +87,7 @@ def main(
         loss_val_best=loss_val_best,
         model_state_dict_best=model_state_dict_best,
         # Options
-        print_every=1 if debug else 100,
+        print_every=1 if debug else 25,
     )
 
     # Merge training statistics
@@ -135,10 +135,9 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']    
     modelID_list = [
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'adjust_context': True}),
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'adjust_context': False}),
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'scale': 1, 'n_features': 4}),
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'scale': 2, 'n_features': 16}),
+        ('unet',            {'batch_size': 1, 'shape': 256}),
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}), 
+        ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

@@ -131,3 +131,33 @@ def structure_dose_loss(pred_dose, target_dose, structures):
 
     # Return loss
     return loss
+
+# Define gradient loss function
+def gradient_loss(pred, target):
+    """
+    Compute gradient difference loss between prediction and target in 3D.
+    Encourages sharp edges by aligning gradients.
+    """
+
+    # Define gradient function
+    def compute_gradients(x):
+        dx = x[..., 1:, :, :] - x[..., :-1, :, :]
+        dy = x[..., :, 1:, :] - x[..., :, :-1, :]
+        dz = x[..., :, :, 1:] - x[..., :, :, :-1]
+        return dx, dy, dz
+
+    # Compute gradients
+    dx_pred, dy_pred, dz_pred = compute_gradients(pred)
+    dx_targ, dy_targ, dz_targ = compute_gradients(target)
+
+    # Compute loss with MAE not MSE
+    loss = (
+        (dx_pred - dx_targ).abs().mean()    # Use MAE NOT MSE
+        + (dy_pred - dy_targ).abs().mean()
+        + (dz_pred - dz_targ).abs().mean()
+    )
+    
+    # Return loss
+    return loss
+
+
