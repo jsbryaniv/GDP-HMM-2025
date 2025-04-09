@@ -20,7 +20,7 @@ from architectures.blocks import FiLM3d, DyTanh3d
 class TimeAwareUnet3d(CrossUnetModel):
     def __init__(self, 
         in_channels, out_channels, n_cross_channels_list, 
-        n_features=16, n_blocks=6, n_layers_per_block=4,
+        n_features=16, n_blocks=5, n_layers_per_block=4,
         scale=2, feature_scale=None,
     ):
         super().__init__(
@@ -93,7 +93,7 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=6, 
+        n_features=16, n_blocks=5, 
         n_layers_per_block=4, n_mixing_blocks=4,
         scale=2, n_steps=16, eta=.1,
     ):

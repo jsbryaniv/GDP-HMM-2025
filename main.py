@@ -135,7 +135,7 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']    
     modelID_list = [
-        ('unet',            {'batch_size': 1, 'shape': 256}),
+        ('unet',            {'batch_size': 1, 'shape': 256, 'scale': 2, 'n_features': 8}),
         ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}), 
         ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
     ]
