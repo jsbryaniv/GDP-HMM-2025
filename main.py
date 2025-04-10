@@ -151,6 +151,9 @@ if __name__ == '__main__':
         # Test 4: Does kernel size help or hurt crossunet?
         ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
         ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # Test 5: Does kernel size help unet when its scaled? (compare to second model of test 2)
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=7'}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
