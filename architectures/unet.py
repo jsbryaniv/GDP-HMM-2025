@@ -271,6 +271,7 @@ if __name__ == '__main__':
     model = Unet3d(
         in_channels=in_channels, 
         out_channels=out_channels,
+        n_features=64,
     )
 
     # Print model structure

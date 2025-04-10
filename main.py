@@ -103,7 +103,12 @@ def main(
     # Test model
     model_best = copy.deepcopy(model)
     model_best.load_state_dict(metadata['model_state_dict_best'])
-    loss_test, losses_test, losses_test_d97 = test_model(model_best, dataset_test, debug=debug)
+    loss_test, losses_test, losses_test_d97 = test_model(
+        model_best, 
+        dataset_test, 
+        debug=debug, 
+        print_every=1 if debug else 25,
+    )
     metadata['loss_test'] = loss_test
     metadata['losses_test'] = losses_test
     metadata['losses_test_d97'] = losses_test_d97
@@ -135,9 +140,17 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']    
     modelID_list = [
-        ('unet',            {'batch_size': 1, 'shape': 256, 'scale': 2, 'n_features': 8}),
-        ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 4}), 
-        ('diffunet',        {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 16}),
+        # Test 1: Does scaling help or hurt diffunet?
+        ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8}), 
+        ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
+        # Test 2: Does scaling help or hurt unet?
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # Test 3: Does kernel size help or hurt unet? (compare to first model of test 2)
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        # Test 4: Does kernel size help or hurt crossunet?
+        ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

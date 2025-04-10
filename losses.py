@@ -156,6 +156,9 @@ def gradient_loss(pred, target):
         + (dy_pred - dy_targ).abs().mean()
         + (dz_pred - dz_targ).abs().mean()
     )
+
+    # Rescale loss
+    loss = loss * 10
     
     # Return loss
     return loss

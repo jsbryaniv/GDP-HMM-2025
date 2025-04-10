@@ -20,7 +20,7 @@ class CrossUnetModel(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         n_features=8, n_blocks=5, n_layers_per_block=2,
-        n_attn_repeats=2, attn_kernel_size=5,
+        n_attn_repeats=2, attn_kernel_size=3,
         scale=1, conv_block_type=None, use_dropout=False,
         feature_scale=None,
     ):
