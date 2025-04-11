@@ -194,6 +194,7 @@ def plot_results_summary(fig_ax_list):
         # Plot predicted dose for each job
         for job in range(n_jobs):
             title = '\n'.join([
+                # '_'.join(all_savenames[job].split('_')[2:]),
                 all_savenames[job].split('_')[2],
                 'img_loss='+axs[job][i, 2].get_title().split('=')[-1],
                 'avg_loss='+f'{losses[job]:.4f}',
@@ -209,8 +210,8 @@ def plot_results_summary(fig_ax_list):
         # Plot predicted DVH for each job
         for job in range(len(all_savenames)):
             ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-            # ax[i, n_jobs+3+job].set_title(f'DVH { '_'.join(all_savenames[job].split("_")[2:]) }')
-            ax[i, n_jobs+3+job].set_title(f'DVH {"_".join(all_savenames[job].split("_")[2:])}')
+            # ax[i, n_jobs+3+job].set_title(f'DVH\n{"_".join(all_savenames[job].split("_")[2:])}')
+            ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
             ax[i, n_jobs+3+job].set_xlim([0, 80])
 
     # Finalize plot
@@ -225,12 +226,25 @@ def plot_results_summary(fig_ax_list):
 if __name__ == '__main__':
     
     # Set up all jobs
+    suptitle = f"Left kernel=3  |  Middle kernel=5  |  Right kernel=7"
     dataIDs_list = ['All']
     modelID_list = [
-        # ('diffunet',        {'batch_size': 4, 'shape': 64, 'adjust_context': True}),        # 17.0518
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'adjust_context': False}),       # 5.2055
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'scale': 1, 'n_features': 4}),   # 4.7695
-        ('diffunet',        {'batch_size': 4, 'shape': 64, 'scale': 2, 'n_features': 16}),  # 4.7996
+        # # Test 1: Does scaling help or hurt diffunet?
+        # ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8}), 
+        # ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
+        # # Test 2: Does scaling help or hurt unet?
+        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # # Test 3: Does kernel size help or hurt unet?
+        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        # # Test 4: Does kernel size help or hurt crossunet?
+        # ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        # ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        # Test 5: Does kernel size help unet when its scaled?
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
+        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=7'}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -243,8 +257,7 @@ if __name__ == '__main__':
     all_savenames = [j for j in all_savenames if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
 
     # Get device
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cpu')  # Force CPU for testing
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Plot each job separately
     data_list = []
@@ -275,6 +288,9 @@ if __name__ == '__main__':
 
     # Plot summary
     fig, ax = plot_results_summary(data_list)
+    fig.suptitle(suptitle)
+    fig.tight_layout()
+    plt.pause(.1)
     fig.savefig(f'figs/summary_{dataID}.png')
 
     # Close figures

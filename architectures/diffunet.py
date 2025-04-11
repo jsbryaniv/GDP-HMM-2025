@@ -21,7 +21,7 @@ class TimeAwareUnet3d(CrossUnetModel):
     def __init__(self, 
         in_channels, out_channels, n_cross_channels_list, 
         n_features=16, n_blocks=5, n_layers_per_block=4,
-        scale=2, feature_scale=None,
+        scale=2, feature_scale=None, bidirectional=False,
     ):
         super().__init__(
             in_channels, out_channels, n_cross_channels_list,
@@ -32,6 +32,7 @@ class TimeAwareUnet3d(CrossUnetModel):
             scale=scale,
             use_dropout=False,                      # No dropout in diffusion model
             conv_block_type='ConvBlockFiLM3d',      # Use FiLM block
+            bidirectional=bidirectional,
         )
 
         # Input regularization
@@ -66,6 +67,8 @@ class TimeAwareUnet3d(CrossUnetModel):
         fcon = feats_context.pop()
         x, _ = feats.pop()
         x = self.cross_attn_blocks[depth](x, fcon)
+        if self.bidirectional:
+            fcon = self.context_attn_blocks[depth](fcon, x)
 
         # Upsample blocks
         for i in range(self.n_blocks):
@@ -79,8 +82,17 @@ class TimeAwareUnet3d(CrossUnetModel):
             x = torch.cat([x, x_skip], dim=1)  # Concatenate features
             x, _ = catblock((x, t))            # Apply convolutional layers
             # Apply cross attention
-            fcon = feats_context.pop()
-            x = self.cross_attn_blocks[depth](x, fcon)
+            if not self.bidirectional:
+                fcon = feats_context.pop()
+                x = self.cross_attn_blocks[depth](x, fcon)
+            else:
+                fcon = self.context_decoder.up_blocks[i](fcon)
+                fcon_skip = feats_context.pop()
+                fcon = torch.cat([fcon, fcon_skip], dim=1)
+                fcon = self.context_decoder.cat_blocks[i](fcon)
+                x = self.cross_attn_blocks[depth](x, fcon)
+                if depth > 0:
+                    fcon = self.context_attn_blocks[depth](fcon, x)
 
         # Output block
         x, _ = self.main_unet.decoder.output_block((x, t))
@@ -96,6 +108,7 @@ class DiffUnet3d(nn.Module):
         n_features=16, n_blocks=5, 
         n_layers_per_block=4, n_mixing_blocks=4,
         scale=2, n_steps=16, eta=.1,
+        bidirectional=False,
     ):
         super(DiffUnet3d, self).__init__()
         
@@ -131,6 +144,7 @@ class DiffUnet3d(nn.Module):
             n_blocks=n_blocks,
             n_layers_per_block=n_layers_per_block,
             scale=scale,
+            bidirectional=bidirectional,
         )
 
         # Get number of features per depth
@@ -147,6 +161,7 @@ class DiffUnet3d(nn.Module):
             'scale': self.scale,
             'n_steps': self.n_steps,
             'eta': self.eta,
+            'bidirectional': self.main_unet.bidirectional,
         }
     
     def forward(self, *context, target=None, return_loss=False):

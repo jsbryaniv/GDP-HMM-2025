@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 # Import custom libraries
-from architectures.unet import Unet3d, UnetEncoder3d
+from architectures.unet import Unet3d, UnetEncoder3d, UnetDecoder3d
 from architectures.blocks import ConvformerDecoder3d
 
 
@@ -20,9 +20,9 @@ class CrossUnetModel(nn.Module):
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
         n_features=8, n_blocks=5, n_layers_per_block=2,
-        n_attn_repeats=2, attn_kernel_size=3,
+        n_attn_repeats=2, attn_kernel_size=5,
         scale=1, conv_block_type=None, use_dropout=False,
-        feature_scale=None,
+        feature_scale=None, bidirectional=False,
     ):
         super(CrossUnetModel, self).__init__()
 
@@ -43,6 +43,7 @@ class CrossUnetModel(nn.Module):
         self.use_dropout = use_dropout
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
+        self.bidirectional = bidirectional
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -69,12 +70,23 @@ class CrossUnetModel(nn.Module):
                     feature_scale=feature_scale,
                 )
             )
+        if bidirectional:
+            self.context_decoder = UnetDecoder3d(
+                n_channels, 
+                n_features=n_features, n_blocks=n_blocks,
+                n_layers_per_block=n_layers_per_block,
+                scale=scale, use_dropout=use_dropout,
+                feature_scale=feature_scale,
+            )
+            del self.context_decoder.output_block  # Remove output block
 
         # Get features per depth
         self.n_features_per_depth = self.main_unet.n_features_per_depth
 
         # Create cross attention blocks
         self.cross_attn_blocks = nn.ModuleList()
+        if bidirectional:
+            self.context_attn_blocks = nn.ModuleList()
         for depth in range(n_blocks+1):
             self.cross_attn_blocks.append(
                 ConvformerDecoder3d(
@@ -85,6 +97,17 @@ class CrossUnetModel(nn.Module):
                     dropout=.2 if use_dropout else 0,
                 )
             )
+            if bidirectional:
+                self.context_attn_blocks.append(
+                    ConvformerDecoder3d(
+                        self.n_features_per_depth[depth], 
+                        kernel_size=attn_kernel_size,
+                        n_layers=n_attn_repeats+depth,  # +depth to increase number of layers
+                        n_heads=max(1, min(self.n_features_per_depth[depth] // 8, 4)),
+                        dropout=.2 if use_dropout else 0,
+                    )
+                )
+
     
     def get_config(self):
         """Get configuration."""
@@ -101,6 +124,7 @@ class CrossUnetModel(nn.Module):
             'use_dropout': self.use_dropout,
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
+            'bidirectional': self.bidirectional,
         }
 
     def encode_context(self, *y_list):
@@ -131,6 +155,8 @@ class CrossUnetModel(nn.Module):
         depth = self.n_blocks
         fcon = feats_context.pop()
         x = self.cross_attn_blocks[depth](x, fcon)
+        if self.bidirectional:
+            fcon = self.context_attn_blocks[depth](fcon, x)
 
         # Upsample blocks
         for i in range(self.n_blocks):
@@ -144,8 +170,17 @@ class CrossUnetModel(nn.Module):
             x = torch.cat([x, x_skip], dim=1)  # Concatenate features
             x = catblock(x)                    # Apply convolutional layers
             # Apply cross attention
-            fcon = feats_context.pop()
-            x = self.cross_attn_blocks[depth](x, fcon)
+            if not self.bidirectional:
+                fcon = feats_context.pop()
+                x = self.cross_attn_blocks[depth](x, fcon)
+            else:
+                fcon = self.context_decoder.up_blocks[i](fcon)
+                fcon_skip = feats_context.pop()
+                fcon = torch.cat([fcon, fcon_skip], dim=1)
+                fcon = self.context_decoder.cat_blocks[i](fcon)
+                x = self.cross_attn_blocks[depth](x, fcon)
+                if depth > 0:
+                    fcon = self.context_attn_blocks[depth](fcon, x)
 
         # Output block
         x = self.main_unet.decoder.output_block(x)
@@ -175,6 +210,7 @@ if __name__ == '__main__':
     # Create a model
     model = CrossUnetModel(
         in_channels, out_channels, n_cross_channels_list,
+        bidirectional=True
     )
 
     # Print model structure

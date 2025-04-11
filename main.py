@@ -138,22 +138,19 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All']    
+    dataIDs_list = ['All']
     modelID_list = [
-        # Test 1: Does scaling help or hurt diffunet?
-        ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8}), 
-        ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
-        # Test 2: Does scaling help or hurt unet?
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # Test 3: Does kernel size help or hurt unet? (compare to first model of test 2)
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        # Test 4: Does kernel size help or hurt crossunet?
-        ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # Test 5: Does kernel size help unet when its scaled? (compare to second model of test 2)
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=7'}),
+        # Unet
+        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        # Diffusion models
+        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
+        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'bidirectional': True}),
+        # Cross attention models
+        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'bidirectional': True}),
+        # Mixture of experts models
+        ('moeunet',            {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        ('moecrossunetlight',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

@@ -18,7 +18,7 @@ class ConvformerModel(nn.Module):
     """Full Convolutional Transformer model"""
     def __init__(self,
         in_channels, out_channels,
-        n_features=32, n_layers=16, n_heads=4, kernel_size=3, expansion=1,
+        n_features=32, n_layers=16, n_heads=4, kernel_size=5, expansion=1,
         scale=4,
     ):
         super(ConvformerModel, self).__init__()

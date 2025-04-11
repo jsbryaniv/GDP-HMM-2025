@@ -99,6 +99,16 @@ class DosePredictionModel(nn.Module):
                 'n_cross_channels_list': [n_channels],
                 **kwargs,
             }
+            self.model = CrossUnetModel(**kwargs)     
+        elif architecture.lower() == "moecrossunetlight":
+            # CrossUnetModel
+            from architectures.crossunet import CrossUnetModel
+            kwargs = {
+                'in_channels': n_channels,
+                'out_channels': 1,
+                'n_cross_channels_list': [n_channels],
+                **kwargs,
+            }
             self.model = CrossUnetModel(**kwargs)
         elif architecture.lower() == "crossvit":
             # CrossViT3d

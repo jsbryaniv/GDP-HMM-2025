@@ -83,7 +83,7 @@ class Diff2Unet3d(nn.Module):
         for n_feats in n_features_per_depth:
             self.time_aware_denoiser.append(
                 ConvBlockFiLM3d(2*n_feats, n_feats, kernel_size=1),
-                ConvBlockFiLM3d(n_feats, n_feats, kernel_size=3, groups=),
+                ConvBlockFiLM3d(n_feats, n_feats, kernel_size=5, groups=n_feats),
                 ConvBlockFiLM3d(n_feats, n_feats, kernel_size=1),
             )
 

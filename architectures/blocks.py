@@ -231,7 +231,7 @@ class VolumeExpand3d(nn.Module):
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, scale=1, dropout=0.0,
+        kernel_size=5, groups=1, scale=1, dropout=0.0,
     ):
         super(ConvBlock3d, self).__init__()
 
@@ -314,7 +314,7 @@ class ConvBlock3d(nn.Module):
 class ConvBlockFiLM3d(ConvBlock3d):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=3, groups=1, scale=1, dropout=0.0
+        kernel_size=5, groups=1, scale=1, dropout=0.0
     ):
         super(ConvBlockFiLM3d, self).__init__(
             in_channels, out_channels, 
@@ -466,7 +466,7 @@ class CrossTransformerBlock(nn.Module):
 # Define convolutional attention block
 class ConvAttn3d(nn.Module):
     """Applies attention within a local receptive field defined by a kernel"""
-    def __init__(self, n_features, kernel_size=3):
+    def __init__(self, n_features, kernel_size=5):
         super(ConvAttn3d, self).__init__()
 
         # Set attributes
@@ -551,7 +551,7 @@ class ConvAttn3d(nn.Module):
 # Make confolutional multi-head attention block
 class MultiheadConvAttn3d(nn.Module):
     """Applies multi-head self-attention within a local receptive field defined by a kernel"""
-    def __init__(self, n_features, kernel_size=3, n_heads=4):
+    def __init__(self, n_features, kernel_size=5, n_heads=4):
         super(MultiheadConvAttn3d, self).__init__()
 
         # Set attributes
@@ -593,7 +593,7 @@ class MultiheadConvAttn3d(nn.Module):
 
 # Define Convformer block
 class ConvformerBlock3d(nn.Module):
-    def __init__(self, n_features, kernel_size=3, n_heads=4, expansion=2, dropout=0):
+    def __init__(self, n_features, kernel_size=5, n_heads=4, expansion=2, dropout=0):
         super(ConvformerBlock3d, self).__init__()
 
         # Set up attributes
@@ -640,7 +640,7 @@ class ConvformerBlock3d(nn.Module):
 
 # Define convolutional cross-attention transformer block
 class ConvformerCrossBlock3d(nn.Module):
-    def __init__(self, n_features, kernel_size=3, n_heads=4, expansion=2, dropout=0):
+    def __init__(self, n_features, kernel_size=5, n_heads=4, expansion=2, dropout=0):
         super(ConvformerCrossBlock3d, self).__init__()
 
         # Set up attributes
@@ -700,7 +700,7 @@ class ConvformerCrossBlock3d(nn.Module):
 # Define convformer encoder
 class ConvformerEncoder3d(nn.Module):
     """Stack of ConvformerBlock3d layers acting as an encoder."""
-    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=4, expansion=2, dropout=0):
+    def __init__(self, n_features, n_layers=1, kernel_size=5, n_heads=4, expansion=2, dropout=0):
         super(ConvformerEncoder3d, self).__init__()
 
         # Set attributes
@@ -734,7 +734,7 @@ class ConvformerEncoder3d(nn.Module):
 # Define convformer decoder
 class ConvformerDecoder3d(nn.Module):
     """Stack of ConvformerCrossBlock3d layers acting as a decoder."""
-    def __init__(self, n_features, n_layers=1, kernel_size=3, n_heads=4, expansion=2, dropout=0):
+    def __init__(self, n_features, n_layers=1, kernel_size=5, n_heads=4, expansion=2, dropout=0):
         super(ConvformerDecoder3d, self).__init__()
 
         # Set attributes
