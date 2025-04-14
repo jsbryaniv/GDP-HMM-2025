@@ -141,16 +141,17 @@ if __name__ == '__main__':
     dataIDs_list = ['All']
     modelID_list = [
         # Unet
-        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
-        # Diffusion models
-        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
-        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'bidirectional': True}),
-        # Cross attention models
-        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
-        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'bidirectional': True}),
-        # Mixture of experts models
-        ('moeunet',            {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
-        ('moecrossunetlight',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'use_catblock': True}),
+        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'use_catblock': False}),
+        # # Diffusion models
+        # ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
+        # ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'bidirectional': True}),
+        # # Cross attention models
+        # ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        # ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'bidirectional': True}),
+        # # Mixture of experts models
+        # ('moeunet',            {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        # ('moecrossunetlight',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

@@ -23,6 +23,7 @@ class CrossUnetModel(nn.Module):
         n_attn_repeats=2, attn_kernel_size=5,
         scale=1, conv_block_type=None, use_dropout=False,
         feature_scale=None, bidirectional=False,
+        use_catblock=True,
     ):
         super(CrossUnetModel, self).__init__()
 
@@ -44,6 +45,7 @@ class CrossUnetModel(nn.Module):
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
         self.bidirectional = bidirectional
+        self.use_catblock = use_catblock
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -56,6 +58,7 @@ class CrossUnetModel(nn.Module):
             n_layers_per_block=n_layers_per_block,
             scale=scale, conv_block_type=conv_block_type, use_dropout=use_dropout,
             feature_scale=feature_scale,
+            use_catblock=use_catblock,
         )
         
         # Create context encoders
@@ -77,6 +80,7 @@ class CrossUnetModel(nn.Module):
                 n_layers_per_block=n_layers_per_block,
                 scale=scale, use_dropout=use_dropout,
                 feature_scale=feature_scale,
+                use_catblock=use_catblock,
             )
             del self.context_decoder.output_block  # Remove output block
 
@@ -125,6 +129,7 @@ class CrossUnetModel(nn.Module):
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
             'bidirectional': self.bidirectional,
+            'use_catblock': self.use_catblock,
         }
 
     def encode_context(self, *y_list):
@@ -167,8 +172,11 @@ class CrossUnetModel(nn.Module):
             x = upblock(x)
             # Merge with skip
             x_skip = feats.pop()               # Get skip connection
-            x = torch.cat([x, x_skip], dim=1)  # Concatenate features
-            x = catblock(x)                    # Apply convolutional layers
+            if self.use_catblock:
+                x = torch.cat([x, x_skip], dim=1)  # Concatenate features
+                x = catblock(x)                    # Apply convolutional layers
+            else:
+                x = x + x_skip                    # Add skip connection
             # Apply cross attention
             if not self.bidirectional:
                 fcon = feats_context.pop()
@@ -176,8 +184,11 @@ class CrossUnetModel(nn.Module):
             else:
                 fcon = self.context_decoder.up_blocks[i](fcon)
                 fcon_skip = feats_context.pop()
-                fcon = torch.cat([fcon, fcon_skip], dim=1)
-                fcon = self.context_decoder.cat_blocks[i](fcon)
+                if self.use_catblock:
+                    fcon = torch.cat([fcon, fcon_skip], dim=1)
+                    fcon = self.context_decoder.cat_blocks[i](fcon)
+                else:
+                    fcon = fcon + fcon_skip
                 x = self.cross_attn_blocks[depth](x, fcon)
                 if depth > 0:
                     fcon = self.context_attn_blocks[depth](fcon, x)

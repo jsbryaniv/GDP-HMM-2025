@@ -226,25 +226,15 @@ def plot_results_summary(fig_ax_list):
 if __name__ == '__main__':
     
     # Set up all jobs
-    suptitle = f"Left kernel=3  |  Middle kernel=5  |  Right kernel=7"
+    suptitle = f""
     dataIDs_list = ['All']
     modelID_list = [
-        # # Test 1: Does scaling help or hurt diffunet?
-        # ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8}), 
-        # ('diffunet',   {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
-        # # Test 2: Does scaling help or hurt unet?
-        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # # Test 3: Does kernel size help or hurt unet?
-        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 1, 'n_features': 8, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        # # Test 4: Does kernel size help or hurt crossunet?
-        # ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        # ('crossunet',  {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        # Test 5: Does kernel size help unet when its scaled?
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=3'}),
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=5'}),
-        ('unet',       {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32, 'conv_block_type': 'ConvBlock3d_kernel_size=7'}),
+        # Unet
+        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        # Diffusion models
+        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
+        # Cross attention models
+        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -300,3 +290,6 @@ if __name__ == '__main__':
     
     # Done
     print('Done.')
+
+
+    

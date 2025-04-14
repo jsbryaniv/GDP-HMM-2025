@@ -96,6 +96,7 @@ class UnetDecoder3d(nn.Module):
         n_blocks=5, n_layers_per_block=4, 
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
+        use_catblock=True,
     ):
         super(UnetDecoder3d, self).__init__()
 
@@ -114,6 +115,7 @@ class UnetDecoder3d(nn.Module):
         self.use_dropout = use_dropout
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
+        self.use_catblock = use_catblock
 
         # Get constants
         conv_block = conv_block_selector(conv_block_type)
@@ -124,7 +126,8 @@ class UnetDecoder3d(nn.Module):
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
-        self.cat_blocks = nn.ModuleList()
+        if use_catblock:
+            self.cat_blocks = nn.ModuleList()
         for i in range(n_blocks):
             depth = self.n_blocks - 1 - i
             n_in = self.n_features_per_depth[depth+1]
@@ -138,14 +141,15 @@ class UnetDecoder3d(nn.Module):
                     *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)]
                 )
             )
-            self.cat_blocks.append(
-                nn.Sequential(
-                    # Merge features to output channels
-                    conv_block(2*n_out, n_out, kernel_size=1),
-                    # Additional convolutional layers
-                    *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
+            if use_catblock:
+                self.cat_blocks.append(
+                    nn.Sequential(
+                        # Merge features to output channels
+                        conv_block(2*n_out, n_out, kernel_size=1),
+                        # Additional convolutional layers
+                        *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
+                    )
                 )
-            )
 
         # Define output block
         self.output_block = nn.Sequential(
@@ -163,13 +167,17 @@ class UnetDecoder3d(nn.Module):
         x = feats.pop()
 
         # Upsample blocks
-        for i, (upblock, catblock) in enumerate(zip(self.up_blocks, self.cat_blocks)):
+        # for i, (upblock, catblock) in enumerate(zip(self.up_blocks, self.cat_blocks)):
+        for i in range(self.n_blocks):
             # Upsample
-            x = upblock(x)
+            x = self.up_blocks[i](x)
             # Merge with skip
             x_skip = feats.pop()               # Get skip connection
-            x = torch.cat([x, x_skip], dim=1)  # Concatenate features
-            x = catblock(x)                    # Apply convolutional layers
+            if self.use_catblock:
+                x = torch.cat([x, x_skip], dim=1)  # Concatenate features
+                x = self.cat_blocks[i](x)                    # Apply convolutional layers
+            else:
+                x = x + x_skip  # Add skip connection
 
         # Output block
         x = self.output_block(x)
@@ -185,6 +193,7 @@ class Unet3d(nn.Module):
         n_blocks=5, n_layers_per_block=4, 
         scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
+        use_catblock=True,
     ):
         super(Unet3d, self).__init__()
 
@@ -204,6 +213,7 @@ class Unet3d(nn.Module):
         self.use_dropout = use_dropout
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
+        self.use_catblock = use_catblock
 
         # Define encoder
         self.encoder = UnetEncoder3d(
@@ -227,6 +237,7 @@ class Unet3d(nn.Module):
             use_dropout=use_dropout,
             conv_block_type=conv_block_type,
             feature_scale=feature_scale,
+            use_catblock=use_catblock,
         )
 
         # Get attributes from encoder and decoder
@@ -243,6 +254,7 @@ class Unet3d(nn.Module):
             'use_dropout': self.use_dropout,
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
+            'use_catblock': self.use_catblock,
         }
         
     def forward(self, x):
