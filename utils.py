@@ -340,13 +340,22 @@ def get_savename(dataID, modelID, **kwargs):
     return savename
 
 # Initialize dataset function
-def initialize_datasets(dataID, validation_set=False):
+def initialize_datasets(dataID, validation_set=False, **kwargs):
 
     # Import dataset
     from dataset import GDPDataset
 
+    # Extract kwargs
+    if '_kwargs' in dataID:
+        treatment = dataID.split('_kwargs=')[0]
+        kwargs = {**eval(dataID.split('_kwargs=')[1]), **kwargs}
+    else:
+        treatment = dataID
+    kwargs['treatment'] = treatment
+    kwargs['validation_set'] = validation_set
+
     # Get number of samples
-    n_samples = len(GDPDataset(treatment=dataID, validation_set=validation_set))
+    n_samples = len(GDPDataset(**kwargs))
 
     # Get indices for split
     test_size = int(0.2 * n_samples)
@@ -356,9 +365,9 @@ def initialize_datasets(dataID, validation_set=False):
     indices_train = indices[2*test_size:]
 
     # Create subsets
-    dataset_train = Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=True),  indices_train)
-    dataset_val =   Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=True),  indices_val)
-    dataset_test =  Subset(GDPDataset(treatment=dataID, validation_set=validation_set, augment=False), indices_test)
+    dataset_train = Subset(GDPDataset(**{'augment': True, **kwargs}),  indices_train)
+    dataset_val =   Subset(GDPDataset(**{'augment': True, **kwargs}),  indices_val)
+    dataset_test =  Subset(GDPDataset(**{'augment': False, **kwargs}), indices_test)
 
     # Return dataset
     return dataset_train, dataset_val, dataset_test

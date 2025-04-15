@@ -189,9 +189,9 @@ class UnetDecoder3d(nn.Module):
 # Define simple 3D Unet model
 class Unet3d(nn.Module):
     def __init__(self, 
-        in_channels, out_channels, n_features=64, 
+        in_channels, out_channels, n_features=16, 
         n_blocks=5, n_layers_per_block=4, 
-        scale=2, use_dropout=False,
+        scale=1, use_dropout=False,
         conv_block_type=None, feature_scale=None,
         use_catblock=True,
     ):

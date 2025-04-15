@@ -138,7 +138,7 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All']
+    dataIDs_list = ['All', "All_kwargs={'augment':False}",]
     modelID_list = [
         # Unet
         ('unet',  {'batch_size': 1, 'shape': 128, 'use_catblock': True, 'conv_block_type': "ConvBlock3d_kwargs={'alpha':1.0}"}),
