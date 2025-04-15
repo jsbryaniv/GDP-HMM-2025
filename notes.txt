@@ -1,0 +1,68 @@
+
+########################################
+        4/15/25
+########################################
+
+Yesterday I ran two tests comparing concatentation blocks vs summing different levels of the Unet.
+```
+            # Merge with skip
+            x_skip = feats.pop()               # Get skip connection
+            if self.use_catblock:
+                x = torch.cat([x, x_skip], dim=1)  # Concatenate features
+                x = self.cat_blocks[i](x)                    # Apply convolutional layers
+            else:
+                x = x + x_skip  # Add skip connection
+```
+
+Today I looked at the results:
+
+job0 -- With catblock=True
+job1 -- With catblock=False
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 8.0269
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 5.6686
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.7342
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.7342
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.0648
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.0012
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.0012
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.8625
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.9142
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.6924
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.6924
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.6924
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.6924
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 5.5403
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 4.9865
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 4.9865
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.9980
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.9980
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.9980
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.8038
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.7355
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.6474
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.6474
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.6474
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.5804
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.5430
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.5430
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.5430
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.5430
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4612
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4612
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4612
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.3433
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.3433
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+
+The catblock does not seem to be helping, however reverting to summing by itself did not reduce the error to the previous 2.61 MAE. I will need to find what other modifications I made since 3/24 that could be causing this.
+
+
