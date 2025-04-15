@@ -177,7 +177,8 @@ def plot_results_summary(fig_ax_list):
     # Get constants
     n_jobs = len(all_savenames)
     n_rows = axs[0].shape[0]
-    n_cols = 3 + 2*n_jobs
+    # n_cols = 3 + 2*n_jobs
+    n_cols = 2 + n_jobs
 
     # Initialize figure
     fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
@@ -196,23 +197,30 @@ def plot_results_summary(fig_ax_list):
             title = '\n'.join([
                 # '_'.join(all_savenames[job].split('_')[2:]),
                 all_savenames[job].split('_')[2],
-                'img_loss='+axs[job][i, 2].get_title().split('=')[-1],
-                'avg_loss='+f'{losses[job]:.4f}',
+                # 'img_loss='+axs[job][i, 2].get_title().split('=')[-1],  # TODO Uncomment
+                # 'avg_loss='+f'{losses[job]:.4f}',
             ])
             ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
             ax[i, job+2].set_title(title)
 
-        # Plot ground truth DVH
-        ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
-        ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
-        ax[i, n_jobs+2].set_xlim([0, 80])
+        # # Plot ground truth DVH
+        # ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
+        # ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
+        # ax[i, n_jobs+2].set_xlim([0, 80])
 
-        # Plot predicted DVH for each job
-        for job in range(len(all_savenames)):
-            ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-            # ax[i, n_jobs+3+job].set_title(f'DVH\n{"_".join(all_savenames[job].split("_")[2:])}')
-            ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
-            ax[i, n_jobs+3+job].set_xlim([0, 80])
+        # # Plot predicted DVH for each job
+        # for job in range(len(all_savenames)):
+        #     ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
+        #     # ax[i, n_jobs+3+job].set_title(f'DVH\n{"_".join(all_savenames[job].split("_")[2:])}')
+        #     ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
+        #     ax[i, n_jobs+3+job].set_xlim([0, 80])
+
+        # Remove ticks
+        for j in range(n_cols):
+            ax[i, j].set_xlabel('')
+            ax[i, j].set_ylabel('')
+            ax[i, j].set_xticks([])
+            ax[i, j].set_yticks([])
 
     # Finalize plot
     plt.tight_layout()

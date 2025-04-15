@@ -232,6 +232,7 @@ class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
         kernel_size=5, groups=1, scale=1, dropout=0.0,
+        alpha=1.0,
     ):
         super(ConvBlock3d, self).__init__()
 
@@ -242,6 +243,7 @@ class ConvBlock3d(nn.Module):
         self.groups = groups
         self.scale = scale
         self.dropout = dropout
+        self.alpha = alpha
 
         # Reshaping
         if scale > 1:
@@ -290,7 +292,7 @@ class ConvBlock3d(nn.Module):
         self.drop = nn.Dropout3d(dropout)
 
         # Define output scaling
-        self.beta = nn.Parameter(torch.zeros(1))
+        # self.beta = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
 
@@ -305,7 +307,8 @@ class ConvBlock3d(nn.Module):
         x = self.drop(x)
 
         # Combine with residual
-        x = x0 + x * self.beta
+        # x = x0 + x * self.beta
+        x = self.alpha * x0 + x
 
         # Return output
         return x
@@ -314,7 +317,8 @@ class ConvBlock3d(nn.Module):
 class ConvBlockFiLM3d(ConvBlock3d):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=5, groups=1, scale=1, dropout=0.0
+        kernel_size=5, groups=1, scale=1, dropout=0.0,
+        alpha=1.0,
     ):
         super(ConvBlockFiLM3d, self).__init__(
             in_channels, out_channels, 
@@ -343,13 +347,22 @@ class ConvBlockFiLM3d(ConvBlock3d):
         x = self.film(x, t)
 
         # Combine with residual
-        x = x0 + x * self.beta
+        # x = x0 + x * self.beta
+        x = self.alpha * x0 + x
 
         # Return output and time
         return (x, t)
 
 # Define function to select convolutional block
 def conv_block_selector(conv_block_type):
+    if 'kwargs' in conv_block_type:
+        # Extract kwargs from string
+        kwargs = eval(conv_block_type.split('_kwargs=', 1)[1])
+        # Extract conv_block from string
+        conv_block_type = conv_block_type.split('_kwargs=')[0]
+        conv_block = conv_block_selector(conv_block_type)
+        # Return lambda function with kwargs
+        return lambda *args, **newkwargs: conv_block(*args, **{**kwargs, **newkwargs})
     if conv_block_type == 'ConvBlock3d':
         return ConvBlock3d
     elif conv_block_type == 'ConvBlockFiLM3d':
@@ -621,18 +634,18 @@ class ConvformerBlock3d(nn.Module):
         self.norm1 = VoxelNorm3d(n_features)
         self.norm2 = VoxelNorm3d(n_features)
 
-        # Define output scaling
-        self.beta = nn.Parameter(torch.zeros(1))
+        # # Define output scaling
+        # self.beta = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
 
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output * self.beta
+        x = x + attn_output # * self.beta
 
         # Feedforward layer
-        x = x + self.mlp(self.norm2(x)) * self.beta
+        x = x + self.mlp(self.norm2(x)) # * self.beta
 
         # Return output
         return x
@@ -671,8 +684,8 @@ class ConvformerCrossBlock3d(nn.Module):
         self.norm3 = VoxelNorm3d(n_features)
         self.norm4 = VoxelNorm3d(n_features)
 
-        # Define output scaling
-        self.beta = nn.Parameter(torch.zeros(1))
+        # # Define output scaling
+        # self.beta = nn.Parameter(torch.zeros(1))
 
     def forward(self, x, y):
         """
@@ -683,16 +696,16 @@ class ConvformerCrossBlock3d(nn.Module):
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output * self.beta
+        x = x + attn_output # * self.beta
 
         # Apply cross-attention
         x_normed = self.norm2(x)
         y_normed = self.norm3(y)  # Normalize context separately
         attn_output = self.cross_attn(x_normed, y_normed, y_normed)
-        x = x + attn_output * self.beta
+        x = x + attn_output # * self.beta
 
         # Feedforward layer
-        x = x + self.mlp(self.norm4(x)) * self.beta
+        x = x + self.mlp(self.norm4(x)) # * self.beta
 
         return x
 

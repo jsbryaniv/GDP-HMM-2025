@@ -38,6 +38,9 @@ class TimeAwareUnet3d(CrossUnetModel):
         # Input regularization
         self.input_reg = DyTanh3d(in_channels, init_alpha=0.1)
 
+        # Output scaling
+        self.beta = nn.Parameter(torch.zeros(1))
+
         # Define time embedding layers
         self.context_time_embedding_blocks = nn.ModuleList()
         for f in self.n_features_per_depth:
@@ -96,6 +99,7 @@ class TimeAwareUnet3d(CrossUnetModel):
 
         # Output block
         x, _ = self.main_unet.decoder.output_block((x, t))
+        x = x * self.beta
         
         # Return outputs
         return x

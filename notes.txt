@@ -16,8 +16,10 @@ Yesterday I ran two tests comparing concatentation blocks vs summing different l
 
 Today I looked at the results:
 
-job0 -- With catblock=True
-job1 -- With catblock=False
+Key:
+    job0 -- With catblock=True
+    job1 -- With catblock=False
+
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 8.0269
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 5.6686
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 4.7342
@@ -40,6 +42,12 @@ outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.6924
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
 outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.5108
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2922
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2922
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2922
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2084
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2084
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 5.5403
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 4.9865
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 4.9865
@@ -62,7 +70,13 @@ outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4612
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.3433
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.3433
 outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.4834
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.1827
 
-The catblock does not seem to be helping, however reverting to summing by itself did not reduce the error to the previous 2.61 MAE. I will need to find what other modifications I made since 3/24 that could be causing this.
+The catblock does not seem to be helping much, however reverting to summing by itself did not reduce the error to the previous 2.61 MAE. I will need to find what other modifications I made since 3/24 that could be causing this.
 
 
