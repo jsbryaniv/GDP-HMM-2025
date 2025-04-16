@@ -3,6 +3,38 @@
         4/15/25
 ########################################
 
+
+Yesterday I compared 3 things: 
+1) Data augmentation
+2) Using a concatentation block instead of summing the skip connections
+3) Using a different value of alpha, where alpha is the decay factor for the skip connections in each convolutional block.
+
+These are the results:
+job0 -- Augment=True,  Catblock=True,  Alpha=1.0
+job1 -- Augment=True,  Catblock=False, Alpha=1.0
+job2 -- Augment=True,  Catblock=True,  Alpha=0.5
+job3 -- Augment=True,  Catblock=False, Alpha=0.5
+job4 -- Augment=False, Catblock=True,  Alpha=1.0
+job5 -- Augment=False, Catblock=False, Alpha=1.0
+job6 -- Augment=False, Catblock=True,  Alpha=0.5
+job7 -- Augment=False, Catblock=False, Alpha=0.5
+outfiles/logs/out_job0.txt:-- Average loss on test dataset: 3.2041
+outfiles/logs/out_job1.txt:-- Average loss on test dataset: 3.2663
+outfiles/logs/out_job2.txt:-- Average loss on test dataset: 3.5315
+outfiles/logs/out_job3.txt:-- Average loss on test dataset: 3.3507
+outfiles/logs/out_job4.txt:-- Average loss on test dataset: 3.3231
+outfiles/logs/out_job5.txt:-- Average loss on test dataset: 3.3166
+outfiles/logs/out_job6.txt:-- Average loss on test dataset: 3.7731
+outfiles/logs/out_job7.txt:-- Average loss on test dataset: 3.6574
+
+Keep in mind that the first four jobs trained longer than the last four jobs. Also I am just showing the final ouput, but in reality there were some differences between the way these models trained. Also the second four had fewer features (16 vs 64) so I was testing that as well.
+
+I still dont see the MAE going below 3 which is concerning. I thought that this set I was doing exactly what I was before when I got MAE=2.7, but I guess not.
+
+########################################
+        4/15/25
+########################################
+
 Yesterday I ran two tests comparing concatentation blocks vs summing different levels of the Unet.
 ```
             # Merge with skip

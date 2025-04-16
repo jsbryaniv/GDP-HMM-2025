@@ -231,10 +231,16 @@ class VolumeExpand3d(nn.Module):
 class ConvBlock3d(nn.Module):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=5, groups=1, scale=1, dropout=0.0,
-        alpha=1.0,
+        kernel_size=3, groups=1, scale=1, dropout=0.0, alpha=.5,
+        only_conv=False,
     ):
         super(ConvBlock3d, self).__init__()
+
+        # Check for simple convolution
+        if only_conv:
+            self.only_conv = only_conv
+            self.conv = nn.Conv3d(in_channels, out_channels, kernel_size=kernel_size, padding=kernel_size//2)
+            return
 
         # Set attributes
         self.in_channels = in_channels
@@ -244,6 +250,7 @@ class ConvBlock3d(nn.Module):
         self.scale = scale
         self.dropout = dropout
         self.alpha = alpha
+        self.only_conv = only_conv
 
         # Reshaping
         if scale > 1:
@@ -291,13 +298,14 @@ class ConvBlock3d(nn.Module):
         # Define dropout
         self.drop = nn.Dropout3d(dropout)
 
-        # Define output scaling
-        # self.beta = nn.Parameter(torch.zeros(1))
-
     def forward(self, x):
 
+        # Check for simple convolution
+        if self.only_conv:
+            return self.conv(x)
+
         # Residual connection
-        x0 = self.residual(x)
+        x0 = self.residual(x) * self.alpha
 
         # Convolutional block
         x = self.conv(x)
@@ -307,8 +315,7 @@ class ConvBlock3d(nn.Module):
         x = self.drop(x)
 
         # Combine with residual
-        # x = x0 + x * self.beta
-        x = self.alpha * x0 + x
+        x = x0 + x
 
         # Return output
         return x
@@ -317,12 +324,13 @@ class ConvBlock3d(nn.Module):
 class ConvBlockFiLM3d(ConvBlock3d):
     def __init__(self, 
         in_channels, out_channels, 
-        kernel_size=5, groups=1, scale=1, dropout=0.0,
-        alpha=1.0,
+        kernel_size=3, groups=1, scale=1, dropout=0.0, alpha=.5,
+        only_conv=False,
     ):
         super(ConvBlockFiLM3d, self).__init__(
             in_channels, out_channels, 
-            kernel_size=kernel_size, groups=groups, scale=scale, dropout=dropout,
+            kernel_size=kernel_size, groups=groups, scale=scale, dropout=dropout, alpha=alpha,
+            only_conv=only_conv,
         )
 
         # Set up FiLM layer
@@ -333,8 +341,12 @@ class ConvBlockFiLM3d(ConvBlock3d):
         # Extract inputs
         x, t = inputs
 
+        # Check for simple convolution
+        if self.only_conv:
+            return (self.conv(x), t)
+
         # Residual connection
-        x0 = self.residual(x)
+        x0 = self.residual(x) * self.alpha
 
         # Convolutional block
         x = self.conv(x)
@@ -347,8 +359,7 @@ class ConvBlockFiLM3d(ConvBlock3d):
         x = self.film(x, t)
 
         # Combine with residual
-        # x = x0 + x * self.beta
-        x = self.alpha * x0 + x
+        x = x0 + x
 
         # Return output and time
         return (x, t)
@@ -634,18 +645,15 @@ class ConvformerBlock3d(nn.Module):
         self.norm1 = VoxelNorm3d(n_features)
         self.norm2 = VoxelNorm3d(n_features)
 
-        # # Define output scaling
-        # self.beta = nn.Parameter(torch.zeros(1))
-
     def forward(self, x):
 
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output # * self.beta
+        x = x + attn_output
 
         # Feedforward layer
-        x = x + self.mlp(self.norm2(x)) # * self.beta
+        x = x + self.mlp(self.norm2(x))
 
         # Return output
         return x
@@ -684,9 +692,6 @@ class ConvformerCrossBlock3d(nn.Module):
         self.norm3 = VoxelNorm3d(n_features)
         self.norm4 = VoxelNorm3d(n_features)
 
-        # # Define output scaling
-        # self.beta = nn.Parameter(torch.zeros(1))
-
     def forward(self, x, y):
         """
         x is the query tensor
@@ -696,16 +701,16 @@ class ConvformerCrossBlock3d(nn.Module):
         # Apply self-attention
         x_normed = self.norm1(x)
         attn_output = self.self_attn(x_normed, x_normed, x_normed)
-        x = x + attn_output # * self.beta
+        x = x + attn_output
 
         # Apply cross-attention
         x_normed = self.norm2(x)
         y_normed = self.norm3(y)  # Normalize context separately
         attn_output = self.cross_attn(x_normed, y_normed, y_normed)
-        x = x + attn_output # * self.beta
+        x = x + attn_output
 
         # Feedforward layer
-        x = x + self.mlp(self.norm4(x)) # * self.beta
+        x = x + self.mlp(self.norm4(x))
 
         return x
 

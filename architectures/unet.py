@@ -27,7 +27,7 @@ class UnetEncoder3d(nn.Module):
         if conv_block_type is None:
             conv_block_type = 'ConvBlock3d'
         if feature_scale is None:
-            feature_scale = 'linear'
+            feature_scale = 'linear64'
         
         # Set attributes
         self.in_channels = in_channels
@@ -45,11 +45,13 @@ class UnetEncoder3d(nn.Module):
             self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
         elif feature_scale == 'linear':
             self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
+        elif feature_scale == 'linear64':
+            self.n_features_per_depth = [min(64, n_features * (i + 1)) for i in range(n_blocks+1)]
 
         # Define input block
         self.input_block = nn.Sequential(
             # Merge input channels to n_features
-            conv_block(in_channels, n_features, kernel_size=1),
+            conv_block(in_channels, n_features, kernel_size=1, only_conv=True),
             # Shrink volume
             conv_block(n_features, n_features, scale=1/scale),  # Dense (not depthwise, groups=1) convolution for scaling
             # Additional convolutional layers
@@ -104,7 +106,7 @@ class UnetDecoder3d(nn.Module):
         if conv_block_type is None:
             conv_block_type = 'ConvBlock3d'
         if feature_scale is None:
-            feature_scale = 'linear'
+            feature_scale = 'linear64'
         
         # Set attributes
         self.out_channels = out_channels
@@ -123,6 +125,8 @@ class UnetDecoder3d(nn.Module):
             self.n_features_per_depth = [min(256, n_features * (2**i)) for i in range(n_blocks+1)]
         elif feature_scale == 'linear':
             self.n_features_per_depth = [min(256, n_features * (i + 1)) for i in range(n_blocks+1)]
+        elif feature_scale == 'linear64':
+            self.n_features_per_depth = [min(64, n_features * (i + 1)) for i in range(n_blocks+1)]
 
         # Define upsample blocks
         self.up_blocks = nn.ModuleList()
@@ -144,10 +148,10 @@ class UnetDecoder3d(nn.Module):
             if use_catblock:
                 self.cat_blocks.append(
                     nn.Sequential(
-                        # Merge features to output channels
+                        # Merge features
                         conv_block(2*n_out, n_out, kernel_size=1),
-                        # Additional convolutional layers
-                        *[conv_block(n_out, n_out, groups=n_features, dropout=dropout) for _ in range(n_layers_per_block - 1)],
+                        # Mix features
+                        conv_block(n_out, n_out, groups=n_features),
                     )
                 )
 
@@ -158,7 +162,7 @@ class UnetDecoder3d(nn.Module):
             # Convolutional layers
             *[conv_block(n_features, n_features, groups=n_features) for _ in range(n_layers_per_block - 1)],
             # Merge features to output channels
-            conv_block(n_features, out_channels, kernel_size=1),
+            conv_block(n_features, out_channels, kernel_size=1, only_conv=True),
         )
         
     def forward(self, feats):
@@ -201,7 +205,7 @@ class Unet3d(nn.Module):
         if conv_block_type is None:
             conv_block_type = 'ConvBlock3d'
         if feature_scale is None:
-            feature_scale = 'linear'
+            feature_scale = 'linear64'
         
         # Set attributes
         self.in_channels = in_channels

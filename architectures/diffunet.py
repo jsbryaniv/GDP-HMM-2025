@@ -21,7 +21,7 @@ class TimeAwareUnet3d(CrossUnetModel):
     def __init__(self, 
         in_channels, out_channels, n_cross_channels_list, 
         n_features=16, n_blocks=5, n_layers_per_block=4,
-        scale=2, feature_scale=None, bidirectional=False,
+        scale=2, feature_scale=None, bidirectional=True, use_catblock=True,
     ):
         super().__init__(
             in_channels, out_channels, n_cross_channels_list,
@@ -33,6 +33,7 @@ class TimeAwareUnet3d(CrossUnetModel):
             use_dropout=False,                      # No dropout in diffusion model
             conv_block_type='ConvBlockFiLM3d',      # Use FiLM block
             bidirectional=bidirectional,
+            use_catblock=use_catblock,
         )
 
         # Input regularization
@@ -91,8 +92,11 @@ class TimeAwareUnet3d(CrossUnetModel):
             else:
                 fcon = self.context_decoder.up_blocks[i](fcon)
                 fcon_skip = feats_context.pop()
-                fcon = torch.cat([fcon, fcon_skip], dim=1)
-                fcon = self.context_decoder.cat_blocks[i](fcon)
+                if self.use_catblock:
+                    fcon = torch.cat([fcon, fcon_skip], dim=1)
+                    fcon = self.context_decoder.cat_blocks[i](fcon)
+                else:
+                    fcon = fcon + fcon_skip
                 x = self.cross_attn_blocks[depth](x, fcon)
                 if depth > 0:
                     fcon = self.context_attn_blocks[depth](fcon, x)
@@ -110,9 +114,9 @@ class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list,
         n_features=16, n_blocks=5, 
-        n_layers_per_block=4, n_mixing_blocks=4,
-        scale=2, n_steps=16, eta=.1,
-        bidirectional=False,
+        n_layers_per_block=4, n_mixing_blocks=2,
+        scale=2, n_steps=10, eta=.1,
+        bidirectional=True, use_catblock=True,
     ):
         super(DiffUnet3d, self).__init__()
         
@@ -126,6 +130,8 @@ class DiffUnet3d(nn.Module):
         self.scale = scale
         self.n_steps = n_steps
         self.eta = eta
+        self.bidirectional = bidirectional
+        self.use_catblock = use_catblock
 
         # Get constants
         n_context = len(n_cross_channels_list)
@@ -149,6 +155,7 @@ class DiffUnet3d(nn.Module):
             n_layers_per_block=n_layers_per_block,
             scale=scale,
             bidirectional=bidirectional,
+            use_catblock=use_catblock,
         )
 
         # Get number of features per depth
@@ -166,6 +173,7 @@ class DiffUnet3d(nn.Module):
             'n_steps': self.n_steps,
             'eta': self.eta,
             'bidirectional': self.main_unet.bidirectional,
+            'use_catblock': self.main_unet.use_catblock,
         }
     
     def forward(self, *context, target=None, return_loss=False):

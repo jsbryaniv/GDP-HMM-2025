@@ -138,13 +138,17 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All', "All_kwargs={'augment':False}",]
+    dataIDs_list = ['All']
     modelID_list = [
+        # DiffUnet
+        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
+        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
         # Unet
-        ('unet',  {'batch_size': 1, 'shape': 128, 'use_catblock': True, 'conv_block_type': "ConvBlock3d_kwargs={'alpha':1.0}"}),
-        ('unet',  {'batch_size': 1, 'shape': 128, 'use_catblock': False, 'conv_block_type': "ConvBlock3d_kwargs={'alpha':1.0}"}),
-        ('unet',  {'batch_size': 1, 'shape': 128, 'use_catblock': True, 'conv_block_type': "ConvBlock3d_kwargs={'alpha':0.5}"}),
-        ('unet',  {'batch_size': 1, 'shape': 128, 'use_catblock': False, 'conv_block_type': "ConvBlock3d_kwargs={'alpha':0.5}"}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock':  True,}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock': False,}),
+        # CrossUnet
+        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
+        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

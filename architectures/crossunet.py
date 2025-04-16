@@ -19,10 +19,10 @@ class CrossUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list,
-        n_features=8, n_blocks=5, n_layers_per_block=2,
+        n_features=16, n_blocks=5, n_layers_per_block=4,
         n_attn_repeats=2, attn_kernel_size=5,
-        scale=1, conv_block_type=None, use_dropout=False,
-        feature_scale=None, bidirectional=False,
+        scale=2, conv_block_type=None, use_dropout=False,
+        feature_scale=None, bidirectional=True,
         use_catblock=True,
     ):
         super(CrossUnetModel, self).__init__()
@@ -167,14 +167,13 @@ class CrossUnetModel(nn.Module):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             upblock = self.main_unet.decoder.up_blocks[i]
-            catblock = self.main_unet.decoder.cat_blocks[i]
             # Upsample
             x = upblock(x)
             # Merge with skip
             x_skip = feats.pop()               # Get skip connection
             if self.use_catblock:
                 x = torch.cat([x, x_skip], dim=1)  # Concatenate features
-                x = catblock(x)                    # Apply convolutional layers
+                x = self.main_unet.decoder.cat_blocks[i](x)                    # Apply convolutional layers
             else:
                 x = x + x_skip                    # Add skip connection
             # Apply cross attention
