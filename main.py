@@ -140,15 +140,10 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        # DiffUnet
-        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
-        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
-        # Unet
-        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock':  True,}),
-        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock': False,}),
-        # CrossUnet
-        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
-        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
+        ('diffunet',  {'batch_size': 2, 'shape': 128}),
+        ('crossunet', {'batch_size': 2, 'shape': 128}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 1}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 2}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

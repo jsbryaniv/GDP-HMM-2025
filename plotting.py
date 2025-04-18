@@ -74,13 +74,11 @@ def copy_axis(ax_from, ax_to):
     return ax_to
 
 # Plot training and validation losses
-def plot_losses(losses_train, losses_val):
-    """
-    Plot training and validation losses.
-    Args:
-        losses_train (list): Training losses.
-        losses_val (list): Validation losses.
-    """
+def plot_losses(losses=None, **labeled_losses):
+
+    # Set up inputs
+    if not losses is None:
+        labeled_losses['Loss'] = losses
 
     # Set up figure
     fig, ax = plt.subplots(1, 1)
@@ -88,15 +86,17 @@ def plot_losses(losses_train, losses_val):
     plt.show()
 
     # Plot losses
-    ax.set_title('Losses')
-    ax.plot(losses_train, label='Train')
-    ax.plot(losses_val, label='Validation')
+    for key, value in labeled_losses.items():
+        ax.plot(value, label=key)
+    # ax.plot(losses_train, label='Train')
+    # ax.plot(losses_val, label='Validation')
 
     # Finalize plot
     ax.set_yscale('log')
-    ax.legend()
+    ax.set_title('Losses')
     ax.set_xlabel('Epoch')
     ax.set_ylabel('Loss')
+    ax.legend()
     plt.tight_layout()
     plt.pause(0.1)
 
@@ -280,6 +280,38 @@ def plot_images(images=None, labels=None, cmap=None, **image_dict):
     plt.pause(1)
     
     # Return
+    return fig, ax
+
+# Plot loss histogram
+def plot_loss_histogram(losses=None, bins=100, **labeled_losses):
+    
+    # Set up inputs
+    if not losses is None:
+        labeled_losses['Loss'] = losses
+
+    # Set up figure
+    fig, ax = plt.subplots(1, 1)
+    plt.ion()
+    plt.show()
+
+    # Plot losses
+    # ax.hist(losses, bins=bins, density=True)
+    for key, value in labeled_losses.items():
+        loss_mean = np.mean(value)
+        # hist, bin_edges = np.histogram(value, bins=bins, density=True)
+        # bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        # ax.plot(bin_centers, hist, label=key)
+        ax.hist(value, bins=bins, density=True, alpha=0.5, label=f'{key} (avg={loss_mean:.2f})')
+
+    # Finalize plot
+    ax.set_title('Loss histogram')
+    ax.set_xlabel('Loss')
+    ax.set_ylabel('Density')
+    ax.legend()
+    plt.tight_layout()
+    plt.pause(0.1)
+
+    # Return figure and axis
     return fig, ax
 
 

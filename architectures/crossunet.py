@@ -18,12 +18,9 @@ from architectures.blocks import ConvformerDecoder3d
 class CrossUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
-        in_channels, out_channels, n_cross_channels_list,
-        n_features=16, n_blocks=5, n_layers_per_block=4,
-        n_attn_repeats=2, attn_kernel_size=5,
-        scale=2, conv_block_type=None, use_dropout=False,
-        feature_scale=None, bidirectional=True,
-        use_catblock=True,
+        in_channels, out_channels, n_cross_channels_list, scale=2, 
+        n_features=16, n_blocks=5, n_layers_per_block=4, n_attn_repeats=2, attn_kernel_size=5,
+        conv_block_type=None, feature_scale=None, bidirectional=False, use_dropout=False, use_catblock=False,
     ):
         super(CrossUnetModel, self).__init__()
 
@@ -35,16 +32,16 @@ class CrossUnetModel(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.n_cross_channels_list = n_cross_channels_list
+        self.scale = scale
         self.n_features = n_features
         self.n_blocks = n_blocks
         self.n_layers_per_block = n_layers_per_block
         self.n_attn_repeats = n_attn_repeats
         self.attn_kernel_size = attn_kernel_size
-        self.scale = scale
-        self.use_dropout = use_dropout
         self.conv_block_type = conv_block_type
         self.feature_scale = feature_scale
         self.bidirectional = bidirectional
+        self.use_dropout = use_dropout
         self.use_catblock = use_catblock
 
         # Get constants
@@ -53,12 +50,9 @@ class CrossUnetModel(nn.Module):
 
         # Create main unet
         self.main_unet = Unet3d(
-            in_channels, out_channels, 
-            n_features=n_features, n_blocks=n_blocks,
-            n_layers_per_block=n_layers_per_block,
-            scale=scale, conv_block_type=conv_block_type, use_dropout=use_dropout,
-            feature_scale=feature_scale,
-            use_catblock=use_catblock,
+            in_channels, out_channels, scale=scale, 
+            n_features=n_features, n_blocks=n_blocks, n_layers_per_block=n_layers_per_block,
+            conv_block_type=conv_block_type, feature_scale=feature_scale, use_dropout=use_dropout, use_catblock=use_catblock,
         )
         
         # Create context encoders
@@ -66,21 +60,16 @@ class CrossUnetModel(nn.Module):
         for n_channels in n_cross_channels_list:
             self.context_encoders.append(
                 UnetEncoder3d(
-                    n_channels, 
-                    n_features=n_features, n_blocks=n_blocks,
-                    n_layers_per_block=n_layers_per_block,
-                    scale=scale, use_dropout=use_dropout,
-                    feature_scale=feature_scale,
+                    n_channels, scale=scale, 
+                    n_features=n_features, n_blocks=n_blocks, n_layers_per_block=n_layers_per_block,
+                    feature_scale=feature_scale, use_dropout=use_dropout, 
                 )
             )
         if bidirectional:
             self.context_decoder = UnetDecoder3d(
-                n_channels, 
-                n_features=n_features, n_blocks=n_blocks,
-                n_layers_per_block=n_layers_per_block,
-                scale=scale, use_dropout=use_dropout,
-                feature_scale=feature_scale,
-                use_catblock=use_catblock,
+                n_channels, scale=scale, 
+                n_features=n_features, n_blocks=n_blocks, n_layers_per_block=n_layers_per_block,
+                feature_scale=feature_scale, use_dropout=use_dropout, use_catblock=use_catblock,
             )
             del self.context_decoder.output_block  # Remove output block
 
@@ -95,9 +84,9 @@ class CrossUnetModel(nn.Module):
             self.cross_attn_blocks.append(
                 ConvformerDecoder3d(
                     self.n_features_per_depth[depth], 
+                    n_heads=self.n_features_per_depth[depth]//self.n_features,
                     kernel_size=attn_kernel_size,
-                    n_layers=n_attn_repeats+depth,  # +depth to increase number of layers
-                    n_heads=max(1, min(self.n_features_per_depth[depth] // 8, 4)),
+                    n_layers=n_attn_repeats,
                     dropout=.2 if use_dropout else 0,
                 )
             )
@@ -105,9 +94,9 @@ class CrossUnetModel(nn.Module):
                 self.context_attn_blocks.append(
                     ConvformerDecoder3d(
                         self.n_features_per_depth[depth], 
+                        n_heads=self.n_features_per_depth[depth]//self.n_features,
                         kernel_size=attn_kernel_size,
-                        n_layers=n_attn_repeats+depth,  # +depth to increase number of layers
-                        n_heads=max(1, min(self.n_features_per_depth[depth] // 8, 4)),
+                        n_layers=n_attn_repeats+depth,
                         dropout=.2 if use_dropout else 0,
                     )
                 )
@@ -119,16 +108,16 @@ class CrossUnetModel(nn.Module):
             'in_channels': self.in_channels,
             'out_channels': self.out_channels,
             'n_cross_channels_list': self.n_cross_channels_list,
+            'scale': self.scale,
             'n_features': self.n_features,
             'n_blocks': self.n_blocks,
             'n_layers_per_block': self.n_layers_per_block,
             'n_attn_repeats': self.n_attn_repeats,
             'attn_kernel_size': self.attn_kernel_size,
-            'scale': self.scale,
-            'use_dropout': self.use_dropout,
             'conv_block_type': self.conv_block_type,
             'feature_scale': self.feature_scale,
             'bidirectional': self.bidirectional,
+            'use_dropout': self.use_dropout,
             'use_catblock': self.use_catblock,
         }
 
@@ -220,7 +209,6 @@ if __name__ == '__main__':
     # Create a model
     model = CrossUnetModel(
         in_channels, out_channels, n_cross_channels_list,
-        bidirectional=True
     )
 
     # Print model structure

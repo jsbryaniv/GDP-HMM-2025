@@ -97,7 +97,7 @@ if __name__ == '__main__':
     print(f'Using device: {device}')
 
     # Get model and metadata
-    savename = 'model_All_crossunet_shape=128'
+    savename = 'model_All_crossunet_bidirectional=False_shape=128'
     checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
     model, _, _, _ = load_checkpoint(checkpoint_path, load_best=True)
     model.to(device)

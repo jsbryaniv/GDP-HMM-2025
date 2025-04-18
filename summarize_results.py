@@ -14,13 +14,11 @@ from torch.utils.data import DataLoader
 from config import *
 from utils import get_dvh, get_savename, load_checkpoint
 from losses import competition_loss
-from plotting import plot_losses, copy_axis
+from plotting import plot_losses, plot_loss_histogram, copy_axis
 
 
 # Set up training function
-def plot_model_results(
-    model, dataset_test, metadata, n_show=5,
-): 
+def plot_model_results(model, dataset_test, metadata, n_show=5,): 
 
     # Set up model
     model.eval()
@@ -177,8 +175,8 @@ def plot_results_summary(fig_ax_list):
     # Get constants
     n_jobs = len(all_savenames)
     n_rows = axs[0].shape[0]
-    # n_cols = 3 + 2*n_jobs
-    n_cols = 2 + n_jobs
+    n_cols = 3 + 2*n_jobs
+    # n_cols = 2 + n_jobs
 
     # Initialize figure
     fig, ax = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
@@ -195,25 +193,25 @@ def plot_results_summary(fig_ax_list):
         # Plot predicted dose for each job
         for job in range(n_jobs):
             title = '\n'.join([
-                # '_'.join(all_savenames[job].split('_')[2:]),
-                all_savenames[job].split('_')[2],
-                # 'img_loss='+axs[job][i, 2].get_title().split('=')[-1],  # TODO Uncomment
-                # 'avg_loss='+f'{losses[job]:.4f}',
+                '_'.join(all_savenames[job].split('_')[2:]),
+                # all_savenames[job].split('_')[2],
+                'img_loss='+axs[job][i, 2].get_title().split('=')[-1],
+                'avg_loss='+f'{losses[job]:.4f}',
             ])
             ax[i, job+2] = copy_axis(axs[job][i, 2], ax[i, job+2])
             ax[i, job+2].set_title(title)
 
-        # # Plot ground truth DVH
-        # ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
-        # ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
-        # ax[i, n_jobs+2].set_xlim([0, 80])
+        # Plot ground truth DVH
+        ax[i, n_jobs+2].set_title('DVH (Ground Truth)')
+        ax[i, n_jobs+2] = copy_axis(axs[0][i, -2], ax[i, n_jobs+2])
+        ax[i, n_jobs+2].set_xlim([0, 80])
 
-        # # Plot predicted DVH for each job
-        # for job in range(len(all_savenames)):
-        #     ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
-        #     # ax[i, n_jobs+3+job].set_title(f'DVH\n{"_".join(all_savenames[job].split("_")[2:])}')
-        #     ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
-        #     ax[i, n_jobs+3+job].set_xlim([0, 80])
+        # Plot predicted DVH for each job
+        for job in range(len(all_savenames)):
+            ax[i, n_jobs+3+job] = copy_axis(axs[job][i, -1], ax[i, n_jobs+3+job])
+            # ax[i, n_jobs+3+job].set_title(f'DVH\n{"_".join(all_savenames[job].split("_")[2:])}')
+            ax[i, n_jobs+3+job].set_title(f'DVH {all_savenames[job].split("_")[2]}')
+            ax[i, n_jobs+3+job].set_xlim([0, 80])
 
         # Remove ticks
         for j in range(n_cols):
@@ -237,12 +235,15 @@ if __name__ == '__main__':
     suptitle = f""
     dataIDs_list = ['All']
     modelID_list = [
+        # DiffUnet
+        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
+        ('diffunet',  {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
         # Unet
-        ('unet',               {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
-        # Diffusion models
-        ('diffunet',           {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 32}),
-        # Cross attention models
-        ('crossunet',          {'batch_size': 1, 'shape': 128, 'scale': 2, 'n_features': 64}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock':  True,}),
+        ('unet',      {'batch_size': 2, 'shape': 128, 'use_catblock': False,}),
+        # CrossUnet
+        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional':  True,}),
+        ('crossunet', {'batch_size': 2, 'shape': 128, 'bidirectional': False,}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -266,6 +267,7 @@ if __name__ == '__main__':
         checkpoint_path = os.path.join(PATH_OUTPUT, f'{savename}.pth')
         model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path, load_best=True)
         loss_test = metadata['loss_test']
+        losses_test = metadata['losses_test']
         losses_train = metadata['losses_train']
         losses_val = metadata['losses_val']
 
@@ -273,10 +275,16 @@ if __name__ == '__main__':
         model.to(device)
 
         # Plot losses
-        fig, ax = plot_losses(losses_train, losses_val)
+        fig, ax = plot_losses(Train=losses_train, Val=losses_val)
         fig.suptitle(f'{savename} - Test Loss: {loss_test:.4f}')
         fig.savefig(f'figs/{savename}_losses.png')
         plt.close()  # Close figure
+
+        # Histogram of losses
+        fig, ax = plot_loss_histogram(LossOnTest=losses_test)
+        fig.suptitle(f'{savename} - Test Loss Histogram')
+        fig.savefig(f'figs/{savename}_loss_histogram.png')
+        plt.close()
 
         # Test model
         dataset_test = datasets[2]

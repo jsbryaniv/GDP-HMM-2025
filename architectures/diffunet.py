@@ -19,20 +19,20 @@ from architectures.blocks import FiLM3d, DyTanh3d
 # Make time aware Unet
 class TimeAwareUnet3d(CrossUnetModel):
     def __init__(self, 
-        in_channels, out_channels, n_cross_channels_list, 
+        in_channels, out_channels, n_cross_channels_list, scale=2, 
         n_features=16, n_blocks=5, n_layers_per_block=4,
-        scale=2, feature_scale=None, bidirectional=True, use_catblock=True,
+        feature_scale=None, bidirectional=False, use_catblock=False,
     ):
         super().__init__(
             in_channels, out_channels, n_cross_channels_list,
+            scale=scale,
             n_features=n_features, 
             n_blocks=n_blocks, 
             n_layers_per_block=n_layers_per_block, 
-            feature_scale=feature_scale,
-            scale=scale,
-            use_dropout=False,                      # No dropout in diffusion model
             conv_block_type='ConvBlockFiLM3d',      # Use FiLM block
+            feature_scale=feature_scale,
             bidirectional=bidirectional,
+            use_dropout=False,                      # No dropout in diffusion model
             use_catblock=use_catblock,
         )
 
@@ -78,13 +78,15 @@ class TimeAwareUnet3d(CrossUnetModel):
         for i in range(self.n_blocks):
             depth = self.n_blocks - 1 - i
             upblock = self.main_unet.decoder.up_blocks[i]
-            catblock = self.main_unet.decoder.cat_blocks[i]
             # Upsample
             x, _= upblock((x, t))
             # Merge with skip
-            x_skip, _ = feats.pop()            # Get skip connection
-            x = torch.cat([x, x_skip], dim=1)  # Concatenate features
-            x, _ = catblock((x, t))            # Apply convolutional layers
+            x_skip, _ = feats.pop()
+            if self.use_catblock:
+                x = torch.cat([x, x_skip], dim=1)                    # Concatenate features
+                x, _ = self.main_unet.decoder.cat_blocks[i]((x, t))  # Apply convolutional layers
+            else:
+                x = x + x_skip
             # Apply cross attention
             if not self.bidirectional:
                 fcon = feats_context.pop()
@@ -112,11 +114,10 @@ class TimeAwareUnet3d(CrossUnetModel):
 # Define Diffusion Model Unet
 class DiffUnet3d(nn.Module):
     def __init__(self, 
-        in_channels, n_cross_channels_list,
-        n_features=16, n_blocks=5, 
-        n_layers_per_block=4, n_mixing_blocks=2,
-        scale=2, n_steps=10, eta=.1,
-        bidirectional=True, use_catblock=True,
+        in_channels, n_cross_channels_list, scale=2, 
+        n_features=16, n_blocks=5, n_layers_per_block=4, n_mixing_blocks=2,
+        n_steps=10, eta=.1,
+        bidirectional=False, use_catblock=False,
     ):
         super(DiffUnet3d, self).__init__()
         
