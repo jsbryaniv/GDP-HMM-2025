@@ -43,7 +43,10 @@ def train_model(
 
     # Set up data loaders
     dataset_train, dataset_val = datasets
-    loader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_gdp)
+    loader_val = DataLoader(
+        dataset_val, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
+        generator=torch.Generator().manual_seed(epoch_start),
+    )
     loader_train = DataLoader(
         dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp,
         generator=torch.Generator().manual_seed(epoch_start),
@@ -65,8 +68,8 @@ def train_model(
     # Training loop
     for epoch in range(epoch_start, n_epochs):
         if debug and epoch > epoch_start + 1:
-                print('DEBUG MODE: Breaking early.')
-                break
+            print('DEBUG MODE: Breaking early.')
+            break
 
         # Status update
         t_epoch = time.time()

@@ -16,7 +16,7 @@ from utils import get_savename, save_checkpoint, load_checkpoint, initialize_mod
 
 # Define main function
 def main(
-    dataID, modelID, batch_size=None, max_batches=100,
+    dataID, modelID, batch_size=1, max_batches=None,
     from_checkpoint=False, debug=False, device=None,
     **model_kwargs
 ):
@@ -140,10 +140,11 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All', 'All_augment=False']
     modelID_list = [
-        ('diffunet',  {'batch_size': 2, 'shape': 128}),
-        ('crossunet', {'batch_size': 2, 'shape': 128}),
-        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 1}),
-        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 2}),
+        ('diffunet',  {'shape': 128, 'max_batches': 100}),
+        ('crossunet', {'shape': 128}),
+        ('unet',      {'shape': 128, 'scale': 1}),
+        ('unet',      {'shape': 128, 'scale': 2}),
+        ('unet',      {'shape': 256, 'scale': 4}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
