@@ -138,7 +138,7 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All']
+    dataIDs_list = ['All_augment=False']
     modelID_list = [
         ('diffunet',  {'batch_size': 2, 'shape': 128}),
         ('crossunet', {'batch_size': 2, 'shape': 128}),

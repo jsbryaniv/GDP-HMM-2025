@@ -75,6 +75,9 @@ class GDPDataset(Dataset):
             augment = False  # Turn off augmentation for validation set
         if treatment is None:
             treatment = 'All'  # Get treatment
+        if treatment == 'All_augment=False':
+            treatment = 'All'
+            augment = False
         
         # Load dose dictionary
         dose_dict = json.load(open(os.path.join(PATH_METADATA, 'PTV_DICT.json'), 'r'))
