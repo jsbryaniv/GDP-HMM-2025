@@ -141,10 +141,10 @@ if __name__ == '__main__':
     dataIDs_list = ['All']
     modelID_list = [
         ('diffunet',     {'shape': 128, 'max_batches': 100}),
-        ('unet',         {'shape': 128, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
-        ('crossunet',    {'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
-        ('moeunet',      {'shape': 128, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
-        ('moecrossunet', {'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
+        ('unet',         {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
+        ('crossunet',    {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
+        ('moeunet',      {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
+        ('moecrossunet', {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
