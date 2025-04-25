@@ -138,13 +138,13 @@ def main(
 if __name__ == '__main__':
     
     # Set up all jobs
-    dataIDs_list = ['All', 'All_augment=False']
+    dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',  {'shape': 128, 'max_batches': 100}),
-        ('crossunet', {'shape': 128}),
-        ('unet',      {'shape': 128, 'scale': 1}),
-        ('unet',      {'shape': 128, 'scale': 2}),
-        ('unet',      {'shape': 256, 'scale': 4}),
+        ('diffunet',     {'shape': 128, 'max_batches': 100}),
+        ('unet',         {'shape': 128, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
+        ('crossunet',    {'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
+        ('moeunet',      {'shape': 128, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
+        ('moecrossunet', {'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:

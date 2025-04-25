@@ -115,7 +115,7 @@ class TimeAwareUnet3d(CrossUnetModel):
 class DiffUnet3d(nn.Module):
     def __init__(self, 
         in_channels, n_cross_channels_list, scale=2, 
-        n_features=16, n_blocks=5, n_layers_per_block=4, n_mixing_blocks=2,
+        n_features=16, n_blocks=5, n_layers_per_block=8, n_mixing_blocks=8,
         n_steps=10, eta=.1,
         bidirectional=False, use_catblock=False,
     ):
@@ -217,7 +217,6 @@ class DiffUnet3d(nn.Module):
 
             # Update position 
             x = (
-                # torch.sqrt(a_t1/a_t) * (x - torch.sqrt(1 - a_t) * noise_pred)
                 torch.sqrt(a_t1) * x_pred
                 + torch.sqrt(1 - a_t1 - sigma**2) * noise_pred 
                 + sigma * torch.randn_like(x, device=x.device)

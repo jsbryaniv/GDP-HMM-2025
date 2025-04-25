@@ -49,16 +49,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = Unet3d(**kwargs)
-        elif architecture.lower() == "vit":
-            # ViT3D
-            from architectures.vit import ViT3d
-            kwargs = {
-                'in_channels': n_channels,
-                'out_channels': 1,
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = ViT3d(**kwargs)
         elif architecture.lower() == "moeunet":
             # MOEUnet3D
             from architectures.unet import Unet3d
@@ -69,17 +59,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = MOEWrapper3d(Unet3d, **kwargs)
-        elif architecture.lower() == "moevit":
-            # MOEViT3D
-            from architectures.vit import ViT3d
-            from architectures.moe import MOEWrapper3d
-            kwargs = {
-                'in_channels': n_channels,
-                'out_channels': 1,
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = MOEWrapper3d(ViT3d, **kwargs)
         elif architecture.lower() == "crossunet":
             # CrossUnetModel
             from architectures.crossunet import CrossUnetModel
@@ -100,27 +79,16 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = CrossUnetModel(**kwargs)     
-        elif architecture.lower() == "moecrossunetlight":
+        elif architecture.lower() == "moecrossunet":
             # CrossUnetModel
             from architectures.crossunet import CrossUnetModel
             kwargs = {
                 'in_channels': n_channels,
                 'out_channels': 1,
-                'n_cross_channels_list': [n_channels],
+                'n_cross_channels_list': [5, n_channels-2],  # (scan, beam, ptvs), (ptvs, oars, body)
                 **kwargs,
             }
             self.model = CrossUnetModel(**kwargs)
-        elif architecture.lower() == "crossvit":
-            # CrossViT3d
-            from architectures.crossvit import CrossViT3d
-            kwargs = {
-                'in_channels': n_channels,
-                'out_channels': 1,
-                'n_cross_channels_list': [5, n_channels-2],  # (scan, beam, ptvs), (ptvs, oars, body)
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = CrossViT3d(**kwargs)
         elif architecture.lower() == "diffunet":
             # DiffUnet3d
             from architectures.diffunet import DiffUnet3d
@@ -130,16 +98,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = DiffUnet3d(**kwargs)
-        elif architecture.lower() == "diffvit":
-            # DiffViT3d
-            from architectures.diffvit import DiffViT3d
-            kwargs = {
-                'in_channels': 1,
-                'n_cross_channels_list': [5, n_channels-2],  # (scan, beam, ptvs), (ptvs, oars, body)
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = DiffViT3d(**kwargs)
         elif architecture.lower() == "diffunetlight":
             # DiffUnet3d
             from architectures.diffunet import DiffUnet3d
@@ -149,16 +107,6 @@ class DosePredictionModel(nn.Module):
                 **kwargs,
             }
             self.model = DiffUnet3d(**kwargs)
-        elif architecture.lower() == "diffvitlight":
-            # DiffViT3d
-            from architectures.diffvit import DiffViT3d
-            kwargs = {
-                'in_channels': 1,
-                'n_cross_channels_list': [n_channels],
-                'shape': shape,
-                **kwargs,
-            }
-            self.model = DiffViT3d(**kwargs)
         else:
             raise ValueError(f"Architecture '{architecture}' not recognized.")
         

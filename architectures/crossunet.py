@@ -19,7 +19,7 @@ class CrossUnetModel(nn.Module):
     """Cross attention Unet model."""
     def __init__(self,
         in_channels, out_channels, n_cross_channels_list, scale=2, 
-        n_features=16, n_blocks=5, n_layers_per_block=4, n_attn_repeats=2, attn_kernel_size=5,
+        n_features=16, n_blocks=5, n_layers_per_block=4, n_attn_repeats=None, attn_kernel_size=5,
         conv_block_type=None, feature_scale=None, bidirectional=False, use_dropout=False, use_catblock=False,
     ):
         super(CrossUnetModel, self).__init__()
@@ -27,6 +27,8 @@ class CrossUnetModel(nn.Module):
         # Set default values
         if conv_block_type is None:
             conv_block_type = 'ConvBlock3d'
+        if n_attn_repeats is None:
+            n_attn_repeats = n_layers_per_block
         
         # Set attributes
         self.in_channels = in_channels
@@ -87,7 +89,7 @@ class CrossUnetModel(nn.Module):
                     n_heads=self.n_features_per_depth[depth]//self.n_features,
                     kernel_size=attn_kernel_size,
                     n_layers=n_attn_repeats,
-                    dropout=.2 if use_dropout else 0,
+                    dropout=.1 if use_dropout else 0,
                 )
             )
             if bidirectional:
@@ -97,7 +99,7 @@ class CrossUnetModel(nn.Module):
                         n_heads=self.n_features_per_depth[depth]//self.n_features,
                         kernel_size=attn_kernel_size,
                         n_layers=n_attn_repeats+depth,
-                        dropout=.2 if use_dropout else 0,
+                        dropout=.1 if use_dropout else 0,
                     )
                 )
 

@@ -235,10 +235,11 @@ if __name__ == '__main__':
     suptitle = f""
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',  {'batch_size': 2, 'shape': 128}),
-        ('crossunet', {'batch_size': 2, 'shape': 128}),
-        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 1}),
-        ('unet',      {'batch_size': 2, 'shape': 128, 'scale': 2}),
+        ('diffunet',  {'shape': 128, 'max_batches': 100}),
+        ('crossunet', {'shape': 128}),
+        ('unet',      {'shape': 128, 'scale': 1}),
+        ('unet',      {'shape': 128, 'scale': 2}),
+        ('unet',      {'shape': 256, 'scale': 4}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
@@ -292,7 +293,7 @@ if __name__ == '__main__':
     fig.suptitle(suptitle)
     fig.tight_layout()
     plt.pause(.1)
-    fig.savefig(f'figs/summary_{dataID}.png')
+    fig.savefig(f'figs/summary.png')
 
     # Close figures
     plt.close(fig)
