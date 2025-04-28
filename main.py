@@ -140,11 +140,11 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('diffunet',     {'shape': 128, 'max_batches': 100}),
-        ('unet',         {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
-        ('crossunet',    {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
-        ('moeunet',      {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 32, 'n_layers_per_block': 16}),
-        ('moecrossunet', {'shape': 128, 'max_batches': 600, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16, 'use_dropout': True}),
+        ('unet',         {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
+        ('unet',         {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
+        ('moeunet',      {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
+        ('crossunet',    {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
+        ('crossunet',    {'batch_size': 1, 'max_batches': 1000, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
