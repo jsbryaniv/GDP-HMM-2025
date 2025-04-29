@@ -144,7 +144,7 @@ if __name__ == '__main__':
         ('unet',         {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
         ('moeunet',      {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
         ('crossunet',    {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
-        ('crossunet',    {'batch_size': 1, 'max_batches': 1000, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
+        ('crossunet',    {'batch_size': 1, 'max_batches':  600, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
     ]
     all_jobs = []
     for dataID in dataIDs_list:
