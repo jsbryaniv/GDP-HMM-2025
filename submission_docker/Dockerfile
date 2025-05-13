@@ -23,4 +23,4 @@ RUN pip3 install -r requirements.txt
 WORKDIR /app
 
 # Set entrypoint for inference
-ENTRYPOINT ["python3", "results.py"]
+ENTRYPOINT ["python3", "predict.py"]
