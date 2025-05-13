@@ -140,11 +140,11 @@ if __name__ == '__main__':
     # Set up all jobs
     dataIDs_list = ['All']
     modelID_list = [
-        ('unet',         {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
-        ('unet',         {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
-        ('moeunet',      {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
-        ('crossunet',    {'batch_size': 1, 'max_batches': None, 'shape': 128, 'scale': 2}),
-        ('crossunet',    {'batch_size': 1, 'max_batches':  600, 'shape': 128, 'scale': 2, 'n_features': 16, 'n_layers_per_block': 16}),
+        ('diffunet',     {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'scale': 1, 'n_blocks': 6, 'n_features': 8, 'n_layers_per_block': 4, 'bidirectional': False}),  # DiffUNet
+        ('diffunet',     {'batch_size': 1, 'max_batches': 100, 'shape': 128, 'scale': 1, 'n_blocks': 6, 'n_features': 8, 'n_layers_per_block': 4, 'bidirectional': True}),   # DiffUNet
+        ('crossunet',    {'batch_size': 1, 'max_batches': 600, 'shape': 128, 'scale': 1, 'n_blocks': 6, 'n_features': 8, 'n_layers_per_block': 4, 'bidirectional': False}),  # CrossUNet
+        ('crossunet',    {'batch_size': 1, 'max_batches': 600, 'shape': 128, 'scale': 1, 'n_blocks': 6, 'n_features': 8, 'n_layers_per_block': 4, 'bidirectional': True}),   # CrossUNet
+        ('crossunet',    {'batch_size': 1, 'max_batches': 600, 'shape': 128, 'scale': 2, 'n_blocks': 5, 'n_features': 16, 'n_layers_per_block': 8}),                         # CrossUNet
     ]
     all_jobs = []
     for dataID in dataIDs_list:

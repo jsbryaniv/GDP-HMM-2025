@@ -38,13 +38,6 @@ def plot_model_results(model, dataset_test, metadata, n_show=5,):
     dvh_pred_val_list = []
     dvh_pred_bin_list = []
 
-    # # TODO: DEBUG STORE diffs for batches missing context
-    # diffs_no_scan = []
-    # diffs_no_beam = []
-    # diffs_no_ptvs = []
-    # diffs_no_oars = []
-    # diffs_no_body = []
-
     # Loop over batches
     print(f'Testing model with {n_parameters} parameters on {device}.')
     for batch_idx, (scan, beam, ptvs, oars, body, dose) in enumerate(loader_test):
@@ -62,24 +55,6 @@ def plot_model_results(model, dataset_test, metadata, n_show=5,):
 
         # Ignore voxels outside body
         pred = body*pred
-
-        # # TODO: Debugging: test forward pass with no context
-        # with torch.no_grad():
-        #     pred_no_scan = model(0*scan, beam, ptvs, oars, body) * body
-        #     pred_no_beam = model(scan, 0*beam, ptvs, oars, body) * body
-        #     pred_no_ptvs = model(scan, beam, 0*ptvs, oars, body) * body
-        #     pred_no_oars = model(scan, beam, ptvs, 0*oars, body) * body
-        #     pred_no_body = model(scan, beam, ptvs, oars, 0*body) * body
-        #     diff_no_scan = (pred - pred_no_scan).abs().mean().item()
-        #     diff_no_beam = (pred - pred_no_beam).abs().mean().item()
-        #     diff_no_ptvs = (pred - pred_no_ptvs).abs().mean().item()
-        #     diff_no_oars = (pred - pred_no_oars).abs().mean().item()
-        #     diff_no_body = (pred - pred_no_body).abs().mean().item()
-        #     diffs_no_scan.append(diff_no_scan)
-        #     diffs_no_beam.append(diff_no_beam)
-        #     diffs_no_ptvs.append(diff_no_ptvs)
-        #     diffs_no_oars.append(diff_no_oars)
-        #     diffs_no_body.append(diff_no_body)
 
         # Get plot data
         slice_index = scan.shape[-3] // 2
@@ -154,13 +129,6 @@ def plot_model_results(model, dataset_test, metadata, n_show=5,):
     # Finalize plot
     plt.tight_layout()
     plt.pause(1)
-
-    # # TODO DEBUGGING: PRINT diffs
-    # print('Diffs no scan:', sum(diffs_no_scan)/len(diffs_no_scan))
-    # print('Diffs no beam:', sum(diffs_no_beam)/len(diffs_no_beam))
-    # print('Diffs no ptvs:', sum(diffs_no_ptvs)/len(diffs_no_ptvs))
-    # print('Diffs no oars:', sum(diffs_no_oars)/len(diffs_no_oars))
-    # print('Diffs no body:', sum(diffs_no_body)/len(diffs_no_body))
     
     # Return figure
     return fig, ax
@@ -233,22 +201,27 @@ if __name__ == '__main__':
     
     # Set up all jobs
     suptitle = f""
-    dataIDs_list = ['All']
-    modelID_list = [
-        ('diffunet',  {'shape': 128, 'max_batches': 100}),
-        ('crossunet', {'shape': 128}),
-        ('unet',      {'shape': 128, 'scale': 1}),
-        ('unet',      {'shape': 128, 'scale': 2}),
-        ('unet',      {'shape': 256, 'scale': 4}),
-    ]
-    all_jobs = []
-    for dataID in dataIDs_list:
-        for (modelID, kwargs) in modelID_list:
-            kwargs = {k: v for k, v in kwargs.items() if not k in ['batch_size', 'max_batches']}  # Remove training args
-            all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
+    # dataIDs_list = ['All']
+    # modelID_list = [
+    #     ('diffunet',  {'shape': 128, 'max_batches': 100}),
+    #     ('crossunet', {'shape': 128}),
+    #     ('unet',      {'shape': 128, 'scale': 1}),
+    #     ('unet',      {'shape': 128, 'scale': 2}),
+    #     ('unet',      {'shape': 256, 'scale': 4}),
+    # ]
+    # all_jobs = []
+    # for dataID in dataIDs_list:
+    #     for (modelID, kwargs) in modelID_list:
+    #         kwargs = {k: v for k, v in kwargs.items() if not k in ['batch_size', 'max_batches']}  # Remove training args
+    #         all_jobs.append({'dataID': dataID, 'modelID': modelID, **kwargs})
 
-    # Convert to savenames
-    all_savenames = [get_savename(**args) for args in all_jobs]
+    # # Convert to savenames
+    # all_savenames = [get_savename(**args) for args in all_jobs]
+    all_savenames = [
+        "model_All_crossunet_shape=128_best",
+        "model_diffunet_shape=128",
+        "model_unet_scale=2_shape=128",
+    ]
     all_savenames = [j for j in all_savenames if os.path.exists(os.path.join(PATH_OUTPUT, f'{j}.pth'))]
 
     # Get device
@@ -264,6 +237,7 @@ if __name__ == '__main__':
         model, datasets, optimizer, metadata = load_checkpoint(checkpoint_path, load_best=True)
         loss_test = metadata['loss_test']
         losses_test = metadata['losses_test']
+        losses_test = metadata['losses_test_d97']
         losses_train = metadata['losses_train']
         losses_val = metadata['losses_val']
 

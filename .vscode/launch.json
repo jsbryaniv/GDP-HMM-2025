@@ -11,6 +11,14 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python Debugger: Inference (submission_docker)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "${workspaceFolder}/submission_docker/app",
+            "console": "integratedTerminal"
         }
     ]
 }
