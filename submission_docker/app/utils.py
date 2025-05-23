@@ -16,28 +16,24 @@ import torch.nn.functional as F
 def norm_d97(dose, ptvs):
     
     # Convert to numpy if tensor
-    using_torch = isinstance(dose, torch.Tensor)
-    if using_torch:
-        dtype = dose.dtype
-        device = dose.device
-        dose = dose.cpu().detach().numpy()
-    if isinstance(ptvs, torch.Tensor):
-        ptvs = ptvs.cpu().detach().numpy()
+    dose_np = dose.cpu().detach().numpy() if isinstance(dose, torch.Tensor) else dose
+    ptvs_np = ptvs.cpu().detach().numpy() if isinstance(ptvs, torch.Tensor) else ptvs
 
     # Get PTV high dose and mask
-    dose_ptvhigh = ptvs.max()
-    dose_ptvhigh_mask = (ptvs == dose_ptvhigh).any(axis=-4, keepdims=True)
+    ptvhigh_value = ptvs_np.max()
+    ptvhigh_mask = (ptvs_np == ptvhigh_value).any(axis=-4, keepdims=True)
 
-    # Normalize using D97 of PTV_High
-    norm_scale = dose_ptvhigh / (np.percentile(dose[dose_ptvhigh_mask], 3) + 1e-5)
-    dose = dose * norm_scale
+    # Get norm scale using D97 of PTV_High
+    norm_scale = ptvhigh_value / (np.percentile(dose_np[ptvhigh_mask], 3) + 1e-5)
+
+    # Normalize dose
+    dose *= norm_scale
 
     # Clip dose to 0 and 1.2 * PTV_High
-    dose = np.clip(dose, 0, dose_ptvhigh * 1.2)
-
-    # Convert to tensor if using torch
-    if using_torch:
-        dose = torch.tensor(dose, dtype=dtype, device=device)
+    if isinstance(dose, torch.Tensor):
+        dose = torch.clamp(dose, 0, ptvhigh_value * 1.2)
+    else:
+        dose = np.clip(dose, 0, ptvhigh_value * 1.2)
 
     # Return normalized dose
     return dose

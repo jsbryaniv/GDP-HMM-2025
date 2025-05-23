@@ -64,6 +64,33 @@ def download_data(path_data):
     print('Done')
     return
 
+# Download dicoms
+def download_dicoms(path_data):
+
+
+    # Import libraries
+    import os
+    import json
+    import datasets
+    from huggingface_hub import login, snapshot_download
+
+    # Set up hugging face
+    with open("config.json", "r") as f:
+        config = json.load(f)
+        hf_token = config["HUGGINGFACE_TOKEN"]
+    login(token=hf_token)
+
+    # Download the dataset
+    snapshot_download(
+        repo_id="Jungle15/Radiotherapy_HaN_Lung_AIRTP", 
+        repo_type="dataset", 
+        local_dir="data/dicoms/"
+    )
+
+    # Done
+    print('Done')
+    return
+
 
 # Download data
 if __name__ == '__main__':

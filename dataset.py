@@ -296,7 +296,7 @@ if __name__ == "__main__":
     )
 
     # Create dataloader
-    batch_size = 4
+    batch_size = 1
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_gdp)
 
     # Loop over dataloader
@@ -308,13 +308,26 @@ if __name__ == "__main__":
         fig, ax = plt.subplots(1, 6)
         plt.ion()
         plt.show()
-        d_slice = scan.shape[2] // 2
+        z_slice = np.where(ptvs == ptvs.max())[2][0]
         for i, x in enumerate([scan, beam, ptvs, oars, body, dose]):
-            ax[i].imshow(x[0, 0, d_slice], cmap='gray')
+            ax[i].imshow(x[0, 0, z_slice], cmap='gray')
             ax[i].axis('off')
         plt.tight_layout()
         plt.pause(0.1)
         plt.savefig('_image.png', dpi=900)
+        plt.close()
+
+        # Plot ptvs
+        fig, ax = plt.subplots(1, 2)
+        plt.ion()
+        plt.show()
+        z_slice = np.where(ptvs == ptvs.max())[2][0]
+        for i, x in enumerate([ptvs[0, 0], ptvs[0, 2]]):
+            ax[i].imshow(x[z_slice], cmap='gray')
+            ax[i].axis('off')
+        plt.tight_layout()
+        plt.pause(0.1)
+        plt.savefig('_ptvs.png', dpi=900)
         plt.close()
 
     # Done

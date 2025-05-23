@@ -1,733 +1,859 @@
 
+# Import libraries
+import os
+import json
+import datasets
+from huggingface_hub import login, snapshot_download
 
-# Set up unet scores
-scores_unet = """
-2.339412613217346
-2.9092179694299873
-2.858204624958499
-2.1654931818588006
-2.910049850896267
-2.54618115855694
-1.9217560995189549
-2.5314787055102586
-2.3305691250877647
-1.9850285935632084
-2.6023360784466587
-2.564977240900524
-2.1718695548711944
-2.534318418802935
-2.2655418538514245
-2.0582750919665003
-2.755692204225313
-2.5523043112671586
-2.3592496864809647
-2.81854967098709
-2.5889504043967833
-2.158365031827677
-2.5036554070389774
-2.4041912379672463
-2.930087377659237
-3.4593647734213535
-3.184003280782267
-4.4090135431128745
-4.608650295434411
-4.083086066112899
-2.1224372951693664
-2.5258654817967963
-2.5806383132566024
-2.522319277500599
-3.134390486634904
-3.078670116413755
-2.684704084051802
-3.184652606647011
-3.7866733011892704
-1.9688530847498975
-2.2562720680612114
-2.4776178535869615
-2.609880943751394
-3.158994072149477
-2.9248826756962756
-2.307053372197496
-2.9632959910615075
-2.615141488006303
-2.370722157076629
-2.9190689252776547
-2.560941326539424
-2.661736550185942
-3.1653889422906887
-2.8906259243037864
-2.899274403505227
-3.298117815478461
-2.822805713171813
-2.249839519086425
-2.611765299828721
-2.9557853743785505
-2.7429948255970618
-2.9482024836822465
-3.0357255629076434
-2.0364291592724837
-2.6089283905827587
-2.5484619537339923
-2.137265248218398
-2.630708238720041
-2.500399041648463
-1.9565959632584204
-2.4416096189245513
-2.5282392398665494
-2.077354316520167
-2.6894693948902995
-2.3216237547502727
-2.1754704925753083
-2.7665169000173644
-2.7441489956223233
-2.0630810970301297
-2.492902071885909
-2.807392331901769
-2.3840494404020234
-2.8284680009421805
-3.3183693798976135
-2.001288567279733
-2.592760459642631
-2.680720101298457
-2.1436048233354
-2.4241729621784693
-2.3673169586289258
-2.1101781112029436
-2.8557292678608293
-2.4208463829370053
-1.9757560452833016
-2.42665500543167
-2.8876902273234277
-2.5919725345307154
-2.9325647633637946
-3.2517914548595006
-2.584022882007656
-3.421648143337879
-3.050646756624877
-2.1945449738644394
-2.9384988169211708
-2.364852248887609
-1.9261002992169853
-2.376177989663489
-2.2635921632285654
-2.0471511541080534
-2.3899044008428048
-2.243446710600713
-2.5704447458097466
-1.7940750850201976
-2.163649595128805
-2.1163931775436433
-2.4660839787709397
-2.703605628600263
-2.983592640271536
-5.701177718355789
-5.898161663255298
-7.105036540124742
-1.8283324029483503
-2.3500128681021084
-2.092012901498236
-2.0317462292286685
-2.651661113808107
-2.344972545377484
-1.9914079053411964
-2.2821703494626453
-2.380586020986957
-2.59920992219523
-3.1405494072450075
-3.451864125551932
-2.457443901730553
-3.179575202240183
-2.699197665799818
-2.0449575534711304
-2.594400534617279
-2.2726960869980615
-2.0299004774239435
-2.5860230751025894
-2.6065320266763368
-2.3104879819242066
-2.888839315998167
-2.687237459534055
-1.9248271133977046
-2.4186023695784313
-2.2453645553309265
-1.9195948428868561
-2.5625777538583354
-2.5863844927563178
-3.1707807341351324
-3.1071937084882757
-1.977986250341608
-2.4471517114831793
-2.446956871009978
-3.4844412710611623
-4.460852855366664
-3.56836850381402
-2.213292758769367
-2.5323478103365233
-2.4792675810572007
-2.5676205895268462
-3.1532631105872566
-2.8440612324642034
-2.278421439697034
-2.9876721490128433
-2.829309886657886
-3.7118581085849693
-3.4422633115211316
-2.9778974800108697
-3.3092042108350914
-3.398935721957541
-2.307652191529901
-3.023310253112454
-2.8744678007845286
-2.0826129520695305
-2.903532674656044
-2.9763157531082287
-2.4317908685034992
-3.482226845795329
-3.163723385187969
-3.0058538319702324
-3.96858251238714
-2.9087421401945
-2.21695907976335
-3.206436854415496
-3.121646203980586
-2.731107614786142
-2.7909805198796676
-3.794017551120057
-3.5340520377306373
-2.7270385246934206
-3.175587628599261
-3.4307382894996836
-3.8753519407810137
-3.676164020434106
-3.57307159921956
-4.357652738519361
-3.5312368607032862
-3.1041219501353354
-4.175253647330224
-4.051466465864044
-1.9838805465784277
-2.3966202454459884
-2.65549577061936
-2.984329700209381
-3.6777125488391227
-3.0842418074401907
-3.4650143889325427
-4.007975870565247
-4.186236713922119
-3.1074348966295484
-3.05969886346045
-3.7003961141239876
-2.490580972686111
-3.3923514017652994
-4.030205196463873
-3.459673224049728
-3.6323458611668733
-4.209515178066123
-2.476107476153884
-3.481962447639243
-2.6801776809991504
-2.4636502049681392
-2.048620123575413
-1.9832519735452991
-1.9782606634626507
-1.6150509019856698
-1.8340986993544135
-3.4498105047904453
-3.1222680541615633
-2.4091556118239694
-2.8648953504813384
-1.7295595532422552
-2.582975795120589
-2.731515232009592
-3.1101902612478236
-1.9051325164937647
-2.5117003840949166
-2.200527171108969
-2.0041944561350715
-3.167157876667042
-3.6804704650536975
-2.069680045596557
-2.597284217308582
-2.0057581995207547
-2.1190840975565
-4.289437559137258
-3.321415158416162
-7.811087458399018
-4.220848697025057
-2.552693160762792
-3.218858669512656
-3.071454422417271
-2.1601997797137216
-2.514030179478021
-2.0446806429557842
-1.9969084541935505
-2.042987533184009
-2.213187886459341
-2.0323180274314097
-3.019515553870598
-3.978257866211118
-3.433808509129888
-1.8180924540646997
-1.9077930464974875
-1.9425262737343572
-1.6941691515433968
-2.901025251526169
-2.9262741634406395
-3.2256775969623988
-2.6062648165472377
-2.5303051201433475
-2.633837650226406
-2.597650288732644
-2.4370300973403056
-2.2738361938415492
-1.9872300849029807
-2.011899552204239
-2.7737894518067914
-3.207944764024181
-1.4770603739364094
-1.8193417513640793
-2.355869778548712
-2.1929766523079004
-3.260818354751471
-2.872639113650918
-2.6909521138173873
-2.554575914786099
-2.996181294005924
-1.7776569010352512
-1.9710338263261606
-2.236574033961054
-2.528759288525945
-2.5495554400267424
-2.8490653295288193
-3.132944480610725
-2.335700332328239
-2.6470748023410375
-2.2959332230125282
-2.215199507353646
-2.3709297300857717
-2.3110617537210456
-1.5167569596704091
-1.7332135125163537
-1.4399432747831118
-1.695967877423801
-2.2293683276098193
-2.3129288561601395
-1.7532084593882447
-1.8834369710235332
-1.4299773285095716
-1.9255146198310442
-2.0804112471635685
-1.8488727194037515
-2.062044806718437
-1.7066171993602521
-1.5801083942738787
-1.7454731995266843
-3.0833906316970254
-3.0913287537432077
-2.3945429055106855
-1.6883221403499309
-2.27518176491974
-1.5748803853911095
-1.6697532251582732
-1.6702889976397362
-1.9462872260731656
-2.49834855835414
-2.4640815665131166
-2.4933459989789397
-2.6374734106911606
-2.1231238449578242
-1.6636735813231247
-2.1013453166017535
-2.182774212978733
-2.0951004164725124
-1.9711586361319826
-1.8301779992964216
-1.713568922028133
-2.303917324835608
-1.8417073348023278
-1.8781233105147535
-2.2567663354315486
-2.1597961348628028
-2.7537835910048436
-3.241197010358912
-2.478697252683128
-2.4857636148150966
-2.352901072489241
-2.856598549953778
-2.6258786050377783
-2.326086240622116
-2.204383097579127
-2.0941680208594775
-"""
-scores_unet = [float(score) for score in scores_unet.split('\n') if score]
+# Set up hugging face
+with open("config.json", "r") as f:
+    config = json.load(f)
+    hf_token = config["HUGGINGFACE_TOKEN"]
+login(token=hf_token)
 
-# Set up crossunet scores
-scores_crossunet = """
-1.6793000800354088
-2.139701094672842
-2.127494109183883
-2.1130088894809385
-2.6619900898497293
-2.3957278088076883
-2.0109172250264686
-2.226685910056838
-2.1156876728331686
-2.0455413750474305
-2.652970078902336
-2.4165957615185665
-2.4455021221616247
-2.7364198275815688
-2.2667972578825233
-2.2155162341608787
-2.6016713627226755
-2.447730975259545
-2.5272525870993325
-2.8506579839458155
-2.7015325890621935
-2.2560868314570586
-2.493758307590849
-2.5444992532633326
-3.2928450909438327
-3.8302565348948048
-3.406753255686223
-3.8656048784869306
-4.199805694249265
-3.9421601595092683
-1.8719491331024207
-2.2880467635258634
-2.4154426590184426
-2.652751670383388
-2.969440398688032
-3.019679199291985
-2.847762098887923
-3.5767064632989407
-3.344710737618664
-2.0901271139124296
-2.185996596143289
-2.3651337427347663
-3.1651696923407617
-3.4630753518253528
-3.5028762896605077
-2.162898267787033
-2.95259428716867
-2.7745098958762493
-1.9743664046771827
-2.5897865614870925
-2.4935638612989717
-2.023393679383947
-2.481553300990799
-2.380328653188721
-2.3209341111004447
-2.8501747095417946
-2.4106415362374105
-1.989387319355785
-2.1613981408150704
-2.4516156875402753
-2.9858163936842588
-2.9710241461659685
-2.67318542362971
-1.8929164973392658
-2.1589889609663286
-2.273201664969302
-2.2085761766039034
-2.352475287253655
-2.3651758853139104
-1.835962729105574
-2.20207495674938
-2.442096611309497
-2.14922143469859
-2.552979422177128
-2.282151390576399
-2.214324927572198
-2.7190805085456167
-2.8312054693820907
-1.9640270917989613
-2.200797066756877
-2.4780928370908284
-2.53884312375399
-2.8741025402952576
-3.0223717037593847
-1.902427576368084
-2.10141283453621
-2.3778477632484103
-1.8099060970402174
-2.292793481625276
-2.108425999013339
-2.1317727468665755
-2.7477013891288715
-2.435734274411242
-2.111528092810871
-2.3976985491948395
-2.6048921092435187
-2.6810159164336067
-2.9161200763915693
-3.898124369436996
-2.030990574179326
-2.722809615077126
-2.808768777926318
-1.92342555285512
-2.6726287332215626
-2.5657460601370903
-1.9221509138695194
-2.3267554982058387
-2.263054419669293
-2.3779370672825304
-2.71179578671388
-2.6031438717735336
-2.9957514565224157
-2.009633460697773
-2.2612529087665125
-2.208118315698586
-3.252808787164986
-3.0814046430242135
-3.1908207575511716
-5.743433892572949
-5.768621676721317
-7.528614311841158
-1.8912690603584752
-2.088833188550676
-2.307750343661179
-2.1399399457644495
-2.721501669601896
-2.358892422438569
-1.7544077956482291
-2.1769810072933677
-2.2956729835286898
-3.025826650918913
-3.4840272702197677
-3.7478664837624627
-2.3775761473323938
-3.0392022136951318
-2.319559486568254
-2.183852699882401
-2.5738195565341693
-2.317315841223998
-2.4646854862641194
-2.681069302417864
-2.5765594051172895
-1.9905303890974007
-2.6492240721029674
-2.488713344216979
-2.401907124775168
-2.5629006217057757
-2.396878841717012
-2.234792807930308
-2.8976064722917987
-2.4622974956477353
-3.179568701222505
-3.4931017082610585
-2.647564904829831
-2.9547910743407275
-2.6922231573464184
-2.895027231521309
-3.6972777368201357
-3.2613268892156237
-2.3034407567827744
-2.689505381135795
-2.5541304237171816
-2.015176470862216
-2.5579164731625545
-2.855251076885323
-2.41025242379936
-3.1409393528458027
-3.274181199735375
-3.0157122654931023
-3.081054087133413
-2.245928682753218
-2.90360642307584
-3.1934485275908226
-2.606856158508389
-3.0486324907091213
-3.1731707462686445
-2.198009063291779
-2.720360531170582
-2.792357728402343
-2.7948734836759517
-3.4789271517672553
-3.31891166109989
-3.083803714727773
-3.691780331332814
-3.4606664357181507
-2.02877770567678
-2.851711419875764
-2.76148442759056
-2.7807966121732735
-2.0584672328356524
-2.9475583173612603
-2.846900325553262
-3.0562624971879107
-3.1402306542820297
-2.806988668767058
-3.2464334666469052
-3.3165365133944564
-3.2036334816599865
-3.831398599006101
-3.9039227371186658
-3.1856532002904214
-3.802265327029191
-3.683807028806479
-2.1832750672146752
-2.384687187584791
-2.6892905816735926
-2.3317335390438063
-2.9617971275432136
-2.6497303312549616
-2.728832252988847
-3.218067905661885
-4.058828847737771
-2.5211846166485095
-2.4957938306862193
-3.118852179984494
-2.7860234625639726
-2.9333083546554035
-3.911938523818689
-3.334942592348547
-3.4119744509363366
-3.5904599933782997
-2.9389745289819436
-3.6038183288067205
-3.430719257147224
-2.7193755626544434
-2.054424170687743
-1.9696997322841072
-1.97315384763583
-2.0405814190175486
-1.9522824046065108
-3.684345140493939
-3.335908120223226
-2.6004076301981947
-2.7259993550714934
-2.3004502492720396
-2.4816790567323506
-2.846319863157061
-3.2287097236434907
-2.1433309549997026
-2.5222360914892676
-2.1273875109450526
-2.1756932152108046
-2.8804421698306877
-3.813446184661372
-2.330170961340597
-3.2572507524545062
-1.936343225659981
-2.1365375985982697
-3.8162024105179198
-2.761887741747714
-7.185637920368722
-3.8152611836428
-2.623640034594184
-3.445162654698737
-2.9891673061076998
-2.3080678214603854
-2.446543704872663
-2.085138699764253
-1.8453097201204374
-2.031774712381701
-2.3067748337480993
-2.176476065867013
-3.297930091022736
-4.231456471927052
-3.29905150948337
-2.0373151878495417
-2.032360021491129
-1.9988955991462092
-1.8424771171049523
-2.940270297344302
-2.975707215101528
-2.9376629653018576
-2.331614227974761
-2.5845737212969615
-2.0696747158583464
-2.1013382022555294
-2.135182613149712
-2.242146021702768
-2.194519095760341
-1.9631244095821914
-2.8429149143924737
-3.1762493104770204
-1.5532002091017283
-2.139209801034623
-2.3386110602800643
-2.1485787879521934
-3.269942228917759
-2.839859609008927
-2.569401476903272
-2.3869856263679026
-2.9091853097605727
-1.7173707146711985
-1.954606572248968
-2.436877606333934
-2.72783637056474
-2.448867058016441
-2.6275713465721218
-3.289291189910192
-2.3990056846696763
-2.160770087086082
-1.9505577637575655
-2.424464689289828
-2.4855636597675916
-2.034279842709622
-1.5893284188416719
-1.7577039007575441
-1.832057858078111
-1.8296605804451613
-1.681937799797805
-1.9871098052241412
-1.5625886595883405
-1.7461101914630714
-2.1845636795191434
-2.326767866608552
-1.9037010995418138
-1.7145120004395935
-1.9589310831367122
-1.8938158238831977
-1.8007741672645707
-1.7382470129246654
-3.3112829996588427
-2.8508073927836985
-2.3562473603856176
-1.9077026388423544
-2.2872029703888352
-1.5131704306189202
-1.798140034867891
-1.6520885470945845
-1.871868600842341
-2.5017145671511334
-2.3824444796096196
-3.1333080304568806
-2.7669763865377885
-2.141653276829185
-1.6398053443087104
-2.0321687490699034
-2.1943945670083695
-1.6714821614596365
-1.8398751476100632
-1.8222713741969192
-1.7278059453487022
-2.495452524078373
-1.7877182688834372
-1.6687649104454059
-2.2403310376010634
-2.3032164274829534
-2.932421116267701
-3.408495378463319
-2.8232483111702007
-2.930558867358485
-2.459874157697747
-2.783107977629658
-2.4511073707203543
-2.5139683021327617
-1.9169693738404008
-1.6525243700054637
-"""
-scores_crossunet = [float(score) for score in scores_crossunet.split('\n') if score]
-
-
-
-
-
-
+# Download the dataset
+snapshot_download(
+    repo_id="Jungle15/Radiotherapy_HaN_Lung_AIRTP", 
+    repo_type="dataset", 
+    local_dir="data/dicoms/"
+)
 
 # Done
-print('done')
+print('Done')
+
+
+
+
+# # Import libraries
+# import os
+# import time
+# import torch
+# import pydicom
+# import numpy as np
+# import SimpleITK as sitk
+# import torch.nn.functional as F
+# from scipy import ndimage
+# from skimage.draw import polygon
+
+
+# # -------------------------------------------------------------
+# # ------------------------- Constants -------------------------
+# # -------------------------------------------------------------
+
+# # Define the OAR priorities
+# OAR_PRIORITIES = {
+#     ## High Priority ##
+#     'brain':               0,
+#     'brain_stem':          0,
+#     'cord':                0,
+#     'optic_nrv_l':         0,
+#     'optic_nrv_r':         0,
+#     'eye_l':               0,
+#     'eye_r':               0,
+#     'cochlea_l':           0,
+#     'cochlea_r':           0,
+#     'larynx':              0,
+#     'brachial_plex_l':     0,
+#     'brachial_plex_r':     0,
+#     'esophagus':           0,
+#     'esophagus_cerv':      0,
+#     ## Medium Priority ##
+#     'mandible':            1,
+#     'oral_cavity':         1,
+#     'oral_cavity-ptv':     1,
+#     'parotid_l':           1,
+#     'parotid_r':           1,
+#     'parotid_l_prv':       1,
+#     'parotid_r_prv':       1,
+#     'parotid_total':       1,
+#     'constrictors_p':      1,
+#     'constrictor prv':     1,
+#     'sub_mandib_l':        1,
+#     'sub_mandib_r':        1,
+#     'crico_p_inlet':       1,
+#     'pituitary':           1,
+#     'nasal_cavity':        1,
+#     ## Low Priority ##
+#     'body-ptv':            2,
+#     'FD_artifact':         2,
+#     'lung_l':              2,
+#     'lung_r':              2,
+#     'lung_total':          2,
+#     'mastoid_l':           2,
+#     'mastoid_r':           2,
+#     'ext_aud_canal_l':     2,
+#     'ext_aud_canal_r':     2,
+#     'semi_cir_canal_l':    2,
+#     'semi_cir_canal_r':    2,
+#     'optic_nrv_prv_l':     2,
+#     'optic_nrv_prv_r':     2,
+#     'cord_prv':            2,
+#     'brain_stem_prv':      2,
+#     'larynx-ptv':          2,
+#     'eval_carotid_art':    2,
+#     'thyroid':             2,
+#     'lips':                2,
+#     'zRing':               2,
+#     'zRing2':              2,
+#     'CouchInterior':       2,
+#     'CouchSurface':        2,
+#     'zPtvLowOpti1':        2,
+# }
+
+
+# # ----------------------------------------------------------------
+# # ------------------------- Data Loading -------------------------
+# # ----------------------------------------------------------------
+
+# def load_sitk(path):
+#     """
+#     This function loads a DICOM file using SimpleITK.
+
+#     Arguments:
+#         path (str): Path to the DICOM file.
+
+#     Returns:
+#         sitk_image (SimpleITK.Image): SimpleITK image object.
+#     """
+
+#     # Set up SimpleITK reader
+#     reader = sitk.ImageSeriesReader()
+#     dicom_files = reader.GetGDCMSeriesFileNames(path)
+#     reader.SetFileNames(dicom_files)
+
+#     # Read the image
+#     sitk_image = reader.Execute()
+
+#     # Return the image
+#     return sitk_image
+
+# def load_scan(path):
+#     """
+#     This function loads a CT scan from a DICOM directory.
+
+#     Arguments:
+#         path (str): Path to the DICOM directory.
+
+#     Returns:
+#         scan (numpy.ndarray): 3D numpy array of the CT scan.
+#     """
+
+#     # Load the image
+#     ct_sitk = load_sitk(path)
+
+#     # Get the array
+#     scan = sitk.GetArrayFromImage(ct_sitk)
+
+#     # Return the image array and SimpleITK image
+#     return scan
+
+# def load_rxdose(path_rp):
+#     """
+#     This function loads the prescription dose from a DICOM RT Plan file.
+
+#     Arguments:
+#         rp_path (str): Path to the DICOM RT Plan file.
+
+#     Returns:
+#         rxdoses (list): List of prescription doses.
+#     """
+
+#     # Read the RP DICOM file
+#     ds = pydicom.dcmread(path_rp)
+
+#     # Initialize dose list
+#     rxdoses = []
+
+#     # Loop over Dose References
+#     for ref in ds.DoseReferenceSequence:
+
+#         # Get dose
+#         x = ref.get("TargetPrescriptionDose", None)
+#         # If not available, try to get from DeliveryMaximumDose
+#         if x is None:
+#             x = ref.get("DeliveryMaximumDose", None)
+#         # If not available, try to get from OrganAtRiskMaximumDose
+#         if x is None:
+#             x = ref.get("OrganAtRiskMaximumDose", None)
+#         # If not available, skip this reference
+#         if x is None:
+#             continue
+
+#         # Append to doses list
+#         rxdoses.append(float(x))
+
+#     # Sort doses
+#     rxdoses = sorted(rxdoses)
+
+#     # Return doses
+#     return rxdoses
+
+# def load_beaminfo(path_rp, path_ct):
+#     """
+#     This function loads the beam information from a DICOM RT Plan file.
+
+#     Arguments:
+#         path_rp (str): Path to the DICOM RT Plan file.
+#         path_ct (str): Path to the DICOM CT file.
+
+#     Returns:
+#         beam_info (dict): Dictionary containing beam angles, isocenter position, and spacing.
+#     """
+
+#     # Load dicoms
+#     rp = pydicom.dcmread(path_rp)
+#     ct_sitk = load_sitk(path_ct)
+
+#     # Get info from sitk
+#     spacing = ct_sitk.GetSpacing()
+#     origin = ct_sitk.GetOrigin()
+
+#     # Get angles
+#     angles = []
+#     for beam_seq in rp.BeamSequence:
+#         if not beam_seq.TreatmentDeliveryType == 'TREATMENT':
+#             continue
+#         for control_point in beam_seq.ControlPointSequence:
+#             if 'GantryAngle' in control_point:
+#                 angle = float(control_point.GantryAngle)
+#                 angles.append(angle)
+    
+#     # Get isocenter
+#     isocenter = [float(x) for x in beam_seq.ControlPointSequence[0].IsocenterPosition]
+#     isocenter = [
+#         int((isocenter[0] - origin[0]) / spacing[0]),
+#         int((isocenter[1] - origin[1]) / spacing[1]),
+#         int((isocenter[2] - origin[2]) / spacing[2]),
+#     ]
+
+#     # Create beam info dictionary
+#     beam_info = {
+#         'angles': angles,
+#         'isocenter': isocenter,
+#         'spacing': spacing,
+#     }
+
+#     # Return beam info
+#     return beam_info
+
+# def load_dose(path_rd, path_ct):
+#     """
+#     This function loads a dose from a DICOM file. It optionally matches the dose to a CT scan.
+
+#     Arguments:
+#         path_rd (str): Path to the DICOM RD file.
+#         path_ct (str): Path to the DICOM CT file.
+
+#     Returns:
+#         dose_array (numpy.ndarray): 3D numpy array of the dose.
+#     """
+
+#     # Load dicom
+#     rd = pydicom.dcmread(path_rd)
+#     dose_grid = rd.pixel_array * rd.DoseGridScaling
+
+#     # Convert to sitk
+#     dose_sitk = sitk.GetImageFromArray(dose_grid)
+#     spacing_z = rd.GridFrameOffsetVector[1] - rd.GridFrameOffsetVector[0] if len(rd.GridFrameOffsetVector) > 1 else 2.0
+#     dose_sitk.SetSpacing((float(rd.PixelSpacing[0]), float(rd.PixelSpacing[1]), spacing_z))
+#     dose_sitk.SetOrigin(tuple(rd.ImagePositionPatient))
+#     dose_sitk.SetDirection([1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
+
+#     # Resample dose to match CT
+#     match_ct = load_sitk(path_ct)
+#     resampler = sitk.ResampleImageFilter()
+#     resampler.SetReferenceImage(match_ct)
+#     resampler.SetInterpolator(sitk.sitkLinear)
+#     resampler.SetDefaultPixelValue(0.0)
+#     dose_resampled = resampler.Execute(dose_sitk)
+
+#     # Extract array
+#     dose_array = sitk.GetArrayFromImage(dose_resampled)
+    
+#     # Return the dose array
+#     return dose_array
+
+# def load_structures(path_rs, path_ct, names=None):
+#     """
+#     This function loads structure masks from a DICOM file. It optionally matches the structures to a CT scan.
+
+#     Arguments:
+#         path_rs (str): Path to the DICOM Structure file.
+#         path_ct (str): Path to the DICOM CT file.
+#         names (list): List of structure names to load. If None, loads all structures.
+
+#     Returns:
+#         masks (dict): Dictionary of structure masks, where keys are structure names and values are 3D numpy arrays.
+#     """
+
+#     # Load dicom
+#     ds = pydicom.dcmread(path_rs)
+#     structure_set = ds.StructureSetROISequence
+#     roi_contours = ds.ROIContourSequence
+
+#     # Get the image shape and spacing
+#     match_ct = load_sitk(path_ct)
+#     spacing = match_ct.GetSpacing()
+#     origin = match_ct.GetOrigin()
+#     shape_xyz = match_ct.GetSize()
+#     shape_zyx = shape_xyz[::-1]
+
+#     # Initialize masks
+#     structures = {}
+
+#     # Loop through each ROI
+#     for roi, roi_contour in zip(structure_set, roi_contours):
+
+#         # Get name of the ROI
+#         name = roi.ROIName
+#         if (names is not None) and (name not in names):
+#             continue
+
+#         # Initialize mask
+#         mask = np.zeros(shape_zyx, dtype=bool)
+
+#         # Loop through each contour sequence
+#         for sequence in roi_contour.ContourSequence:
+
+#             # Get contour coordinates
+#             coords = np.array(sequence.ContourData).reshape(-1, 3)  # Reshape to (N, 3)
+            
+#             # Transform physical coordinates to voxel coordinates
+#             # voxels = np.round((coords - origin) / spacing).astype(np.int32)
+#             voxels = np.round((coords - origin) / spacing).astype(int)
+#             voxels = np.clip(voxels, 0, np.array(shape_xyz) - 1)
+
+#             # Loop over z slices
+#             for z_slice in set(voxels[:, 2]):
+
+#                 # Get points in the slice
+#                 slice_points = np.array([(x, y) for x, y, z in voxels if z == z_slice])
+
+#                 # Skip slices with less than 3 points
+#                 if slice_points.shape[0] < 3:
+#                     continue
+
+#                 # Create mask
+#                 rr, cc = polygon(slice_points[:, 0], slice_points[:, 1], shape_xyz[:2])
+#                 mask[z_slice, cc, rr] = 1  # Mask coordinates are (z, y, x)
+
+#         # Fill holes in the mask
+#         mask = ndimage.binary_fill_holes(mask)
+
+#         # Add to masks
+#         structures[name] = mask
+    
+#     # Return masks
+#     return structures
+
+# def make_oars_array(structures, n_channels=None, mapping=None):
+#     """
+#     This function merges OAR structure masks into a single mask with multiple channels.
+#     Each channel corresponds to a different priority level for the OARs.
+
+#     Arguments:
+#         structures (dict): Dictionary of structure masks, where keys are structure names and values are 3D numpy arrays.
+#         n_channels (int): Number of channels in the output mask. If None, determined from mapping.
+#         mapping (dict): Dictionary mapping structure names to channel indices. If None, uses default mapping.
+
+#     Returns:
+#         mask (numpy.ndarray): 3D numpy array of the merged OAR mask with shape (n_channels, Z, Y, X).
+#     """
+
+#     # Set defaults
+#     if mapping is None:
+#         mapping = OAR_PRIORITIES
+#     if n_channels is None:
+#         n_channels = max(mapping.values()) + 1    
+
+#     # Initialize mask
+#     ref_arr = structures[list(structures.keys())[0]]  # Use first structure as reference
+#     mask = np.zeros((n_channels, *ref_arr.shape), dtype=bool)
+
+#     # Loop over structures
+#     for name, struct in structures.items():
+
+#         # Get channel index
+#         channel = mapping.get(name, None)
+#         if channel is None:
+#             continue
+
+#         # Add to mask
+#         mask[channel] = np.logical_or(mask[channel], struct)
+
+#     # Return mask
+#     return mask
+
+# def make_ptvs_array(structures, rxdoses):
+#     """
+#     This function creates a PTV array from the structure masks and prescription doses.
+#     It merges all the PTVs into a single array where each voxel is assigned the prescription dose.
+
+#     Arguments:
+#         structures (dict): Dictionary of structure masks, where keys are structure names and values are 3D numpy arrays.
+#         rxdoses (list): List of prescription doses.
+
+#     Returns:
+#         ptvs (numpy.ndarray): 3D numpy array of the PTVs, where each voxel is assigned the prescription dose.
+#     """
+
+#     # Initialize ptvs
+#     ref_arr = structures[list(structures.keys())[0]]  # Use first structure as reference
+#     ptvs = np.zeros(ref_arr.shape, dtype=float)
+
+#     # Find all the ptv keys and sort them by priority
+#     def sort_order(x):
+#         if 'high' in x.lower():
+#             return 0
+#         elif 'mid' in x.lower():
+#             return 1
+#         elif 'low' in x.lower():
+#             return 2
+#         else:
+#             return 3
+#     ptv_keys = [key for key in structures.keys() if 'ptv' in key.lower()]
+#     ptv_keys.sort(key=sort_order)
+
+#     # Sort rxdoses
+#     rxdoses = sorted(rxdoses)[::-1]
+
+#     # Loop over ptv keys
+#     for i, key in enumerate(ptv_keys):
+#         if i >= len(rxdoses):
+#             break
+
+#         # Get the ptv mask and dose
+#         ptv_mask = structures[key] * (ptvs == 0)  # Avoid overwriting existing doses
+#         dose = rxdoses[i]
+
+#         # Fill in the ptvs
+#         ptvs[ptv_mask] = dose
+
+#     # Return the ptvs
+#     return ptvs
+
+# def make_beam_array(ptvs, beam_info, calculation_scale=2):
+#     """
+#     This function creates a beam array from the PTVs and beam information.
+
+#     Arguments:
+#         ptvs (numpy.ndarray): 3D numpy array of the PTVs, where each voxel is assigned the prescription dose.
+#         beam_info (dict): Dictionary containing beam angles, isocenter position, and spacing.
+
+#     Returns:
+#         beam (numpy.ndarray): 3D numpy array of the beam, where each voxel is assigned the beam dose.
+#     """
+
+#     # Extract info
+#     angles = beam_info['angles']
+#     spacing = beam_info['spacing']
+#     isocenter = beam_info['isocenter']
+
+#     # Convert xyz to zyx
+#     spacing = spacing[::-1]
+#     isocenter = isocenter[::-1]
+
+#     # Get the target
+#     target = ptvs > 0
+
+#     # Rescale target
+#     if calculation_scale != 1:
+#         spacing = [x * calculation_scale for x in spacing]
+#         isocenter = [x // calculation_scale for x in isocenter]
+#         reshape_size = [x // calculation_scale for x in target.shape]
+#         target, transform_params = resize_image_3d(target[None, None, ...], reshape_size, return_params=True)
+#         target = target[0, 0, ...]
+
+#     # Get the beam plate
+#     beam = get_allbeam_plate(target, isocenter, spacing, angles)
+
+#     # Rescale beam
+#     if calculation_scale != 1:
+#         beam = reverse_resize_3d(beam[None, None, ...], transform_params)
+#         beam = beam[0, 0, ...]
+#         beam -= beam.min()
+#         beam /= beam.max() + 1e-5
+
+#     # Return the beam plate
+#     return beam
+
+
+# # -----------------------------------------------------------------------
+# # ------------------------- Beam Plate Geometry -------------------------
+# # -----------------------------------------------------------------------
+# # All Beam Plate Geometry functions are adapted from the GDP-HMM-2025 Competition Github
+# # https://github.com/RiqiangGao/GDP-HMM_AAPMChallenge/tree/main
+
+# def interpolate_point_on_line(x1, y1, z1, x2, y2, z2, y_c):
+#     """
+#     Returns the coordinates of point C on the line segment from (x1, y1, z1) to (x2, y2, z2)
+#     with the specified y-coordinate y_c.
+
+#     Arguments:
+#         x1, y1, z1 (int): Coordinates of point A.
+#         x2, y2, z2 (int): Coordinates of point B.
+#         y_c (int): The y-coordinate of point C.
+
+#     Returns:
+#         x_c, y_c, z_c (int): Coordinates of point C.
+#     """
+
+#     # Calculate the ratio of y_c relative to the total y-distance between points A and B
+#     if y2 == y1:
+#         y2 += 1
+#     ratio = (y_c - y1) / (y2 - y1)
+    
+#     # Use linear interpolation to find the corresponding x and z coordinates
+#     x_c = x1 + ratio * (x2 - x1)
+#     z_c = z1 + ratio * (z2 - z1)
+    
+#     # Convert to int
+#     x_c, y_c, z_c = int(x_c), int(y_c), int(z_c)
+
+#     # Return point
+#     return x_c, y_c, z_c
+
+# def interpolate_line(x1, y1, z1, x2, y2, z2, y_c):
+#     """
+#     Returns all the coordinates along the line segment from (x1, y1, z1) to (x2, y2, z2).
+
+#     Arguments:
+#         x1, y1, z1 (int): Coordinates of point A.
+#         x2, y2, z2 (int): Coordinates of point B.
+#         y_c (int): The y-coordinate of point C.
+
+#     Returns:
+#         coordinates (list): List of tuples representing the coordinates along the line segment.
+#     """
+
+#     # Calculate the distance between the points
+#     x_c, y_c, z_c = interpolate_point_on_line(x1, y1, z1, x2, y2, z2, y_c)
+#     length = max(abs(x_c - x1), abs(y_c - y1), abs(z_c - z1))
+    
+#     # Generate linearly spaced coordinates between the points
+#     x_coords = np.linspace(x1, x_c, length + 1)
+#     y_coords = np.linspace(y1, y_c, length + 1)
+#     z_coords = np.linspace(z1, z_c, length + 1)
+    
+#     # Round coordinates to integers
+#     x_coords = np.round(x_coords).astype(int)
+#     y_coords = np.round(y_coords).astype(int)
+#     z_coords = np.round(z_coords).astype(int)
+    
+#     # Combine coordinates into tuples
+#     coordinates = [(x, y, z) for x, y, z in zip(x_coords, y_coords, z_coords)]
+    
+#     # Return the coordinates
+#     return coordinates
+
+# def get_source_from_angle(isocenter, angle, spacing, r=1000):
+#     """
+#     Gets the source point from the isocenter and angle.
+
+#     Arguments:
+#         isocenter (tuple): Isocenter coordinates (z, y, x).
+#         angle (float): Gantry angle in degrees.
+#         spacing (tuple): Voxel spacing (z, y, x).
+#         r (float): Distance in voxels from the isocenter to the source point.
+
+#     Returns:
+#         points (tuple): Coordinates of the source point (z, y, x).
+#     """
+
+#     # Correct the angle to match the coordinate system
+#     angle = angle - 90 
+    
+#     # Get points
+#     points = (
+#         isocenter[0],
+#         int(isocenter[1] + r * np.sin(np.deg2rad(angle)) / spacing[1]),
+#         int(isocenter[2] + r * np.cos(np.deg2rad(angle)) / spacing[2]),
+
+#     )
+
+#     # Return points
+#     return points
+
+# def get_nonzero_coordinates(binary_mask):
+#     """
+#     Returns the coordinates of non-zero values in a binary mask.
+#     """
+#     return list(zip(*np.nonzero(binary_mask)))
+
+# def get_surface_coordinates(binary_mask):
+#     """
+#     Get the surface coordinates of a binary mask by comparing the mask with its eroded version.
+#     """
+
+#     # Get nonzero coordinates
+#     nonzero_coords = get_nonzero_coordinates(binary_mask)
+
+#     # Initialize surface coordinates list
+#     surface_coords = []
+
+#     # Loop over nonzero coordinates
+#     for x,y,z in nonzero_coords:
+#         if (
+#             x == 0
+#             or y == 0
+#             or z == 0
+#             or x == binary_mask.shape[0] - 1
+#             or y == binary_mask.shape[1] - 1
+#             or z == binary_mask.shape[2] - 1
+#         ): 
+#             # Add point if it is on the edge of the mask
+#             surface_coords.append((x, y, z))
+#         elif (
+#             binary_mask[x-1, y, z] == 0
+#             or binary_mask[x+1, y, z] == 0
+#             or binary_mask[x, y-1, z] == 0
+#             or binary_mask[x, y+1, z] == 0
+#             or binary_mask[x, y, z-1] == 0
+#             or binary_mask[x, y, z+1] == 0
+#         ):
+#             # Add point if it is adjacent to a zero value
+#             surface_coords.append((x, y, z))
+
+#     # Return the surface coordinates
+#     return surface_coords
+
+# def get_per_beamplate(shape, surface_coords, isocenter, spacing, gantry_angle, with_distance=True):
+#     """
+#     Get the beam plate for a given angle.
+#     """
+
+#     # Initialize the beam plate
+#     beam_plate = np.zeros(shape, dtype=bool)
+
+#     # Get source location
+#     source = get_source_from_angle(isocenter, gantry_angle, spacing)
+
+#     # Get all line points between source and surface
+#     all_points = []
+#     for point in surface_coords:
+#         # Correct y coordinate
+#         y_c = 0 if source[1] > point[1] else shape[1] - 1
+#         # Get points on line
+#         line_points = interpolate_line(source[0], source[1], source[2], point[0], point[1], point[2], y_c=y_c)
+#         # Filter out points
+#         line_points = [p for p in line_points if (0<=p[0]<shape[0]) and (0<=p[1]<shape[1]) and (0<=p[2]<shape[2])]
+#         # Add line to points
+#         all_points.extend(line_points)
+
+#     # Fill mask
+#     for (x, y, z) in set(all_points):
+#         beam_plate[x, y, z] = 1
+#     # all_points = list(set(all_points))
+#     # points = np.array(all_points, dtype=int)
+#     # flat_indices = np.ravel_multi_index(points.T, beam_plate.shape, mode='clip')
+#     # beam_plate.flat[flat_indices] = 1
+    
+#     # Fill holes in the mask TODO: Try beam_plate = ndimage.binary_closing(beam_plate, structure=np.ones((3,3,3)))
+#     beam_plate = ndimage.binary_dilation(beam_plate, structure=np.ones((4,4,4)))
+#     beam_plate = ndimage.binary_erosion(beam_plate, structure=np.ones((3,3,3)))
+
+#     # Convert to float
+#     beam_plate = beam_plate.astype(float)
+
+#     # If with_distance is True, apply distance weighting
+#     if with_distance:
+#         # Create a meshgrid for the coordinates
+#         zz, yy, xx = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
+#         # Get distances from source to point
+#         dist = (
+#             (zz - source[0])**2 
+#             + (yy - source[1])**2 
+#             + (xx - source[2])**2
+#         )
+#         # Get normalization factor, which is the distance from source to isocenter
+#         norm = (
+#             (isocenter[0] - source[0])**2 
+#             + (isocenter[1] - source[1])**2 
+#             + (isocenter[2] - source[2])**2
+#         )
+#         # Apply distance weighting
+#         beam_plate = beam_plate * norm / (dist + 1e-5)
+
+#     # Return the beam plate
+#     return beam_plate
+
+# def get_allbeam_plate(PTV_mask, isocenter, spacing, angles, with_distance=True):
+#     """
+#     Get the beam plate for all angles.
+
+#     Arguments:
+#         PTV_mask (numpy.ndarray): 3D numpy array of the PTV mask.
+#         isocenter (tuple): Isocenter coordinates (z, y, x).
+#         spacing (tuple): Voxel spacing (z, y, x).
+#         angles (list): List of gantry angles in degrees.
+#         with_distance (bool): Whether to include distance weighting.
+
+#     Returns:
+#         all_beam_plate (numpy.ndarray): 3D numpy array of the beam plate for all angles.
+#     """
+
+#     # Extract information
+#     shape = PTV_mask.shape
+#     surface_coords = get_surface_coordinates(PTV_mask)
+
+#     # Initialize the beam plate
+#     all_beam_plate = np.zeros(shape, dtype=float)
+
+#     # Loop over angles
+#     for angle in angles:
+#         t = time.time()
+#         all_beam_plate += get_per_beamplate(shape, surface_coords, isocenter, spacing, angle, with_distance=with_distance)
+#         print(f'angle={angle}; time={time.time() - t}')
+
+#     # Normalize the beam plate
+#     all_beam_plate -= all_beam_plate.min()
+#     all_beam_plate /= all_beam_plate.max()
+
+#     # Return the beam plate
+#     return all_beam_plate
+
+
+# # ---------------------------------------------------------------------
+# # ------------------------- Image Manipulation ------------------------
+# # ---------------------------------------------------------------------
+
+# # Define function to resize 3D image
+# def resize_image_3d(image, target_shape, fill_value=0, return_params=False):
+#     """
+#     Resize a 3D image to the target shape while maintaining aspect ratio.
+#     Automatically handles boolean data by using nearest-neighbor interpolation.
+
+#     Args:
+#         image (torch.Tensor): 3D image tensor of shape (B, C, D, H, W)
+#         target_shape (tuple): Desired shape (D_target, H_target, W_target)
+#         fill_value (int): Value to use for padding.
+#         return_params (bool): If True, return parameters for inverse transformation.
+
+#     Returns:
+#         torch.Tensor: Resized image tensor of shape (B, C, D_target, H_target, W_target)
+#         dict: Parameters for inverse transformation (if return_params is True).
+#     """
+
+#     # Convert to torch.Tensor if not already
+#     is_numpy = isinstance(image, np.ndarray)
+#     if is_numpy:
+#         image = torch.from_numpy(image)
+
+#     # Get image shape
+#     _, _, D, H, W = image.shape
+#     D_target, H_target, W_target = target_shape
+
+#     # Determine interpolation mode based on dtype
+#     is_boolean = image.dtype == torch.bool
+#     interp_mode = 'nearest' if is_boolean else 'trilinear'
+#     interp_align = False if interp_mode == 'trilinear' else None
+
+#     # Compute uniform scale factor
+#     scale = min(D_target / D, H_target / H, W_target / W)
+#     new_size = (int(D * scale), int(H * scale), int(W * scale))
+
+#     # Resize the image
+#     resized_image = F.interpolate(
+#         image.float(), 
+#         size=new_size, 
+#         mode=interp_mode, 
+#         align_corners=interp_align
+#     )
+#     if is_boolean:
+#         resized_image = resized_image.bool()
+
+#     # Compute padding
+#     pad_d = (D_target - new_size[0]) / 2
+#     pad_h = (H_target - new_size[1]) / 2
+#     pad_w = (W_target - new_size[2]) / 2
+#     pad = (int(pad_w), int(pad_w + 0.5), int(pad_h), int(pad_h + 0.5), int(pad_d), int(pad_d + 0.5))
+
+#     # Apply padding with the correct default value
+#     image_new = F.pad(resized_image, pad, mode='constant', value=fill_value)
+
+#     # Convert to numpy if original was numpy
+#     if is_numpy:
+#         image_new = image_new.numpy()
+
+#     # Check return mode
+#     if return_params:
+#         # Store parameters for inverse transformation
+#         transform_params = {
+#             "original_shape": (D, H, W),
+#             "scale": scale,
+#             "pad": pad
+#         }
+#         # Return image and transform parameters
+#         return image_new, transform_params
+#     else:
+#         # Return image
+#         return image_new
+
+# # Define function to reverse resize 3D image
+# def reverse_resize_3d(image, transform_params):
+#     """
+#     Reverse the resize and padding operation.
+
+#     Args:
+#         image (torch.Tensor): Padded image tensor of shape (B, C, D_target, H_target, W_target)
+#         transform_params (dict): Parameters from forward transform (original shape, scale, padding)
+
+#     Returns:
+#         torch.Tensor: Restored original-sized image.
+#     """
+
+#     # Convert to torch.Tensor if not already
+#     is_numpy = isinstance(image, np.ndarray)
+#     if is_numpy:
+#         image = torch.from_numpy(image)
+
+#     # Get variables
+#     _, _, D_target, H_target, W_target = image.shape
+#     D, H, W = transform_params["original_shape"]
+#     pad = transform_params["pad"]
+
+#     # Remove padding
+#     unpadded_image = image[:, :, pad[4]:D_target-pad[5], pad[2]:H_target-pad[3], pad[0]:W_target-pad[1]]
+
+#     # Determine interpolation mode
+#     is_boolean = image.dtype == torch.bool
+#     interp_mode = 'nearest' if is_boolean else 'trilinear'
+#     interp_align = False if interp_mode == 'trilinear' else None
+
+#     # Resize back to original shape
+#     restored_image = F.interpolate(
+#         unpadded_image.float(), 
+#         size=(D, H, W), 
+#         mode=interp_mode, 
+#         align_corners=interp_align
+#     )
+#     if is_boolean:
+#         restored_image = restored_image.bool()
+
+#     # Convert to numpy if original was numpy
+#     if is_numpy:
+#         restored_image = restored_image.numpy()
+
+#     # Return output
+#     return restored_image
+
+
+
+
+
+
+
+
+
+
+
+
+# # Test on one patient
+# if __name__ == '__main__':
+
+
+
+
+#     # Done
+#     print('done')
 
